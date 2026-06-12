@@ -1,0 +1,21 @@
+# 일회용 크롤링 타당성 테스트용 이미지 (스파이크). 본 구현 아님.
+# 인프라 패턴(ePrism 루트 CA 주입)만 그대로 재사용한다.
+FROM python:3.12-slim
+
+# ePrism SSL 프록시 인증서 설치 (사내망 전용)
+COPY ePrism-SSL-ROOT-CA.crt /usr/local/share/ca-certificates/ePrism-SSL-ROOT-CA.crt
+RUN update-ca-certificates
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONIOENCODING=utf-8
+# pip도 사내 프록시 뒤에서 동작하도록 시스템 CA 번들 지정
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt
+
+WORKDIR /app
+RUN pip install --no-cache-dir requests beautifulsoup4 lxml feedparser
+
+COPY scripts/ /app/scripts/
+CMD ["python", "scripts/rss_probe.py"]

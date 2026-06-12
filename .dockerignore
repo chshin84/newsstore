@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+.claude/
+docs/
+scripts/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+# 주의: ePrism-SSL-ROOT-CA.crt 는 제외하지 않는다 (office 빌드 시 이미지에 설치)
