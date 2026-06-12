@@ -103,7 +103,9 @@
       "suffered losses in", "encourages investors", "reminds investors", "securities fraud",
       "bragar eagel", "rosen law", "pomerantz", "levi & korsinsky", "glancy prongay", "kahn swick",
       "robbins geller", "faruqi", "schall law", "hagens berman", "kessler topaz", "bronstein, gewirtz",
-      "gross law firm", "johnson fistel", "kirby mcinerney"];
+      "gross law firm", "johnson fistel", "kirby mcinerney",
+      // 벤징가 "$X 투자했다면 지금 얼마" 류 클릭베이트
+      "would be worth this much today", "if an investor had bought"];
     function isJunk(it) {
       const s = (decode(it.title) + " " + decode(it.body)).toLowerCase();
       return JUNK.some(k => s.includes(k));
