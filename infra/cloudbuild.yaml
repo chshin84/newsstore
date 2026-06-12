@@ -1,0 +1,24 @@
+# Cloud Build config for the cloud (Firestore) collector image.
+# Builds infra/Dockerfile with the [gcp] extra (google-cloud-firestore), no dev deps.
+#
+# Usage (from repo root, authenticated):
+#   gcloud builds submit --config infra/cloudbuild.yaml \
+#     --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest .
+#
+# The Artifact Registry repo must exist first:
+#   gcloud artifacts repositories create newsstore --repository-format=docker --location=asia-northeast3
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - infra/Dockerfile
+      - --build-arg
+      - INSTALL_DEV=false
+      - --build-arg
+      - INSTALL_GCP=true
+      - -t
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}

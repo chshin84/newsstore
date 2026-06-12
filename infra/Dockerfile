@@ -6,14 +6,19 @@ WORKDIR /app
 # INSTALL_DEV=true(기본)면 pytest 포함(테스트 워크플로), prod 이미지는
 #   docker build --build-arg INSTALL_DEV=false ... 로 [dev] 제외.
 ARG INSTALL_DEV=true
+# 클라우드(Cloud Run) 이미지는 INSTALL_DEV=false INSTALL_GCP=true 로 빌드 → google-cloud-firestore 포함.
+ARG INSTALL_GCP=false
 
 # 의존성 먼저 (캐시). requirements.lock을 constraints로 걸어 재현 가능 빌드.
 COPY pyproject.toml ./
 COPY infra/requirements.lock ./infra/requirements.lock
 COPY src/ ./src/
 RUN pip install --upgrade pip && \
-    if [ "$INSTALL_DEV" = "true" ]; then \
-      pip install -e ".[dev]" -c infra/requirements.lock ; \
+    EXTRAS="" ; \
+    if [ "$INSTALL_DEV" = "true" ]; then EXTRAS="dev" ; fi ; \
+    if [ "$INSTALL_GCP" = "true" ]; then EXTRAS="${EXTRAS:+$EXTRAS,}gcp" ; fi ; \
+    if [ -n "$EXTRAS" ]; then \
+      pip install -e ".[$EXTRAS]" -c infra/requirements.lock ; \
     else \
       pip install -e . -c infra/requirements.lock ; \
     fi
