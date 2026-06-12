@@ -4,7 +4,6 @@
 .env.*
 .claude/
 docs/
-scripts/
 __pycache__/
 *.py[cod]
 .venv/

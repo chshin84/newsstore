@@ -1,3 +1,4 @@
+import pytest
 from newsstore.config import load_feeds
 
 def test_load_feeds(tmp_path):
@@ -15,3 +16,20 @@ def test_load_feeds(tmp_path):
     feeds = load_feeds(p)
     assert len(feeds) == 1
     assert feeds[0].feed_id == "bz_news" and feeds[0].poll_minutes == 5
+
+def test_unknown_key_is_rejected(tmp_path):
+    # a typo'd key (body_mod) must fail loudly, not silently fall back to a default
+    p = tmp_path / "feeds.yaml"
+    p.write_text("feeds:\n  - {feed_id: a, url: https://e/a, source: S, body_mod: full}\n",
+                 encoding="utf-8")
+    with pytest.raises(Exception):
+        load_feeds(p)
+
+def test_duplicate_feed_id_is_rejected(tmp_path):
+    p = tmp_path / "feeds.yaml"
+    p.write_text("feeds:\n"
+                 "  - {feed_id: dup, url: https://e/a, source: S}\n"
+                 "  - {feed_id: dup, url: https://e/b, source: S}\n",
+                 encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate feed_id"):
+        load_feeds(p)

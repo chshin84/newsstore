@@ -1,23 +1,64 @@
 from __future__ import annotations
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from ..models import RawItem
 
+SCHEMA_VERSION = 1
+
+# Fresh DBs get the full target schema here; pre-existing DBs are upgraded by
+# _migrate() via ALTER TABLE. Step-2 consumes raw_items WHERE processed=0.
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS raw_items (
   id TEXT PRIMARY KEY, feed_id TEXT, source TEXT, asset_hint TEXT, language TEXT,
-  url TEXT, title TEXT, body TEXT, published_at TEXT, fetched_at TEXT
+  url TEXT, title TEXT, body TEXT, published_at TEXT, fetched_at TEXT,
+  processed INTEGER NOT NULL DEFAULT 0, processed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS feed_state (
   feed_id TEXT PRIMARY KEY, etag TEXT, last_modified TEXT, last_fetched TEXT
 );
 """
 
+_ITEM_COLS = ("id", "feed_id", "source", "asset_hint", "language",
+              "url", "title", "body", "published_at", "fetched_at")
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    conn.executescript(_SCHEMA)
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < 1:
+        # Legacy DBs created before the processed columns existed lack them;
+        # add idempotently (fresh DBs already have them from _SCHEMA above).
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(raw_items)")}
+        if "processed" not in cols:
+            conn.execute("ALTER TABLE raw_items ADD COLUMN processed INTEGER NOT NULL DEFAULT 0")
+        if "processed_at" not in cols:
+            conn.execute("ALTER TABLE raw_items ADD COLUMN processed_at TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_raw_unprocessed "
+                     "ON raw_items(processed)")
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    conn.commit()
+
+
+def _row_to_item(row: sqlite3.Row) -> RawItem:
+    def _dt(v):
+        return datetime.fromisoformat(v) if v else None
+    return RawItem(
+        id=row["id"], feed_id=row["feed_id"], source=row["source"],
+        asset_hint=row["asset_hint"] or "", language=row["language"] or "en",
+        url=row["url"], title=row["title"], body=row["body"] or "",
+        published_at=_dt(row["published_at"]), fetched_at=_dt(row["fetched_at"]),
+    )
+
+
 class SqliteStore:
     def __init__(self, path):
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
-        self.conn.executescript(_SCHEMA)
+        # WAL lets a reader (future Step-2) and the writer coexist; busy_timeout
+        # avoids 'database is locked' if two passes briefly overlap.
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA busy_timeout=5000")
+        _migrate(self.conn)
 
     def upsert_items(self, items: list[RawItem]) -> int:
         new = 0
@@ -60,5 +101,37 @@ class SqliteStore:
             (feed_id, etag, last_modified, lf_s))
         self.conn.commit()
 
+    def get_unprocessed(self, limit: int | None = None) -> list[RawItem]:
+        """Oldest-first raw items not yet handed to Step-2 (processed=0)."""
+        sql = (f"SELECT {','.join(_ITEM_COLS)} FROM raw_items "
+               "WHERE processed=0 ORDER BY fetched_at")
+        params: tuple = ()
+        if limit is not None:
+            sql += " LIMIT ?"
+            params = (int(limit),)
+        return [_row_to_item(r) for r in self.conn.execute(sql, params)]
+
+    def mark_processed(self, ids: list[str], processed_at: datetime | None = None) -> int:
+        """Mark ids as processed (idempotent). Returns rows actually changed."""
+        if not ids:
+            return 0
+        ts = (processed_at or datetime.now(timezone.utc)).isoformat()
+        placeholders = ",".join("?" * len(ids))
+        cur = self.conn.execute(
+            f"UPDATE raw_items SET processed=1, processed_at=? "
+            f"WHERE id IN ({placeholders}) AND processed=0",
+            (ts, *ids))
+        self.conn.commit()
+        return cur.rowcount
+
     def count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM raw_items").fetchone()[0]
+
+    def close(self) -> None:
+        self.conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()

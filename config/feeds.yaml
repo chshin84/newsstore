@@ -1,13 +1,14 @@
 # config/feeds.yaml — verified 2026-06-12 (KR IP, Docker)
 feeds:
   # ── 한국 (연합인포맥스 = 연합뉴스 금융단말 자회사) ──
-  - {feed_id: infomax_bond_fx,  url: "https://news.einfomax.co.kr/rss/S1N16.xml", source: 인포맥스, asset_hint: "kr_bond,kr_fx", language: ko, poll_minutes: 60, body_mode: summary}
-  - {feed_id: infomax_stock,    url: "https://news.einfomax.co.kr/rss/S1N2.xml",  source: 인포맥스, asset_hint: kr_stock, language: ko, poll_minutes: 60, body_mode: summary}
-  - {feed_id: infomax_overseas, url: "https://news.einfomax.co.kr/rss/S1N21.xml", source: 인포맥스, asset_hint: us_stock, language: ko, poll_minutes: 60, body_mode: summary}
-  - {feed_id: infomax_intl,     url: "https://news.einfomax.co.kr/rss/S1N23.xml", source: 인포맥스, asset_hint: macro, language: ko, poll_minutes: 60, body_mode: summary}
-  - {feed_id: infomax_policy,   url: "https://news.einfomax.co.kr/rss/S1N15.xml", source: 인포맥스, asset_hint: kr_macro, language: ko, poll_minutes: 60, body_mode: summary}
+  # infomax는 pubDate를 offset 없는 naive KST로 발행 → tz_offset: 9 로 보정(2026-06-12 검증)
+  - {feed_id: infomax_bond_fx,  url: "https://news.einfomax.co.kr/rss/S1N16.xml", source: 인포맥스, asset_hint: "kr_bond,kr_fx", language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
+  - {feed_id: infomax_stock,    url: "https://news.einfomax.co.kr/rss/S1N2.xml",  source: 인포맥스, asset_hint: kr_stock, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
+  - {feed_id: infomax_overseas, url: "https://news.einfomax.co.kr/rss/S1N21.xml", source: 인포맥스, asset_hint: us_stock, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
+  - {feed_id: infomax_intl,     url: "https://news.einfomax.co.kr/rss/S1N23.xml", source: 인포맥스, asset_hint: macro, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
+  - {feed_id: infomax_policy,   url: "https://news.einfomax.co.kr/rss/S1N15.xml", source: 인포맥스, asset_hint: kr_macro, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
   # ── 한국 독립 경제지 (연합 계열 밖) ──
-  - {feed_id: hankyung,   url: "https://www.hankyung.com/feed/finance",  source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: summary}
+  - {feed_id: hankyung,   url: "https://www.hankyung.com/feed/finance",  source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
   - {feed_id: mk_stock,   url: "https://www.mk.co.kr/rss/50200011/",     source: 매일경제, asset_hint: kr_stock, language: ko, poll_minutes: 30, body_mode: summary}
   # ── 미국 주식/크립토/원자재 (Benzinga: /feed 열림, 요약 풍부) ──
   - {feed_id: bz_news,     url: "https://www.benzinga.com/news/feed",                   source: Benzinga, asset_hint: us_stock, poll_minutes: 5,  body_mode: summary}
@@ -19,16 +20,16 @@ feeds:
   - {feed_id: coindesk,      url: "https://www.coindesk.com/arc/outboundfeeds/rss/", source: CoinDesk, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   - {feed_id: cointelegraph, url: "https://cointelegraph.com/rss",                   source: Cointelegraph, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   # ── FX / 금리·중앙은행 ──
-  - {feed_id: forexlive,    url: "https://www.forexlive.com/feed/news",       source: ForexLive, asset_hint: fx, poll_minutes: 60, body_mode: full}
-  - {feed_id: forexlive_cb, url: "https://www.forexlive.com/feed/centralbank", source: ForexLive, asset_hint: "rates,central_bank", poll_minutes: 60, body_mode: full}
+  - {feed_id: forexlive,    url: "https://investinglive.com/feed/news",       source: InvestingLive, asset_hint: fx, poll_minutes: 60, body_mode: full}   # forexlive.com→investinglive.com 사명변경(301), URL 갱신 2026-06-12
+  - {feed_id: forexlive_cb, url: "https://investinglive.com/feed/centralbank", source: InvestingLive, asset_hint: "rates,central_bank", poll_minutes: 60, body_mode: full}
   - {feed_id: fxstreet,     url: "https://www.fxstreet.com/rss/news",          source: FXStreet, asset_hint: fx, poll_minutes: 30, body_mode: summary}
-  - {feed_id: investing_fx, url: "https://www.investing.com/rss/news_1.rss",   source: Investing, asset_hint: fx, poll_minutes: 60, body_mode: summary}
+  - {feed_id: investing_fx, url: "https://www.investing.com/rss/news_1.rss",   source: Investing, asset_hint: fx, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
   # ── 채권/매크로/정책 ──
   - {feed_id: fed,           url: "https://www.federalreserve.gov/feeds/press_all.xml", source: Fed, asset_hint: us_policy, poll_minutes: 60, body_mode: summary}
-  - {feed_id: ecb,           url: "https://www.ecb.europa.eu/rss/press.html",            source: ECB, asset_hint: eu_policy, poll_minutes: 60, body_mode: summary}
-  - {feed_id: investing_bond, url: "https://www.investing.com/rss/bonds.rss",            source: Investing, asset_hint: us_bond, poll_minutes: 60, body_mode: summary}
+  - {feed_id: ecb,           url: "https://www.ecb.europa.eu/rss/press.html",            source: ECB, asset_hint: eu_policy, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증); HTTP 200·RSS 정상
+  - {feed_id: investing_bond, url: "https://www.investing.com/rss/bonds.rss",            source: Investing, asset_hint: us_bond, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
   # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ──
-  - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: headline}
+  - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: summary}   # description 채워짐 → 승격(2026-06-12 검증)
   - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech, poll_minutes: 15, body_mode: headline}
   - {feed_id: bbg_economics,  url: "https://feeds.bloomberg.com/economics/news.rss",  source: Bloomberg, asset_hint: macro, poll_minutes: 15, body_mode: headline}
   - {feed_id: bbg_korea,      url: "https://flipboard.com/@bloomberg/korea-gaa61f1tz.rss", source: Bloomberg, asset_hint: kr_market, poll_minutes: 15, body_mode: summary}

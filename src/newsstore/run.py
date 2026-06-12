@@ -1,10 +1,19 @@
 from __future__ import annotations
 import argparse
+import logging
 import os
 from .config import load_feeds
 from .ssl_config import make_client
 from .store.sqlite_store import SqliteStore
 from .collector import collect_once
+
+log = logging.getLogger("newsstore")
+
+# Exit non-zero when at least this fraction of *attempted* feeds failed, so an
+# external scheduler (cron / Cloud Scheduler) treats a systemic outage (proxy
+# down, cert expired, network gone) as a failed run instead of a silent success.
+# Isolated transient feed flakiness stays below the bar and exits 0.
+FAIL_RATE_ALERT = 0.5
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore collector (one pass)")
@@ -13,22 +22,33 @@ def main(argv=None) -> int:
     ap.add_argument("--force", action="store_true", help="ignore poll intervals (fetch all)")
     args = ap.parse_args(argv)
 
+    logging.basicConfig(
+        level=os.environ.get("NEWSSTORE_LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
     os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
     feeds = load_feeds(args.feeds)
-    store = SqliteStore(args.db)
     client = make_client()
-    try:
-        summary = collect_once(client, store, feeds, force=args.force)
-    finally:
-        client.close()
+    with SqliteStore(args.db) as store:
+        try:
+            summary = collect_once(client, store, feeds, force=args.force)
+        finally:
+            client.close()
 
-    total_new = sum(v for v in summary.values() if v > 0)
-    failed = [k for k, v in summary.items() if v == -1]
-    print(f"collected {total_new} new item(s); store total = {store.count()}")
-    for fid, n in sorted(summary.items()):
-        print(f"  {fid}: {'FAIL' if n == -1 else n}")
+        total_new = sum(v for v in summary.values() if v > 0)
+        failed = [k for k, v in summary.items() if v == -1]
+        attempted = len(summary)      # skipped (not-due) feeds are absent from summary
+        log.info("collected %d new item(s); store total = %d", total_new, store.count())
+        for fid, n in sorted(summary.items()):
+            log.info("  %s: %s", fid, "FAIL" if n == -1 else n)
+
+    if attempted and len(failed) / attempted >= FAIL_RATE_ALERT:
+        log.error("run FAILED: %d/%d feeds failed (>= %.0f%%): %s",
+                  len(failed), attempted, FAIL_RATE_ALERT * 100, ", ".join(sorted(failed)))
+        return 1
     if failed:
-        print(f"failed feeds: {', '.join(failed)}")
+        log.warning("%d feed(s) failed (isolated): %s", len(failed), ", ".join(sorted(failed)))
     return 0
 
 if __name__ == "__main__":

@@ -1,10 +1,13 @@
 from __future__ import annotations
+import logging
 from datetime import datetime, timezone, timedelta
 import httpx
 from .models import FeedConfig
 from .store.base import Store
 from .fetcher import fetch_feed
 from .parser import parse_feed
+
+log = logging.getLogger(__name__)
 
 def is_due(state: dict, poll_minutes: int, now: datetime) -> bool:
     last = state.get("last_fetched")
@@ -28,6 +31,8 @@ def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
                 summary[feed.feed_id] = 0
                 continue
             if res.status != 200:
+                log.warning("feed %s: HTTP %s (transient; retried next pass)",
+                            feed.feed_id, res.status)
                 summary[feed.feed_id] = -1     # transient failure; retried next pass
                 continue
             items = parse_feed(res.content, feed, fetched_at=now)
@@ -36,5 +41,7 @@ def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
                                  last_modified=res.last_modified, last_fetched=now)
             summary[feed.feed_id] = new
         except Exception:
-            summary[feed.feed_id] = -1     # 격리: 이 피드만 실패 처리, 다음 패스에 재시도
+            # 격리: 이 피드만 실패 처리, 다음 패스에 재시도. 트레이스백은 남긴다.
+            log.exception("feed %s: parse/store error (isolated)", feed.feed_id)
+            summary[feed.feed_id] = -1
     return summary
