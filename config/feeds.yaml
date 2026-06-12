@@ -37,6 +37,8 @@ feeds:
   - {feed_id: gn_macro_reuters, url: "https://news.google.com/rss/search?q=site:reuters.com+(inflation+OR+economy+OR+Fed)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: macro, poll_minutes: 30, body_mode: headline}
   - {feed_id: gn_rumor,         url: "https://news.google.com/rss/search?q=(reportedly+OR+%22in+talks%22+OR+%22sources+say%22)+(stock+OR+merger+OR+acquisition+OR+raise)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: rumor, poll_minutes: 30, body_mode: headline}
   - {feed_id: gn_kr_chips,      url: "https://news.google.com/rss/search?q=(%22SK+Hynix%22+OR+Samsung)+(hedge+fund+OR+leverage+OR+chip)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: kr_stock, poll_minutes: 30, body_mode: headline}
+  # ── Reuters (직접 RSS 폐지됨 → Google News site:reuters.com 경유; 본문 없음) ──
+  - {feed_id: reuters_top,      url: "https://news.google.com/rss/search?q=site:reuters.com+when:24h&hl=en-US&gl=US&ceid=US:en", source: Reuters, asset_hint: global, poll_minutes: 20, body_mode: headline}
   # ── 특수: 트럼프 원문 / Axios ──
   - {feed_id: trump_truth, url: "https://trumpstruth.org/feed",        source: TruthSocial, asset_hint: "trump,policy", poll_minutes: 15, body_mode: full}
   - {feed_id: axios,       url: "https://www.axios.com/feeds/feed.rss", source: Axios, asset_hint: "policy,scoop", poll_minutes: 60, body_mode: summary}
