@@ -86,9 +86,8 @@
 
     // 소스명 → 고정 색 (해시 기반). 카드 왼쪽 띠 + 소스 태그.
     // 알려진 소스는 황금각(137.5°) 간격으로 색 배정 → 겹침 최소화, 미지 소스는 해시 폴백
-    const SRC_ORDER = ["인포맥스","한국경제","매일경제","Benzinga","CoinDesk","Cointelegraph",
-      "ForexLive","InvestingLive","FXStreet","Investing","Fed","ECB","Bloomberg","GoogleNews",
-      "TruthSocial","Axios","Reuters","FinancialJuice"];
+    const SRC_ORDER = ["Bloomberg","Reuters","Benzinga","GoogleNews","Axios","인포맥스","한국경제",
+      "매일경제","CoinDesk","Cointelegraph","InvestingLive","Investing","Fed","ECB","TruthSocial"];
     function srcColors(s) {
       const str = s || "?";
       let h, i = SRC_ORDER.indexOf(str);
@@ -190,6 +189,12 @@
         render(items);
         statusEl.textContent = `${items.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
       } catch (e) {
+        if (/requires an index|currently building/i.test(e.message)) {
+          statusEl.textContent = "인덱스 생성 중…";
+          listEl.innerHTML = `<div class="empty">소스 필터용 인덱스를 만드는 중이에요 (최초 1회, 보통 1~3분).<br>잠시 후 자동으로 다시 불러옵니다…</div>`;
+          setTimeout(load, 20000);
+          return;
+        }
         statusEl.textContent = "";
         listEl.innerHTML = `<div class="error">불러오기 실패: <code>${esc(e.message)}</code></div>`;
       }
