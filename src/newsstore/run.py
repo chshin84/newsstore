@@ -36,7 +36,7 @@ def main(argv=None) -> int:
         try:
             summary = collect_once(client, store, feeds, force=args.force)
         finally:
-            getattr(client, "close", lambda: None)()
+            client.close()
 
         total_new = sum(v for v in summary.values() if v > 0)
         failed = [k for k, v in summary.items() if v == -1]

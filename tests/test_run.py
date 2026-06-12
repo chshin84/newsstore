@@ -1,6 +1,6 @@
+import types
 import httpx
 from newsstore import run
-from newsstore import run as run_mod
 
 FEEDS_YAML = (
     "feeds:\n"
@@ -46,11 +46,11 @@ def test_run_uses_factory_with_env_backend(monkeypatch, tmp_path):
         return FakeStore()
 
     monkeypatch.setenv("NEWSSTORE_BACKEND", "sqlite")
-    monkeypatch.setattr(run_mod, "make_store", fake_make_store)
-    monkeypatch.setattr(run_mod, "make_client", lambda: object())
-    monkeypatch.setattr(run_mod, "load_feeds", lambda p: [])
-    monkeypatch.setattr(run_mod, "collect_once", lambda *a, **k: {})
+    monkeypatch.setattr(run, "make_store", fake_make_store)
+    monkeypatch.setattr(run, "make_client", lambda: types.SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(run, "load_feeds", lambda p: [])
+    monkeypatch.setattr(run, "collect_once", lambda *a, **k: {})
 
-    rc = run_mod.main(["--db", str(tmp_path / "db.sqlite")])
+    rc = run.main(["--db", str(tmp_path / "db.sqlite")])
     assert rc == 0
     assert captured["backend"] == "sqlite"
