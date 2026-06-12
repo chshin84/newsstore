@@ -19,7 +19,8 @@ venv/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
-uv.lock         # 로컬 uv venv 산물; 표준 의존성 락은 infra/requirements.lock
+# 로컬 uv venv 산물; 표준 의존성 락은 infra/requirements.lock
+uv.lock
 
 # --- 런타임 산출물 (재생성 가능: run.py --force) ---
 data/
