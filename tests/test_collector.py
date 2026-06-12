@@ -30,3 +30,20 @@ def test_collect_once_304_is_zero_new(tmp_path):
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(304)))
     s = collect_once(client, store, [feed], now=NOW, force=True)
     assert s == {"f1": 0}
+
+def test_collect_once_isolates_feed_failure(tmp_path):
+    # 한 피드의 저장 예외가 다른 피드 수집을 막지 않아야 한다.
+    class FlakyStore(SqliteStore):
+        def upsert_items(self, items):
+            if items and items[0].feed_id == "bad":
+                raise RuntimeError("db boom")
+            return super().upsert_items(items)
+
+    bad = FeedConfig(feed_id="bad", url="https://e/b.rss", source="S", poll_minutes=0)
+    good = FeedConfig(feed_id="good", url="https://e/g.rss", source="S", poll_minutes=0)
+    store = FlakyStore(tmp_path / "db.sqlite")
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=RSS)))
+    s = collect_once(client, store, [bad, good], now=NOW, force=True)
+    assert s["bad"] == -1          # 실패는 격리되어 -1
+    assert s["good"] == 1          # 나머지 피드는 정상 수집
+    assert store.count() == 1

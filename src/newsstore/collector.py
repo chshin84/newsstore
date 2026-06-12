@@ -17,20 +17,24 @@ def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
     now = now or datetime.now(timezone.utc)
     summary: dict[str, int] = {}
     for feed in feeds:
-        state = store.get_feed_state(feed.feed_id)
-        if not force and not is_due(state, feed.poll_minutes, now):
-            continue
-        res = fetch_feed(client, feed, state.get("etag"), state.get("last_modified"))
-        if res.status == 304:
-            store.set_feed_state(feed.feed_id, last_fetched=now)
-            summary[feed.feed_id] = 0
-            continue
-        if res.status != 200:
-            summary[feed.feed_id] = -1     # transient failure; retried next pass
-            continue
-        items = parse_feed(res.content, feed, fetched_at=now)
-        new = store.upsert_items(items)
-        store.set_feed_state(feed.feed_id, etag=res.etag,
-                             last_modified=res.last_modified, last_fetched=now)
-        summary[feed.feed_id] = new
+        # 한 피드의 실패(파싱/저장 예외 포함)가 다른 피드 수집을 막지 않도록 격리한다.
+        try:
+            state = store.get_feed_state(feed.feed_id)
+            if not force and not is_due(state, feed.poll_minutes, now):
+                continue
+            res = fetch_feed(client, feed, state.get("etag"), state.get("last_modified"))
+            if res.status == 304:
+                store.set_feed_state(feed.feed_id, last_fetched=now)
+                summary[feed.feed_id] = 0
+                continue
+            if res.status != 200:
+                summary[feed.feed_id] = -1     # transient failure; retried next pass
+                continue
+            items = parse_feed(res.content, feed, fetched_at=now)
+            new = store.upsert_items(items)
+            store.set_feed_state(feed.feed_id, etag=res.etag,
+                                 last_modified=res.last_modified, last_fetched=now)
+            summary[feed.feed_id] = new
+        except Exception:
+            summary[feed.feed_id] = -1     # 격리: 이 피드만 실패 처리, 다음 패스에 재시도
     return summary
