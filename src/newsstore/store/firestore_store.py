@@ -46,6 +46,23 @@ class FirestoreStore:
     def count(self) -> int:
         return sum(1 for _ in self.db.collection(_ITEMS).stream())
 
+    def get_feed_state(self, feed_id: str) -> dict:
+        snap = self.db.collection(_FEED_STATE).document(feed_id).get()
+        if not snap.exists:
+            return {}
+        d = snap.to_dict()
+        return {"etag": d.get("etag"), "last_modified": d.get("last_modified"),
+                "last_fetched": d.get("last_fetched")}
+
+    def set_feed_state(self, feed_id: str, **fields) -> None:
+        cur = self.get_feed_state(feed_id)        # read-modify-write (no merge=)
+        cur.update(fields)
+        self.db.collection(_FEED_STATE).document(feed_id).set({
+            "etag": cur.get("etag"),
+            "last_modified": cur.get("last_modified"),
+            "last_fetched": cur.get("last_fetched"),
+        })
+
     def close(self) -> None:
         pass
 

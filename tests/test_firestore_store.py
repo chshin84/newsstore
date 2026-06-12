@@ -21,3 +21,17 @@ def test_upsert_dedups_by_id():
 def test_context_manager_yields_store():
     with _store() as s:
         assert s.upsert_items([_item("a")]) == 1
+
+def test_feed_state_roundtrip():
+    s = _store()
+    assert s.get_feed_state("f1") == {}
+    s.set_feed_state("f1", etag='W/"x"', last_modified="Mon", last_fetched=NOW)
+    st = s.get_feed_state("f1")
+    assert st["etag"] == 'W/"x"' and st["last_fetched"] == NOW
+
+def test_set_feed_state_merges_existing_fields():
+    s = _store()
+    s.set_feed_state("f1", etag="e1", last_fetched=NOW)
+    s.set_feed_state("f1", last_modified="Tue")   # must not wipe etag
+    st = s.get_feed_state("f1")
+    assert st["etag"] == "e1" and st["last_modified"] == "Tue"
