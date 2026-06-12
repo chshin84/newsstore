@@ -97,6 +97,17 @@
     }
     function txt(s) { return esc(decode(s)); }
     function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 호버 시 전체
+
+    // 변호사/집단소송 PR 스팸 필터 — 제목+본문에 아래 시그널이 있으면 숨김 (고정밀)
+    const JUNK = ["lead plaintiff", "class action", "deadline alert", "shareholder rights law firm",
+      "suffered losses in", "encourages investors", "reminds investors", "securities fraud",
+      "bragar eagel", "rosen law", "pomerantz", "levi & korsinsky", "glancy prongay", "kahn swick",
+      "robbins geller", "faruqi", "schall law", "hagens berman", "kessler topaz", "bronstein, gewirtz",
+      "gross law firm", "johnson fistel", "kirby mcinerney"];
+    function isJunk(it) {
+      const s = (decode(it.title) + " " + decode(it.body)).toLowerCase();
+      return JUNK.some(k => s.includes(k));
+    }
     function relTime(d) {
       if (!d) return "시간 미상";
       const s = (Date.now() - d.getTime()) / 1000;
@@ -147,14 +158,15 @@
       const tag = tagSel.value;
       const col = collection(db, "items");
       const q = (tag && tag !== "__all__")
-        ? query(col, where("tags", "array-contains", tag), orderBy("published_at", "desc"), limit(50))
-        : query(col, orderBy("published_at", "desc"), limit(50));
+        ? query(col, where("tags", "array-contains", tag), orderBy("published_at", "desc"), limit(80))
+        : query(col, orderBy("published_at", "desc"), limit(80));
       try {
         const snap = await getDocs(q);
         const rawItems = snap.docs.map(d => d.data());
         // 제목(정규화) 기준 중복 제거 — 같은 뉴스가 URL만 달라 여러 번 들어온 경우 한 건만
         const seen = new Set(); const items = [];
         for (const it of rawItems) {
+          if (isJunk(it)) continue;                          // 집단소송 PR 스팸 제거
           const k = decode(it.title).trim().toLowerCase().replace(/\s+/g, " ");
           if (k && seen.has(k)) continue;
           if (k) seen.add(k);
