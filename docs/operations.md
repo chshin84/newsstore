@@ -72,6 +72,13 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
 현재: `source+published_at`(소스필터), `tags+published_at`(태그필터), `processed+fetched_at`(Step-2 큐) — 전부 READY.
 
+## 접근 방식 / 결정 (newsstore)
+- **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
+- **본문은 "피드가 주면 사용, 안 주면 헤드라인".** 기사 페이지 스크래핑은 **안 함**(Cloud Run IP 차단·JS렌더·GN 리다이렉트로 fragile). 본문 부족하면 **피드를 더 추가**(Bloomberg 카테고리처럼).
+- **피드 추가 전 curl 실측**(HTTP·item수·desc 유무) → 되는 것만 등록 → A 재배포.
+- **콘솔 수동 대신 REST**로 GCP/Firebase 운영(인증 공유).
+- 환경 두 축(`APP_ENV`=home/office, `NEWSSTORE_BACKEND`=sqlite/firestore)은 `README.md` 표 참조.
+
 ## 알아둘 함정
 - 수집기는 **Cloud Run 데이터센터 IP**라 일부 사이트가 차단함(fxstreet 제거됨, Bloomberg 기사본문 403). 본문은 **피드 자체 description**으로만 — 기사 스크래핑은 안 함.
 - 피드 추가는 "되는지 curl 테스트 → feeds.yaml → A 재배포" 순서.
