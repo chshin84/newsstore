@@ -36,6 +36,8 @@
     .card a.title:hover { color:var(--accent); }
     .excerpt { color:var(--sub); font-size:13px; line-height:1.6; margin:5px 0 0;
       display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .card:hover { background:#fbfbf9; border-color:#d8d6cf; }
+    .card:hover .excerpt { -webkit-line-clamp:99; overflow:visible; }
     .meta { color:var(--mut); font-size:12px; margin-top:8px; display:flex; gap:6px;
       align-items:center; flex-wrap:wrap; }
     .pill { background:var(--pill); color:var(--pill-fg); border-radius:999px;
@@ -94,10 +96,7 @@
         ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
     }
     function txt(s) { return esc(decode(s)); }
-    function excerpt(s, n = 100) {
-      const t = decode(s).trim();
-      return t.length > n ? esc(t.slice(0, n)) + "…" : esc(t);
-    }
+    function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 호버 시 전체
     function relTime(d) {
       if (!d) return "시간 미상";
       const s = (Date.now() - d.getTime()) / 1000;
@@ -127,7 +126,7 @@
         // TruthSocial은 본문을 제목칸에 싣고 있음 → 제목은 "Truth Social", 미리보기는 그 본문
         const isTS = it.source === "TruthSocial";
         const titleHtml = isTS ? "Truth Social" : (txt(it.title) || "(제목 없음)");
-        const body = isTS ? excerpt(it.title || it.body, 100) : excerpt(it.body, 100);
+        const body = bodyHtml(isTS ? (it.title || it.body) : it.body);
         const c = srcColors(it.source);
         const tags = (it.tags || []).map(t => `<span class="pill">${txt(t)}</span>`).join("");
         return `<div class="card" style="border-left-color:${c.bar}">
