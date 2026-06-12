@@ -71,7 +71,7 @@ class FirestoreStore:
              .order_by("fetched_at"))
         if limit is not None:
             q = q.limit(int(limit))
-        return [_from_doc(s.id, s.to_dict()) for s in q.stream()]
+        return [_from_doc(s.id, s.to_dict() or {}) for s in q.stream()]
 
     def mark_processed(self, ids: list[str], processed_at: datetime | None = None) -> int:
         if not ids:
