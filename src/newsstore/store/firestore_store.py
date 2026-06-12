@@ -1,6 +1,5 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from typing import Optional
 from ..models import RawItem
 
 _ITEMS = "items"
@@ -80,6 +79,7 @@ class FirestoreStore:
         ts = processed_at or datetime.now(timezone.utc)
         changed = 0
         col = self.db.collection(_ITEMS)
+        # TODO: batch the reads with self.db.get_all([...]) once off MockFirestore (real client only)
         for _id in ids:
             ref = col.document(_id)
             snap = ref.get()
