@@ -52,6 +52,8 @@
     <div class="wrap">
       <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
       <div class="controls">
+        <label for="src">소스</label>
+        <select id="src"><option value="__all__">전체</option></select>
         <label for="tag">태그</label>
         <select id="tag"><option value="__all__">전체</option></select>
         <button id="refresh">새로고침</button>
@@ -78,15 +80,21 @@
     const listEl = document.getElementById("list");
     const statusEl = document.getElementById("status");
     const tagSel = document.getElementById("tag");
+    const srcSel = document.getElementById("src");
     const seenTags = new Set();
     const db = getFirestore(initializeApp(firebaseConfig));
 
     // 소스명 → 고정 색 (해시 기반). 카드 왼쪽 띠 + 소스 태그.
+    // 알려진 소스는 황금각(137.5°) 간격으로 색 배정 → 겹침 최소화, 미지 소스는 해시 폴백
+    const SRC_ORDER = ["인포맥스","한국경제","매일경제","Benzinga","CoinDesk","Cointelegraph",
+      "ForexLive","InvestingLive","FXStreet","Investing","Fed","ECB","Bloomberg","GoogleNews",
+      "TruthSocial","Axios","Reuters","FinancialJuice"];
     function srcColors(s) {
-      let h = 0; const str = s || "?";
-      for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
-      h = h % 360;
-      return { bar:`hsl(${h} 55% 56%)`, bg:`hsl(${h} 62% 95%)`, fg:`hsl(${h} 42% 32%)` };
+      const str = s || "?";
+      let h, i = SRC_ORDER.indexOf(str);
+      if (i >= 0) h = Math.round((i * 137.508) % 360);
+      else { let x = 0; for (let j = 0; j < str.length; j++) x = (x * 31 + str.charCodeAt(j)) >>> 0; h = x % 360; }
+      return { bar:`hsl(${h} 62% 54%)`, bg:`hsl(${h} 64% 95%)`, fg:`hsl(${h} 46% 32%)` };
     }
     // 피드가 이중 인코딩한 &quot; &#39; 등을 실제 문자로 디코드
     const _ta = document.createElement("textarea");
@@ -157,11 +165,15 @@
 
     async function load() {
       statusEl.textContent = "불러오는 중…";
-      const tag = tagSel.value;
+      const tag = tagSel.value, src = srcSel.value;
       const col = collection(db, "items");
-      const q = (tag && tag !== "__all__")
-        ? query(col, where("tags", "array-contains", tag), orderBy("published_at", "desc"), limit(80))
-        : query(col, orderBy("published_at", "desc"), limit(80));
+      let q;
+      if (src !== "__all__")
+        q = query(col, where("source", "==", src), orderBy("published_at", "desc"), limit(80));
+      else if (tag !== "__all__")
+        q = query(col, where("tags", "array-contains", tag), orderBy("published_at", "desc"), limit(80));
+      else
+        q = query(col, orderBy("published_at", "desc"), limit(80));
       try {
         const snap = await getDocs(q);
         const rawItems = snap.docs.map(d => d.data());
@@ -183,6 +195,9 @@
       }
     }
 
+    srcSel.innerHTML = '<option value="__all__">전체 소스</option>' +
+      SRC_ORDER.map(s => `<option>${esc(s)}</option>`).join("");
+    srcSel.addEventListener("change", load);
     tagSel.addEventListener("change", load);
     document.getElementById("refresh").addEventListener("click", load);
     load();
