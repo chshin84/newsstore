@@ -50,7 +50,7 @@ class FirestoreStore:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
         if not snap.exists:
             return {}
-        d = snap.to_dict()
+        d = snap.to_dict() or {}
         return {"etag": d.get("etag"), "last_modified": d.get("last_modified"),
                 "last_fetched": d.get("last_fetched")}
 
