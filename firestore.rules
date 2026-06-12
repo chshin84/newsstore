@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// 공개 뷰어용 규칙: items는 누구나 읽기, 클라이언트 쓰기는 전면 금지.
+// 수집기(Cloud Run Job)는 Admin SDK라 규칙을 우회하므로 write:false여도 정상 기록됨.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /items/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // 내부 상태(조건부 GET 등)는 비공개
+    match /feed_state/{id} {
+      allow read, write: if false;
+    }
+
+    // 그 외 전부 거부
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

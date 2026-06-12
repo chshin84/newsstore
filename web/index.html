@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>newsstore — 뉴스 피드</title>
+  <style>
+    :root { --bg:#0f1115; --card:#171a21; --line:#262b36; --fg:#e6e9ef; --mut:#9aa3b2; --accent:#5b9dff; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif; }
+    header { position:sticky; top:0; background:rgba(15,17,21,.92); backdrop-filter:blur(6px);
+      border-bottom:1px solid var(--line); padding:14px 16px; }
+    .wrap { max-width:820px; margin:0 auto; }
+    h1 { font-size:18px; margin:0 0 10px; }
+    h1 small { color:var(--mut); font-weight:400; font-size:13px; margin-left:6px; }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    select, button { background:var(--card); color:var(--fg); border:1px solid var(--line);
+      border-radius:8px; padding:7px 10px; font-size:14px; }
+    button { cursor:pointer; }
+    #status { color:var(--mut); font-size:13px; margin-left:auto; }
+    main { padding:16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+      padding:14px 16px; margin:0 0 10px; }
+    .card a.title { color:var(--fg); text-decoration:none; font-size:15px; font-weight:600; line-height:1.45; }
+    .card a.title:hover { color:var(--accent); }
+    .meta { color:var(--mut); font-size:12.5px; margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; }
+    .pill { background:#1e2430; border:1px solid var(--line); border-radius:999px; padding:2px 8px; }
+    .empty, .error { color:var(--mut); text-align:center; padding:40px 16px; line-height:1.6; }
+    .error code { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
+      <div class="controls">
+        <label for="tag" style="color:var(--mut);font-size:13px;">태그</label>
+        <select id="tag"><option value="__all__">전체</option></select>
+        <button id="refresh">새로고침</button>
+        <span id="status">불러오는 중…</span>
+      </div>
+    </div>
+  </header>
+  <main><div class="wrap" id="list"></div></main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, query, orderBy, limit, where, getDocs }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    // ── TODO(사용자): Firebase 콘솔 → 프로젝트 설정 → 웹 앱 → SDK config 값을 붙여넣으세요.
+    //    (공개 read 전용이라 이 값들은 노출돼도 안전합니다.)
+    const firebaseConfig = {
+      apiKey: "PASTE_API_KEY",
+      authDomain: "daily-recap-498506.firebaseapp.com",
+      projectId: "daily-recap-498506",
+      // storageBucket / messagingSenderId / appId 는 콘솔 값으로 채워도 되고 생략 가능
+    };
+
+    const listEl = document.getElementById("list");
+    const statusEl = document.getElementById("status");
+    const tagSel = document.getElementById("tag");
+    const seenTags = new Set();
+
+    if (firebaseConfig.apiKey === "PASTE_API_KEY") {
+      listEl.innerHTML = `<div class="error">Firebase 설정이 아직 비어 있어요.<br>
+        <code>web/index.html</code>의 <code>firebaseConfig</code>에 콘솔 값을 넣고 다시 배포하세요.</div>`;
+      statusEl.textContent = "";
+      throw new Error("firebaseConfig not set");
+    }
+
+    const db = getFirestore(initializeApp(firebaseConfig));
+
+    function relTime(d) {
+      if (!d) return "시간 미상";
+      const s = (Date.now() - d.getTime()) / 1000;
+      if (s < 60) return "방금";
+      if (s < 3600) return Math.floor(s / 60) + "분 전";
+      if (s < 86400) return Math.floor(s / 3600) + "시간 전";
+      if (s < 7 * 86400) return Math.floor(s / 86400) + "일 전";
+      return d.toLocaleDateString("ko-KR");
+    }
+
+    function esc(s) {
+      return (s || "").replace(/[&<>"']/g, c =>
+        ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    }
+
+    function refreshTagOptions(items) {
+      let added = false;
+      for (const it of items) for (const t of (it.tags || [])) {
+        if (!seenTags.has(t)) { seenTags.add(t); added = true; }
+      }
+      if (!added) return;
+      const cur = tagSel.value;
+      tagSel.innerHTML = '<option value="__all__">전체</option>' +
+        [...seenTags].sort().map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
+      tagSel.value = cur;
+    }
+
+    function render(items) {
+      if (!items.length) { listEl.innerHTML = `<div class="empty">표시할 뉴스가 없습니다.</div>`; return; }
+      listEl.innerHTML = items.map(it => {
+        const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
+        const tags = (it.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join("");
+        return `<div class="card">
+          <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title) || "(제목 없음)"}</a>
+          <div class="meta">
+            <span class="pill">${esc(it.source) || "?"}</span>
+            ${it.asset_hint ? `<span class="pill">${esc(it.asset_hint)}</span>` : ""}
+            ${tags}
+            <span>${relTime(pub)}</span>
+          </div>
+        </div>`;
+      }).join("");
+    }
+
+    async function load() {
+      statusEl.textContent = "불러오는 중…";
+      const tag = tagSel.value;
+      const col = collection(db, "items");
+      const q = (tag && tag !== "__all__")
+        ? query(col, where("tags", "array-contains", tag), orderBy("published_at", "desc"), limit(50))
+        : query(col, orderBy("published_at", "desc"), limit(50));
+      try {
+        const snap = await getDocs(q);
+        const items = snap.docs.map(d => d.data());
+        if (tag === "__all__") refreshTagOptions(items);
+        render(items);
+        statusEl.textContent = `${items.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
+      } catch (e) {
+        statusEl.textContent = "";
+        listEl.innerHTML = `<div class="error">불러오기 실패: <code>${esc(e.message)}</code><br>
+          (태그 필터는 복합 인덱스가 필요할 수 있어요 — <code>firebase deploy --only firestore:indexes</code>)</div>`;
+      }
+    }
+
+    tagSel.addEventListener("change", load);
+    document.getElementById("refresh").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>
