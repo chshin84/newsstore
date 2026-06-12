@@ -124,11 +124,14 @@
       if (!items.length) { listEl.innerHTML = `<div class="empty">표시할 뉴스가 없습니다.</div>`; return; }
       listEl.innerHTML = items.map(it => {
         const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
-        const body = excerpt(it.body, 100);
+        // TruthSocial은 본문을 제목칸에 싣고 있음 → 제목은 "Truth Social", 미리보기는 그 본문
+        const isTS = it.source === "TruthSocial";
+        const titleHtml = isTS ? "Truth Social" : (txt(it.title) || "(제목 없음)");
+        const body = isTS ? excerpt(it.title || it.body, 100) : excerpt(it.body, 100);
         const c = srcColors(it.source);
         const tags = (it.tags || []).map(t => `<span class="pill">${txt(t)}</span>`).join("");
         return `<div class="card" style="border-left-color:${c.bar}">
-          <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${txt(it.title) || "(제목 없음)"}</a>
+          <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${titleHtml}</a>
           ${body ? `<p class="excerpt">${body}</p>` : ""}
           <div class="meta">
             <span class="pill src" style="background:${c.bg};color:${c.fg}">${txt(it.source) || "?"}</span>
@@ -149,7 +152,15 @@
         : query(col, orderBy("published_at", "desc"), limit(50));
       try {
         const snap = await getDocs(q);
-        const items = snap.docs.map(d => d.data());
+        const rawItems = snap.docs.map(d => d.data());
+        // 제목(정규화) 기준 중복 제거 — 같은 뉴스가 URL만 달라 여러 번 들어온 경우 한 건만
+        const seen = new Set(); const items = [];
+        for (const it of rawItems) {
+          const k = decode(it.title).trim().toLowerCase().replace(/\s+/g, " ");
+          if (k && seen.has(k)) continue;
+          if (k) seen.add(k);
+          items.push(it);
+        }
         if (tag === "__all__") refreshTagOptions(items);
         render(items);
         statusEl.textContent = `${items.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
