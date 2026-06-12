@@ -4,7 +4,7 @@ import logging
 import os
 from .config import load_feeds
 from .ssl_config import make_client
-from .store.sqlite_store import SqliteStore
+from .store.factory import make_store
 from .collector import collect_once
 
 log = logging.getLogger("newsstore")
@@ -27,14 +27,16 @@ def main(argv=None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
+    backend = os.environ.get("NEWSSTORE_BACKEND", "sqlite").lower()
+    if backend == "sqlite":
+        os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
     feeds = load_feeds(args.feeds)
     client = make_client()
-    with SqliteStore(args.db) as store:
+    with make_store(backend, db_path=args.db) as store:
         try:
             summary = collect_once(client, store, feeds, force=args.force)
         finally:
-            client.close()
+            getattr(client, "close", lambda: None)()
 
         total_new = sum(v for v in summary.values() if v > 0)
         failed = [k for k, v in summary.items() if v == -1]

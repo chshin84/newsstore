@@ -1,5 +1,6 @@
 import httpx
 from newsstore import run
+from newsstore import run as run_mod
 
 FEEDS_YAML = (
     "feeds:\n"
@@ -30,3 +31,26 @@ def test_main_returns_nonzero_when_all_feeds_fail(tmp_path, monkeypatch):
     rc = run.main(["--feeds", str(_write_feeds(tmp_path)),
                    "--db", str(tmp_path / "db.sqlite"), "--force"])
     assert rc == 1   # systemic outage must not look like success to the scheduler
+
+
+def test_run_uses_factory_with_env_backend(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeStore:
+        def __enter__(self): return self
+        def __exit__(self, *exc): pass
+        def count(self): return 0          # run.main logs store.count()
+
+    def fake_make_store(backend, **kw):
+        captured["backend"] = backend
+        return FakeStore()
+
+    monkeypatch.setenv("NEWSSTORE_BACKEND", "sqlite")
+    monkeypatch.setattr(run_mod, "make_store", fake_make_store)
+    monkeypatch.setattr(run_mod, "make_client", lambda: object())
+    monkeypatch.setattr(run_mod, "load_feeds", lambda p: [])
+    monkeypatch.setattr(run_mod, "collect_once", lambda *a, **k: {})
+
+    rc = run_mod.main(["--db", str(tmp_path / "db.sqlite")])
+    assert rc == 0
+    assert captured["backend"] == "sqlite"
