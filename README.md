@@ -26,8 +26,11 @@ Firebase Hosting (web/index.html, 정적)
 |----|----|------|
 | **`APP_ENV`** | `home` \| `office` | **보안 환경.** `home`=집, 기본 SSL 검증. `office`=회사 ePrism TLS 프록시 → 루트 CA `ePrism-SSL-ROOT-CA.crt`를 이미지에 주입(.crt는 git 제외, 회사 PC에만). 클라우드(Cloud Run)는 `home`. |
 | **`NEWSSTORE_BACKEND`** | `sqlite` \| `firestore` | **저장소 환경.** `sqlite`(기본)=로컬·집 테스트(파일 `data/newsstore.db`). `firestore`=클라우드 저장. 코드는 동일, 토글만. |
-| `GOOGLE_CLOUD_PROJECT` | `daily-recap-498506` | `firestore` 백엔드일 때 프로젝트 |
-| `NEWSSTORE_DB` | 경로 | sqlite DB 경로 (기본 `data/newsstore.db`) |
+| `GOOGLE_CLOUD_PROJECT` | `daily-recap-498506` | 타겟 GCP/Firestore 프로젝트 ID (firestore 백엔드 + 배포 공통) |
+| `NEWSSTORE_DB` | 경로 | sqlite DB 경로 (기본 `/data/newsstore.db`) |
+| `GCP_REGION` | `asia-northeast3` | 배포/셋업 리전 (`docs/setup.md`·`operations.md`) |
+
+→ **모든 값은 루트 `.env` 한 곳에서 관리.** `cp .env.example .env` 로 만들고 값만 바꾸면 됨(타겟 프로젝트 변경 = `GOOGLE_CLOUD_PROJECT` 한 줄). Docker 실행은 `--env-file .env`.
 
 조합 예:
 - **집에서 로컬 테스트** → `APP_ENV=home` + `NEWSSTORE_BACKEND=sqlite` (아무것도 안 set해도 기본값)
@@ -37,11 +40,11 @@ Firebase Hosting (web/index.html, 정적)
 ## 로컬 실행 (Docker only — 호스트에 로컬 Python 없음)
 
 ```bash
+cp .env.example .env          # 값 확인/수정 (APP_ENV, NEWSSTORE_BACKEND, …)
 docker build -f infra/Dockerfile -t newsstore .
 
-# 1회 수집 (집 + sqlite, named volume로 영속)
-docker run --rm -e APP_ENV=home -e NEWSSTORE_BACKEND=sqlite \
-  -e NEWSSTORE_DB=/data/newsstore.db -v newsstore_data:/data newsstore \
+# 1회 수집 (.env 설정 사용, named volume로 영속)
+docker run --rm --env-file .env -v newsstore_data:/data newsstore \
   python -m newsstore.run --force
 ```
 

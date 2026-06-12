@@ -6,7 +6,11 @@
 
 ## 전제 / 변수
 - `gcloud` 설치 + 로그인(`gcloud auth login`, `gcloud auth application-default login`), GCP **결제 계정** 1개.
-- 변수: `PROJECT_ID`(예 `daily-recap-498506`), `REGION=asia-northeast3`.
+- 변수는 루트 **`.env`** 에서 (`GOOGLE_CLOUD_PROJECT`, `GCP_REGION`). 아래 명령의 `<PROJECT_ID>`=`GOOGLE_CLOUD_PROJECT`, `<REGION>`=`GCP_REGION`. PowerShell 세션에 로드:
+  ```powershell
+  Get-Content .env | ? { $_ -match '^\s*[^#].*=' } | % { $k,$v=$_ -split '=',2; Set-Item "env:$($k.Trim())" $v.Trim() }
+  # 이후: $env:GOOGLE_CLOUD_PROJECT , $env:GCP_REGION
+  ```
 - **Firebase REST 호출엔 헤더 `x-goog-user-project: <PROJECT_ID>` 필수**(없으면 quota project 403). 토큰 = `gcloud auth print-access-token`.
 
 ## 1. 프로젝트 · API · Firestore
