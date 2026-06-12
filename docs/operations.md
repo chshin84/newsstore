@@ -1,7 +1,7 @@
 # 운영 / 재배포 런북
 
 배포는 **이미 완료**돼 라이브다. 이 문서는 이후 **변경분을 클라우드에 반영**하는 명령 모음이다.
-(최초 1회 셋업 — 프로젝트/Firestore/Cloud Run/Scheduler/IAM/규칙/Hosting 생성 — 은 전부 끝났음.)
+**0→배포 최초 셋업 절차(프로젝트/Firestore/Cloud Run/Scheduler/IAM/Firebase/규칙/Hosting 생성)는 `docs/setup.md` 참조** — 이미 끝났으니 평소엔 불필요.
 
 ## 전제
 - `gcloud`가 사용자 프로필에 인증돼 있어야 함 (`chshin84@gmail.com`, 프로젝트 `daily-recap-498506`).

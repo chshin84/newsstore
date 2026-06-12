@@ -51,8 +51,9 @@ docker run --rm -e APP_ENV=home -e NEWSSTORE_BACKEND=sqlite \
 MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pytest -q
 ```
 
-## 재배포 / 운영
-피드(`config/feeds.yaml`)나 수집기 코드, 사이트(`web/index.html`)를 고친 뒤 클라우드에 반영하는 명령은 **`docs/operations.md`** 참고. (이미지 재빌드 → Job 갱신 / Hosting REST 배포 / 인덱스·규칙)
+## 셋업 / 재배포 / 운영
+- **최초 0→배포 셋업**(새 프로젝트·재해복구·복제): **`docs/setup.md`** (gcloud + REST만으로 전체 프로비저닝)
+- **변경 반영**(피드·코드·사이트 수정 후): **`docs/operations.md`** (이미지 재빌드 → Job 갱신 / Hosting REST 배포 / 인덱스·규칙)
 
 ## 피드 레지스트리
 `config/feeds.yaml` — 한국(인포맥스·한경·매경), 미국주식(Benzinga), 크립토(CoinDesk·Cointelegraph), FX/금리(InvestingLive·Investing·Fed·ECB), **Bloomberg(markets/technology/economics/business/politics/opinion/crypto/wealth + Flipboard Korea)**, Reuters(Google News 경유), Google News(루머·KR칩), TruthSocial, Axios.
@@ -63,7 +64,8 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pyt
 - ✅ **공개 사이트**: 라이브 (소스 필터·중복제거·스팸필터·소스별 색·호버 본문).
 - ⬜ **Step-2 (LLM 태깅)**: 다음. `items WHERE processed=false`를 Haiku/Gemini로 태깅 → 사이트 태그 드롭다운 자동 활성화. (`processed`/`get_unprocessed`/`mark_processed` 계약 + 인덱스 준비됨)
 
-## 설계·계획 문서
-- 설계: `docs/superpowers/specs/` (newsstore-design, gcp-deploy-design)
-- 구현계획: `docs/superpowers/plans/` (collector, firestore-store)
-- 운영 런북: `docs/operations.md`
+## 문서
+- 로드맵(Step 1~7): `docs/roadmap.md`
+- 최초 셋업(0→배포): `docs/setup.md` · 운영·재배포: `docs/operations.md`
+- 설계: `docs/superpowers/specs/` · 구현계획: `docs/superpowers/plans/`
+- 소스 선택 근거(히스토리): `docs/handoff/2026-06-12-session-handoff.md`
