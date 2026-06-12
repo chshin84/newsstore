@@ -33,8 +33,13 @@ feeds:
   - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech, poll_minutes: 15, body_mode: headline}
   - {feed_id: bbg_economics,  url: "https://feeds.bloomberg.com/economics/news.rss",  source: Bloomberg, asset_hint: macro, poll_minutes: 15, body_mode: headline}
   - {feed_id: bbg_korea,      url: "https://flipboard.com/@bloomberg/korea-gaa61f1tz.rss", source: Bloomberg, asset_hint: kr_market, poll_minutes: 15, body_mode: summary}
+  # Bloomberg 카테고리 추가 (desc 본문 있음, 2026-06-12 테스트: business/politics/bview 30건, crypto 9, wealth 3)
+  - {feed_id: bbg_business,   url: "https://feeds.bloomberg.com/business/news.rss",   source: Bloomberg, asset_hint: business, poll_minutes: 15, body_mode: summary}
+  - {feed_id: bbg_politics,   url: "https://feeds.bloomberg.com/politics/news.rss",   source: Bloomberg, asset_hint: politics, poll_minutes: 15, body_mode: summary}
+  - {feed_id: bbg_opinion,    url: "https://feeds.bloomberg.com/bview/news.rss",      source: Bloomberg, asset_hint: opinion,  poll_minutes: 30, body_mode: summary}
+  - {feed_id: bbg_crypto,     url: "https://feeds.bloomberg.com/crypto/news.rss",     source: Bloomberg, asset_hint: crypto,   poll_minutes: 30, body_mode: summary}
+  - {feed_id: bbg_wealth,     url: "https://feeds.bloomberg.com/wealth/news.rss",     source: Bloomberg, asset_hint: wealth,   poll_minutes: 30, body_mode: summary}
   # ── 매크로/루머 헤드라인 (Google News 쿼리; 본문 없음) ──
-  - {feed_id: gn_macro_reuters, url: "https://news.google.com/rss/search?q=site:reuters.com+(inflation+OR+economy+OR+Fed)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: macro, poll_minutes: 30, body_mode: headline}
   - {feed_id: gn_rumor,         url: "https://news.google.com/rss/search?q=(reportedly+OR+%22in+talks%22+OR+%22sources+say%22)+(stock+OR+merger+OR+acquisition+OR+raise)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: rumor, poll_minutes: 30, body_mode: headline}
   - {feed_id: gn_kr_chips,      url: "https://news.google.com/rss/search?q=(%22SK+Hynix%22+OR+Samsung)+(hedge+fund+OR+leverage+OR+chip)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: kr_stock, poll_minutes: 30, body_mode: headline}
   # ── Reuters (직접 RSS 폐지됨 → Google News site:reuters.com 경유; 본문 없음) ──
