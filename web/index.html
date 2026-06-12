@@ -4,37 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>newsstore — 뉴스 피드</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:#f5f6f8; --card:#ffffff; --line:#e6e8ec; --fg:#1f2632;
-      --mut:#7b8494; --sub:#4b5563; --accent:#2563eb; --pill:#eef1f6; --pill-fg:#445065;
+      --bg:#f1f0ec; --card:#ffffff; --line:#e4e2db; --fg:#22262c;
+      --sub:#4d5563; --mut:#8b929d; --accent:#2563eb; --pill:#eef0f3; --pill-fg:#4a5260;
     }
     * { box-sizing: border-box; }
     body { margin:0; background:var(--bg); color:var(--fg);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
-      -webkit-font-smoothing:antialiased; }
-    header { position:sticky; top:0; z-index:5; background:rgba(245,246,248,.92);
-      backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:14px 16px; }
+      font-family:"Inter","Noto Sans KR",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      font-size:14.5px; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+    header { position:sticky; top:0; z-index:5; background:rgba(241,240,236,.94);
+      backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:13px 16px; }
     .wrap { max-width:760px; margin:0 auto; }
-    h1 { font-size:18px; margin:0 0 10px; letter-spacing:-.2px; }
+    h1 { font-size:18px; margin:0 0 9px; letter-spacing:-.2px; }
     h1 small { color:var(--mut); font-weight:400; font-size:13px; margin-left:6px; }
     .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .controls label { color:var(--mut); font-size:13px; }
     select, button { background:#fff; color:var(--fg); border:1px solid var(--line);
-      border-radius:8px; padding:7px 11px; font-size:14px; }
+      border-radius:8px; padding:6px 11px; font-size:14px; font-family:inherit; }
     button { cursor:pointer; transition:background .12s; }
-    button:hover { background:#f0f2f6; }
+    button:hover { background:#f0f1f4; }
     #status { color:var(--mut); font-size:13px; margin-left:auto; }
-    main { padding:16px; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
-      padding:15px 17px; margin:0 0 11px; box-shadow:0 1px 2px rgba(16,24,40,.04); }
-    .card a.title { color:var(--fg); text-decoration:none; font-size:15.5px; font-weight:650;
+    main { padding:13px 16px 28px; }
+    .card { background:var(--card); border:1px solid var(--line); border-left-width:4px;
+      border-radius:9px; padding:11px 14px; margin:0 0 6px; }
+    .card a.title { color:var(--fg); text-decoration:none; font-size:15px; font-weight:600;
       line-height:1.5; letter-spacing:-.1px; }
     .card a.title:hover { color:var(--accent); }
-    .excerpt { color:var(--sub); font-size:13.5px; line-height:1.65; margin:7px 0 0; }
-    .meta { color:var(--mut); font-size:12.5px; margin-top:10px; display:flex; gap:7px;
+    .excerpt { color:var(--sub); font-size:13px; line-height:1.6; margin:5px 0 0;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .meta { color:var(--mut); font-size:12px; margin-top:8px; display:flex; gap:6px;
       align-items:center; flex-wrap:wrap; }
-    .pill { background:var(--pill); color:var(--pill-fg); border-radius:999px; padding:2px 9px; }
+    .pill { background:var(--pill); color:var(--pill-fg); border-radius:999px;
+      padding:2px 9px; font-size:11.5px; }
+    .src { font-weight:600; }
     .empty, .error { color:var(--mut); text-align:center; padding:44px 16px; line-height:1.7; }
     .error code { color:var(--accent); }
   </style>
@@ -71,14 +77,27 @@
     const statusEl = document.getElementById("status");
     const tagSel = document.getElementById("tag");
     const seenTags = new Set();
-
-    if (firebaseConfig.apiKey === "PASTE_API_KEY") {
-      listEl.innerHTML = `<div class="error">Firebase 설정이 비어 있어요.</div>`;
-      statusEl.textContent = ""; throw new Error("firebaseConfig not set");
-    }
-
     const db = getFirestore(initializeApp(firebaseConfig));
 
+    // 소스명 → 고정 색 (해시 기반). 카드 왼쪽 띠 + 소스 태그.
+    function srcColors(s) {
+      let h = 0; const str = s || "?";
+      for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+      h = h % 360;
+      return { bar:`hsl(${h} 55% 56%)`, bg:`hsl(${h} 62% 95%)`, fg:`hsl(${h} 42% 32%)` };
+    }
+    // 피드가 이중 인코딩한 &quot; &#39; 등을 실제 문자로 디코드
+    const _ta = document.createElement("textarea");
+    function decode(s) { _ta.innerHTML = s || ""; return _ta.value; }
+    function esc(s) {
+      return (s || "").replace(/[&<>"']/g, c =>
+        ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+    }
+    function txt(s) { return esc(decode(s)); }
+    function excerpt(s, n = 100) {
+      const t = decode(s).trim();
+      return t.length > n ? esc(t.slice(0, n)) + "…" : esc(t);
+    }
     function relTime(d) {
       if (!d) return "시간 미상";
       const s = (Date.now() - d.getTime()) / 1000;
@@ -87,14 +106,6 @@
       if (s < 86400) return Math.floor(s / 3600) + "시간 전";
       if (s < 7 * 86400) return Math.floor(s / 86400) + "일 전";
       return d.toLocaleDateString("ko-KR");
-    }
-    function esc(s) {
-      return (s || "").replace(/[&<>"']/g, c =>
-        ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
-    }
-    function excerpt(s, n = 100) {
-      const t = (s || "").trim();
-      return t.length > n ? esc(t.slice(0, n)) + "…" : esc(t);
     }
 
     function refreshTagOptions(items) {
@@ -114,13 +125,14 @@
       listEl.innerHTML = items.map(it => {
         const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
         const body = excerpt(it.body, 100);
-        const tags = (it.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join("");
-        return `<div class="card">
-          <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title) || "(제목 없음)"}</a>
+        const c = srcColors(it.source);
+        const tags = (it.tags || []).map(t => `<span class="pill">${txt(t)}</span>`).join("");
+        return `<div class="card" style="border-left-color:${c.bar}">
+          <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${txt(it.title) || "(제목 없음)"}</a>
           ${body ? `<p class="excerpt">${body}</p>` : ""}
           <div class="meta">
-            <span class="pill">${esc(it.source) || "?"}</span>
-            ${it.asset_hint ? `<span class="pill">${esc(it.asset_hint)}</span>` : ""}
+            <span class="pill src" style="background:${c.bg};color:${c.fg}">${txt(it.source) || "?"}</span>
+            ${it.asset_hint ? `<span class="pill">${txt(it.asset_hint)}</span>` : ""}
             ${tags}
             <span>${relTime(pub)}</span>
           </div>
