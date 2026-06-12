@@ -1,0 +1,13 @@
+from __future__ import annotations
+from typing import Protocol
+from ..models import RawItem
+
+class Store(Protocol):
+    def upsert_items(self, items: list[RawItem]) -> int:
+        """Insert items, skipping ids already present. Returns count of NEW items."""
+        ...
+    def get_feed_state(self, feed_id: str) -> dict:
+        """Return {} or {'etag','last_modified','last_fetched'(datetime)}."""
+        ...
+    def set_feed_state(self, feed_id: str, **fields) -> None: ...
+    def count(self) -> int: ...
