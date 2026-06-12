@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <title>Sample</title>
+  <item>
+    <title>Banks Curb Hedge Fund Bets on SK Hynix</title>
+    <link>https://example.com/a</link>
+    <description><![CDATA[<p>Global banks are <b>curbing</b> leveraged bets.</p>]]></description>
+    <pubDate>Fri, 12 Jun 2026 06:41:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>No Link Item</title>
+    <description>plain text body</description>
+    <pubDate>Fri, 12 Jun 2026 05:00:00 GMT</pubDate>
+  </item>
+</channel></rss>
