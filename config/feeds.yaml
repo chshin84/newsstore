@@ -22,7 +22,6 @@ feeds:
   # ── FX / 금리·중앙은행 ──
   - {feed_id: forexlive,    url: "https://investinglive.com/feed/news",       source: InvestingLive, asset_hint: fx, poll_minutes: 60, body_mode: full}   # forexlive.com→investinglive.com 사명변경(301), URL 갱신 2026-06-12
   - {feed_id: forexlive_cb, url: "https://investinglive.com/feed/centralbank", source: InvestingLive, asset_hint: "rates,central_bank", poll_minutes: 60, body_mode: full}
-  - {feed_id: fxstreet,     url: "https://www.fxstreet.com/rss/news",          source: FXStreet, asset_hint: fx, poll_minutes: 30, body_mode: summary}
   - {feed_id: investing_fx, url: "https://www.investing.com/rss/news_1.rss",   source: Investing, asset_hint: fx, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
   # ── 채권/매크로/정책 ──
   - {feed_id: fed,           url: "https://www.federalreserve.gov/feeds/press_all.xml", source: Fed, asset_hint: us_policy, poll_minutes: 60, body_mode: summary}
