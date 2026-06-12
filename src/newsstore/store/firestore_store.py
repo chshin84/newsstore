@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
+from typing import Optional
 from ..models import RawItem
 
 _ITEMS = "items"
@@ -62,6 +63,34 @@ class FirestoreStore:
             "last_modified": cur.get("last_modified"),
             "last_fetched": cur.get("last_fetched"),
         })
+
+    def get_unprocessed(self, limit: int | None = None) -> list[RawItem]:
+        # processed==False + order_by(fetched_at) needs a composite index in
+        # real Firestore (created in the deploy plan); MockFirestore needs none.
+        q = (self.db.collection(_ITEMS)
+             .where("processed", "==", False)
+             .order_by("fetched_at"))
+        if limit is not None:
+            q = q.limit(int(limit))
+        return [_from_doc(s.id, s.to_dict()) for s in q.stream()]
+
+    def mark_processed(self, ids: list[str], processed_at: datetime | None = None) -> int:
+        if not ids:
+            return 0
+        ts = processed_at or datetime.now(timezone.utc)
+        changed = 0
+        col = self.db.collection(_ITEMS)
+        for _id in ids:
+            ref = col.document(_id)
+            snap = ref.get()
+            if snap.exists:
+                d = snap.to_dict()
+                if d.get("processed") is False:
+                    d["processed"] = True
+                    d["processed_at"] = ts
+                    ref.set(d)              # full-doc write, no merge=
+                    changed += 1
+        return changed
 
     def close(self) -> None:
         pass

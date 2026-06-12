@@ -35,3 +35,22 @@ def test_set_feed_state_merges_existing_fields():
     s.set_feed_state("f1", last_modified="Tue")   # must not wipe etag
     st = s.get_feed_state("f1")
     assert st["etag"] == "e1" and st["last_modified"] == "Tue"
+
+def test_get_unprocessed_and_mark_processed():
+    s = _store()
+    s.upsert_items([_item("a"), _item("b"), _item("c")])
+    assert {i.id for i in s.get_unprocessed()} == {"a", "b", "c"}
+    assert len(s.get_unprocessed(limit=2)) == 2
+    one = s.get_unprocessed(limit=1)[0]                 # round-trips to a RawItem
+    assert one.fetched_at == NOW and one.feed_id == "f1"
+    assert s.mark_processed(["a", "b"], processed_at=NOW) == 2
+    assert {i.id for i in s.get_unprocessed()} == {"c"}
+    assert s.mark_processed(["a", "b"]) == 0            # idempotent
+    assert s.mark_processed([]) == 0
+
+def test_upsert_preserves_processed_on_resee():
+    s = _store()
+    s.upsert_items([_item("a")])
+    assert s.mark_processed(["a"], processed_at=NOW) == 1
+    assert s.upsert_items([_item("a")]) == 0            # re-seen, not re-written
+    assert s.get_unprocessed() == []                    # still processed
