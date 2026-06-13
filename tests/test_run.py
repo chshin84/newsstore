@@ -40,6 +40,7 @@ def test_run_uses_factory_with_env_backend(monkeypatch, tmp_path):
         def __enter__(self): return self
         def __exit__(self, *exc): pass
         def count(self): return 0          # run.main logs store.count()
+        def set_meta(self, k, v): pass     # run.main writes meta sources
 
     def fake_make_store(backend, **kw):
         captured["backend"] = backend

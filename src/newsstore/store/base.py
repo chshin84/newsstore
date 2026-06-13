@@ -21,3 +21,7 @@ class Store(Protocol):
     def mark_processed(self, ids: list[str], processed_at: datetime | None = None) -> int:
         """Mark ids processed (idempotent). Returns rows actually changed."""
         ...
+
+    def set_meta(self, key: str, value: dict) -> None:
+        """Write a small public-read metadata doc for the site (e.g. 'sources')."""
+        ...

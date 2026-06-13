@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import sqlite3
 from datetime import datetime, timezone
 from ..models import RawItem
@@ -16,6 +17,7 @@ CREATE TABLE IF NOT EXISTS raw_items (
 CREATE TABLE IF NOT EXISTS feed_state (
   feed_id TEXT PRIMARY KEY, etag TEXT, last_modified TEXT, last_fetched TEXT
 );
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 """
 
 _ITEM_COLS = ("id", "feed_id", "source", "asset_hint", "language",
@@ -126,6 +128,13 @@ class SqliteStore:
 
     def count(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM raw_items").fetchone()[0]
+
+    def set_meta(self, key: str, value: dict) -> None:
+        self.conn.execute(
+            "INSERT INTO meta (key,value) VALUES (?,?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, json.dumps(value)))
+        self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()

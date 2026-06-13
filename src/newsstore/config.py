@@ -10,3 +10,12 @@ def load_feeds(path) -> list[FeedConfig]:
     if dups:
         raise ValueError(f"duplicate feed_id in registry: {dups}")
     return feeds
+
+
+def distinct_sources(feeds: list[FeedConfig]) -> list[str]:
+    """Unique source labels in feeds.yaml order — SSOT for the site's source list."""
+    seen: list[str] = []
+    for f in feeds:
+        if f.source not in seen:
+            seen.append(f.source)
+    return seen

@@ -10,6 +10,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 사이트용 메타(소스 목록 등) — feeds.yaml에서 수집기가 도출해 기록(SSOT)
+    match /meta/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // 내부 상태(조건부 GET 등)는 비공개
     match /feed_state/{id} {
       allow read, write: if false;

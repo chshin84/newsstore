@@ -2,7 +2,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from .config import load_feeds
+from .config import load_feeds, distinct_sources
 from .ssl_config import make_client
 from .store.factory import make_store
 from .collector import collect_once
@@ -33,6 +33,8 @@ def main(argv=None) -> int:
     feeds = load_feeds(args.feeds)
     client = make_client()
     with make_store(backend, db_path=args.db) as store:
+        # SSOT: 사이트 소스 드롭다운 목록을 feeds.yaml에서 도출해 기록 (하드코딩 X)
+        store.set_meta("sources", {"sources": distinct_sources(feeds)})
         try:
             summary = collect_once(client, store, feeds, force=args.force)
         finally:

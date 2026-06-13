@@ -46,6 +46,9 @@ class FirestoreStore:
     def count(self) -> int:
         return sum(1 for _ in self.db.collection(_ITEMS).stream())
 
+    def set_meta(self, key: str, value: dict) -> None:
+        self.db.collection("meta").document(key).set(value)
+
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
         if not snap.exists:

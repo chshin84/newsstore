@@ -1,5 +1,5 @@
 import pytest
-from newsstore.config import load_feeds
+from newsstore.config import load_feeds, distinct_sources
 
 def test_load_feeds(tmp_path):
     p = tmp_path / "feeds.yaml"
@@ -33,3 +33,11 @@ def test_duplicate_feed_id_is_rejected(tmp_path):
                  encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate feed_id"):
         load_feeds(p)
+
+
+def test_distinct_sources_preserves_order_and_dedups():
+    from newsstore.models import FeedConfig
+    feeds = [FeedConfig(feed_id="a", url="u", source="Bloomberg"),
+             FeedConfig(feed_id="b", url="u", source="인포맥스"),
+             FeedConfig(feed_id="c", url="u", source="Bloomberg")]
+    assert distinct_sources(feeds) == ["Bloomberg", "인포맥스"]
