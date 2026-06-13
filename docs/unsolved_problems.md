@@ -11,8 +11,10 @@
 - **태깅 LLM 선택** — Haiku vs Gemini Flash (둘 다 무료/저가). 임베딩이 Gemini면 한 provider 이점.
 - **스토리 open/close 시간창** — 새 기사를 어느 기간의 "열린 스토리"와 비교할지(예 24~48h), 언제 close.
 
-## 🟡 구현 대기 (Step-2 인리치먼트 — 설계·검증 완료, 미구현)
-> 설계: `docs/superpowers/specs/`(예정), 검증: 스파이크(centroid T≈0.83, Gemini 임베딩, 30건/~12초).
+## 🟡 구현 대기 (Step-2 인리치먼트 — 설계·검증 완료, 일부 구현)
+> spec: `docs/superpowers/specs/2026-06-13-newsstore-step2-enrichment-design.md`. 검증: 스파이크(centroid T≈0.83, 30건/~12초).
+> **✅ Plan 1(순수 로직) 완료** — `src/newsstore/enrich/`(taxonomy·classify·cluster), 65 passed. (`docs/superpowers/plans/2026-06-13-step2-enrich-core.md`)
+> **이연(후속 Plan에서)**: ① classify SPAM_SIGNALS가 web/index.html JUNK와 *전이적 중복*(view가 `kind` 읽으면 해소) ② `cosine` 차원불일치 assert(임베딩 연결 시) ③ `assign`의 open_stories TypedDict화 ④ classify 제목·본문 접합 false-positive 주석.
 - **새 처리기 `src/newsstore/processor.py`(가칭)** — `get_unprocessed` → 선필터(kind) → 임베딩 → centroid 클러스터 → `mark_processed`. (Cloud Run Job #2 + Scheduler)
 - **`kind` 마킹(비파괴)** — story/spam/digest 분류를 저장. → **뷰의 `JUNK` 스팸필터를 백엔드로 이사**(브라우저마다 계산 X, 한 번 계산해 저장). → 뷰는 `kind == story` 쿼리.
 - **Bloomberg ", More" 다이제스트 선필터** — 패턴 분명(`, More` / `Balance of Power` / `(Podcast)`), 클러스터 전 제외. (스팸필터와 같은 위치)
