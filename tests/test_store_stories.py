@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from mockfirestore import MockFirestore
 from newsstore.store.sqlite_store import SqliteStore
 from newsstore.store.firestore_store import FirestoreStore
@@ -22,3 +22,18 @@ def test_sqlite_create_append(tmp_path):
 
 def test_firestore_create_append():
     _check_create_append(_fs())
+
+def _check_close(s):
+    s.create_story("old", title="t", vec=[1.0], member_id="a", entities=[], now=NOW)
+    s.create_story("new", title="t", vec=[1.0], member_id="b", entities=[],
+                   now=NOW + timedelta(hours=30))
+    closed = s.close_stale_stories(cutoff=NOW + timedelta(hours=24))
+    assert closed == 1
+    open_ids = {x["id"] for x in s.get_open_stories(cutoff=NOW - timedelta(hours=1))}
+    assert open_ids == {"new"}
+
+def test_sqlite_close_stale(tmp_path):
+    _check_close(_sql(tmp_path))
+
+def test_firestore_close_stale():
+    _check_close(_fs())

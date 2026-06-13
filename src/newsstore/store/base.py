@@ -35,3 +35,6 @@ class Store(Protocol):
     def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
         """centroid_sum+=vec, count+=1, member_ids+=member_id, entities합집합, last_seen=now."""
         ...
+    def close_stale_stories(self, cutoff) -> int:
+        """last_seen<cutoff인 open 스토리를 closed로. 변경 수 반환."""
+        ...

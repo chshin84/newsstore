@@ -75,6 +75,17 @@ class FirestoreStore:
                 out.append({"id": snap.id, "centroid": [x / c for x in d.get("centroid_sum", [])]})
         return out
 
+    def close_stale_stories(self, cutoff) -> int:
+        n = 0
+        col = self.db.collection("stories")
+        for snap in col.where("status", "==", "open").stream():
+            d = snap.to_dict() or {}
+            if d.get("last_seen") and d["last_seen"] < cutoff:
+                d["status"] = "closed"
+                col.document(snap.id).set(d)
+                n += 1
+        return n
+
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
         if not snap.exists:

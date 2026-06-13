@@ -174,6 +174,18 @@ class SqliteStore:
                 out.append({"id": r["id"], "centroid": [x / c for x in csum]})
         return out
 
+    def close_stale_stories(self, cutoff) -> int:
+        n = 0
+        for r in self.conn.execute("SELECT id,last_seen FROM stories WHERE status='open'"):
+            ls = datetime.fromisoformat(r["last_seen"])
+            if ls.tzinfo is None:
+                ls = ls.replace(tzinfo=timezone.utc)
+            if ls < cutoff:
+                self.conn.execute("UPDATE stories SET status='closed' WHERE id=?", (r["id"],))
+                n += 1
+        self.conn.commit()
+        return n
+
     def close(self) -> None:
         self.conn.close()
 
