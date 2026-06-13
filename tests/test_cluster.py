@@ -1,3 +1,4 @@
+import pytest
 from newsstore.enrich.cluster import cosine, centroid, assign
 
 def test_cosine_identical():
@@ -14,6 +15,10 @@ def test_cosine_zero_vector_safe():
 
 def test_centroid_mean():
     assert centroid([2, 4, 6], 2) == [1.0, 2.0, 3.0]
+
+def test_centroid_zero_count_raises():
+    with pytest.raises(ValueError):
+        centroid([1, 2, 3], 0)
 
 def test_assign_joins_most_similar_open_story():
     stories = [{"id": "s1", "centroid": [1, 0, 0]}, {"id": "s2", "centroid": [0, 1, 0]}]

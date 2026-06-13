@@ -11,7 +11,9 @@ def cosine(a: list[float], b: list[float]) -> float:
 DEFAULT_THRESHOLD = 0.83
 
 def centroid(centroid_sum: list[float], count: int) -> list[float]:
-    """중심 = 누적합 / 개수."""
+    """중심 = 누적합 / 개수. count는 ≥1 (스토리는 최소 1 멤버)."""
+    if count <= 0:
+        raise ValueError(f"count must be >= 1, got {count}")
     return [x / count for x in centroid_sum]
 
 def assign(vec: list[float], open_stories: list[dict],
