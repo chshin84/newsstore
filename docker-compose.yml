@@ -1,0 +1,20 @@
+# 로컬 개발용 (Docker-only). compose가 `.` 경로를 자체 해석 → Git Bash 마운트 폴백 회피.
+#   docker compose build
+#   docker compose run --rm test        # 테스트
+#   docker compose run --rm collect     # 1회 수집 (.env 필요: cp .env.example .env)
+services:
+  test:
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+    image: newsstore
+    volumes:
+      - ".:/app"
+    command: pytest -q
+  collect:
+    image: newsstore
+    volumes:
+      - ".:/app"
+    env_file:
+      - .env
+    command: python -m newsstore.run --force

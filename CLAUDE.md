@@ -28,6 +28,8 @@
 - **문제 발견 시** → `docs/unsolved_problems.md`에 기록(맥락 충분히). **사용자에게도 알릴 것.**
 - **해결 시** → `docs/solved_problems.md`로 옮기고(문제→원인→해결), unsolved에서 제거.
 - 이 로그가 기억의 원본 — 내(Claude) 기억·정확성에 의존하지 않게.
+- **구현 전 `docs/solved_problems.md` 확인** — 같은 실수 반복 금지.
+- **SDD(서브에이전트) 실행 시 각 서브에이전트 프롬프트에 `solved_problems.md`의 관련 gotchas를 주입** — 서브에이전트는 이 세션 맥락이 없어 과거 실수를 모름. 주입해야 반복을 막는다.
 
 ## 배포 (요약, 상세는 operations.md)
 - 코드/피드 변경 → 이미지 재빌드 → `gcloud run jobs update --image` → execute
