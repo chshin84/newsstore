@@ -3,6 +3,18 @@
 작업 중 발견·해결된 문제 기록. 대부분 **사용자 지적/요청**이나 **코드 리뷰**에서 나왔다. 각 항목: 문제 → 원인 → 해결.
 (미해결·대기 항목은 `unsolved_problems.md`.)
 
+> ⏱ **이 로그는 *발생 시점(2026-06-12~13)의 사실*이다 — 현재 규칙이 아님.** 재사용 가능한 교훈은 `coding-principles.md`로 승격됨(여기엔 일회성 기록 위주, 중복 배제=SSOT). 서브에이전트는 이를 *과거 사실*로 읽을 것 — 살아있는 작업 지시가 아니다(예: "fxstreet 제거"는 이미 끝난 일).
+
+## 핵심 gotchas (재발 방지 — 서브에이전트 주입용 다이제스트)
+*반복되는 cross-cutting 함정*만 추림. SDD/ultracode 서브에이전트엔 **이 섹션 + `coding-principles.md`를 주입**(전체 아카이브 말고). 배선: `docs/subagent-context.md`.
+- **Docker-only**: 테스트 `docker compose run --rm test` (또는 `MSYS_NO_PATHCONV=1 docker run -v "D:/projects/newsstore:/app" newsstore pytest -q`). `$(pwd)` 마운트는 stale 이미지로 조용히 폴백.
+- **Firestore 실client**: 빈 문서 `to_dict()`가 `None` 반환 → 항상 `... or {}` (MockFirestore는 못 잡음).
+- **PowerShell 변수 대소문자 비구분**: `$h`와 `$H`는 같은 변수 → 충돌 주의.
+- **Firebase REST**: 헤더 `x-goog-user-project: daily-recap-498506` 없으면 403.
+- **인라인 주석 금지**: `.gitignore`/`.env`/`--env-file`은 줄끝 `# 주석`을 값/패턴에 섞음 → 주석은 별도 줄.
+- **프로덕션을 테스트에 맞춰 약화 금지**: 테스트 더블이 부실하면 *테스트*를 고쳐라(프로덕션 `client.close()`를 guard로 무르게 X).
+- **하드코딩 금지(SSOT)**: 리스트/설정은 원본(feeds.yaml 등)에서 도출, 두 곳 복제 X.
+
 ## 환경 / 툴링
 - **로컬 Python 없음** — 호스트 `python`은 Windows Store 스텁. → **Docker 전용 개발**(개발 원칙 7). 모든 실행·테스트는 Docker.
 - **Docker bind-mount 경로 폴백** — Git Bash `$(pwd)`/`${PWD}`가 망가져 마운트가 *stale 이미지*로 조용히 폴백 → 테스트 수가 틀리게(44 대신 33) 나옴. → `MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pytest -q`.
