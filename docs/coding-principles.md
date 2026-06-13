@@ -30,6 +30,11 @@
 - 빌드 전에 실제로 되는지 **측정**(curl 피드 테스트, 임베딩 스파이크 등).
 - "집(잔여 IP)에서 됨 ≠ 프로덕션(Cloud Run 데이터센터 IP)에서 됨" — 환경 차이를 먼저 확인.
 
-## 8. 비밀 분리
+## 8. Docker 전용 개발/테스트
+- **로컬 Python 사용 금지** — 모든 실행·테스트·빌드는 Docker로만.
+- 이유: 호스트에 로컬 Python 없음 + 환경 재현성(프로덕션 이미지와 동일 환경에서 테스트).
+- 테스트: `MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pytest -q`
+
+## 9. 비밀 분리
 - 진짜 비밀(`GEMINI_API_KEY`, 서비스계정 키)은 **백엔드 전용** — `.env`(gitignore+dockerignore) / Cloud Run env / Secret Manager. 클라이언트·커밋 금지.
 - 비밀이 아닌 식별자(Firebase 웹 apiKey)는 클라이언트 노출 OK — 접근은 보안 규칙이 통제.

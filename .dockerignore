@@ -9,4 +9,14 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+
+# 런타임(수집기) 이미지에 불필요한 dev/배포 산물 — 이미지 = 순수 런타임 코드만
+tests/
+web/
+*.md
+firebase.json
+firestore.rules
+firestore.indexes.json
+.firebaserc
+
 # 주의: ePrism-SSL-ROOT-CA.crt 는 제외하지 않는다 (office 빌드 시 이미지에 설치)
