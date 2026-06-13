@@ -18,7 +18,7 @@ def assign(vec: list[float], open_stories: list[dict],
            threshold: float = DEFAULT_THRESHOLD) -> str | None:
     """가장 유사한 '열린 스토리' id를 반환(코사인 ≥ threshold). 없으면 None(=새 스토리).
     open_stories: [{'id': str, 'centroid': list[float]}]. centroid 기준이라 전이 연쇄 없음."""
-    best_id, best_sim = None, 0.0
+    best_id, best_sim = None, -1.0
     for st in open_stories:
         s = cosine(vec, st["centroid"])
         if s > best_sim:

@@ -30,3 +30,8 @@ def test_assign_respects_threshold():
 
 def test_assign_empty_stories_is_new():
     assert assign([1, 0, 0], []) is None
+
+def test_assign_threshold_inclusive_boundary():
+    stories = [{"id": "s1", "centroid": [1, 0, 0]}]
+    # cosine([1,0,0],[1,0,0]) == 1.0, threshold 1.0 → 경계 포함(>=)이라 합류
+    assert assign([1, 0, 0], stories, threshold=1.0) == "s1"
