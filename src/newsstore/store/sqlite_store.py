@@ -12,7 +12,8 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS raw_items (
   id TEXT PRIMARY KEY, feed_id TEXT, source TEXT, asset_hint TEXT, language TEXT,
   url TEXT, title TEXT, body TEXT, published_at TEXT, fetched_at TEXT,
-  processed INTEGER NOT NULL DEFAULT 0, processed_at TEXT
+  processed INTEGER NOT NULL DEFAULT 0, processed_at TEXT,
+  kind TEXT, tags TEXT, embedding TEXT, story_id TEXT
 );
 CREATE TABLE IF NOT EXISTS feed_state (
   feed_id TEXT PRIMARY KEY, etag TEXT, last_modified TEXT, last_fetched TEXT
