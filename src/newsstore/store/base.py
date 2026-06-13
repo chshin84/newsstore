@@ -25,3 +25,13 @@ class Store(Protocol):
     def set_meta(self, key: str, value: dict) -> None:
         """Write a small public-read metadata doc for the site (e.g. 'sources')."""
         ...
+
+    def get_open_stories(self, cutoff) -> list[dict]:
+        """status=open이고 last_seen>=cutoff인 스토리: [{'id','centroid'}]. centroid=sum/count."""
+        ...
+    def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
+        """새 스토리: centroid_sum=vec, count=1, member_ids=[member_id], status=open."""
+        ...
+    def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
+        """centroid_sum+=vec, count+=1, member_ids+=member_id, entities합집합, last_seen=now."""
+        ...

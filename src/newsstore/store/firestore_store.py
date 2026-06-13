@@ -49,6 +49,32 @@ class FirestoreStore:
     def set_meta(self, key: str, value: dict) -> None:
         self.db.collection("meta").document(key).set(value)
 
+    def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
+        self.db.collection("stories").document(story_id).set({
+            "title": title, "centroid_sum": list(vec), "count": 1,
+            "member_ids": [member_id], "entities": list(entities),
+            "first_seen": now, "last_seen": now, "status": "open",
+        })
+
+    def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
+        ref = self.db.collection("stories").document(story_id)
+        d = ref.get().to_dict() or {}
+        csum = [a + b for a, b in zip(d.get("centroid_sum", []), vec)]
+        members = list(d.get("member_ids", [])) + [member_id]
+        ents = list(dict.fromkeys(list(d.get("entities", [])) + list(entities)))
+        d.update({"centroid_sum": csum, "count": d.get("count", 0) + 1,
+                  "member_ids": members, "entities": ents, "last_seen": now})
+        ref.set(d)
+
+    def get_open_stories(self, cutoff) -> list[dict]:
+        out = []
+        for snap in self.db.collection("stories").where("status", "==", "open").stream():
+            d = snap.to_dict() or {}
+            if d.get("last_seen") and d["last_seen"] >= cutoff:
+                c = d.get("count", 1) or 1
+                out.append({"id": snap.id, "centroid": [x / c for x in d.get("centroid_sum", [])]})
+        return out
+
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
         if not snap.exists:

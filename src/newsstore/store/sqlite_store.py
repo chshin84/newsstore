@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS feed_state (
   feed_id TEXT PRIMARY KEY, etag TEXT, last_modified TEXT, last_fetched TEXT
 );
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS stories (
+  id TEXT PRIMARY KEY, title TEXT, centroid_sum TEXT, count INTEGER,
+  member_ids TEXT, entities TEXT, first_seen TEXT, last_seen TEXT, status TEXT
+);
 """
 
 _ITEM_COLS = ("id", "feed_id", "source", "asset_hint", "language",
@@ -135,6 +139,36 @@ class SqliteStore:
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (key, json.dumps(value)))
         self.conn.commit()
+
+    def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
+        self.conn.execute(
+            "INSERT INTO stories (id,title,centroid_sum,count,member_ids,entities,first_seen,last_seen,status) "
+            "VALUES (?,?,?,?,?,?,?,?, 'open')",
+            (story_id, title, json.dumps(list(vec)), 1, json.dumps([member_id]),
+             json.dumps(list(entities)), now.isoformat(), now.isoformat()))
+        self.conn.commit()
+
+    def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
+        row = self.conn.execute(
+            "SELECT centroid_sum,count,member_ids,entities FROM stories WHERE id=?",
+            (story_id,)).fetchone()
+        csum = [a + b for a, b in zip(json.loads(row["centroid_sum"]), vec)]
+        members = json.loads(row["member_ids"]) + [member_id]
+        ents = list(dict.fromkeys(json.loads(row["entities"]) + list(entities)))
+        self.conn.execute(
+            "UPDATE stories SET centroid_sum=?, count=?, member_ids=?, entities=?, last_seen=? WHERE id=?",
+            (json.dumps(csum), row["count"] + 1, json.dumps(members), json.dumps(ents),
+             now.isoformat(), story_id))
+        self.conn.commit()
+
+    def get_open_stories(self, cutoff) -> list[dict]:
+        out = []
+        for r in self.conn.execute(
+                "SELECT id,centroid_sum,count,last_seen FROM stories WHERE status='open'"):
+            if datetime.fromisoformat(r["last_seen"]) >= cutoff:
+                csum = json.loads(r["centroid_sum"]); c = r["count"]
+                out.append({"id": r["id"], "centroid": [x / c for x in csum]})
+        return out
 
     def close(self) -> None:
         self.conn.close()
