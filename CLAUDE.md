@@ -22,6 +22,12 @@
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - 로드맵(Step 1~7): `docs/roadmap.md`
 - 코드 원칙 상세: `docs/coding-principles.md`
+- 문제 로그: `docs/solved_problems.md`(해결) · `docs/unsolved_problems.md`(미해결)
+
+## 관습 (항상)
+- **문제 발견 시** → `docs/unsolved_problems.md`에 기록(맥락 충분히). **사용자에게도 알릴 것.**
+- **해결 시** → `docs/solved_problems.md`로 옮기고(문제→원인→해결), unsolved에서 제거.
+- 이 로그가 기억의 원본 — 내(Claude) 기억·정확성에 의존하지 않게.
 
 ## 배포 (요약, 상세는 operations.md)
 - 코드/피드 변경 → 이미지 재빌드 → `gcloud run jobs update --image` → execute
