@@ -1,0 +1,5 @@
+# 통제 어휘 (SSOT). tickers는 LLM이 기사에서 추출(여기 정의 안 함).
+entities: [Fed, ECB, BOJ, PBOC, BOE, 한국은행, Treasury, OPEC, IMF, SEC, WhiteHouse]
+topics: [rates, inflation, bonds, fx, crypto, equities, earnings, m&a, ipo, energy,
+         tech, regulation, jobs, central_bank, recession, trade, geopolitics,
+         commodities, housing, banking]
