@@ -65,17 +65,9 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, query, orderBy, limit, where, getDocs }
+    import { getFirestore, collection, query, orderBy, limit, where, getDocs, doc, getDoc }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyAs-PhCFJ7_RkIOkDfv8FrIYxdyphT8Ofk",
-      authDomain: "daily-recap-498506.firebaseapp.com",
-      projectId: "daily-recap-498506",
-      storageBucket: "daily-recap-498506.firebasestorage.app",
-      messagingSenderId: "754646487603",
-      appId: "1:754646487603:web:19e77fba52a8aacf1b0946",
-    };
+    import { firebaseConfig } from "./config.js";
 
     const listEl = document.getElementById("list");
     const statusEl = document.getElementById("status");
@@ -86,8 +78,7 @@
 
     // 소스명 → 고정 색 (해시 기반). 카드 왼쪽 띠 + 소스 태그.
     // 알려진 소스는 황금각(137.5°) 간격으로 색 배정 → 겹침 최소화, 미지 소스는 해시 폴백
-    const SRC_ORDER = ["Bloomberg","Reuters","Benzinga","GoogleNews","Axios","인포맥스","한국경제",
-      "매일경제","CoinDesk","Cointelegraph","InvestingLive","Investing","Fed","ECB","TruthSocial"];
+    let SRC_ORDER = [];   // SSOT: Firestore meta/sources(=feeds.yaml에서 도출)에서 채움
     function srcColors(s) {
       const str = s || "?";
       let h, i = SRC_ORDER.indexOf(str);
@@ -200,12 +191,19 @@
       }
     }
 
-    srcSel.innerHTML = '<option value="__all__">전체 소스</option>' +
-      SRC_ORDER.map(s => `<option>${esc(s)}</option>`).join("");
+    async function initSources() {
+      try {
+        const snap = await getDoc(doc(db, "meta", "sources"));
+        SRC_ORDER = (snap.exists() && Array.isArray(snap.data().sources)) ? snap.data().sources : [];
+      } catch (e) { SRC_ORDER = []; }
+      srcSel.innerHTML = '<option value="__all__">전체 소스</option>' +
+        SRC_ORDER.map(s => `<option>${esc(s)}</option>`).join("");
+      load();
+    }
     srcSel.addEventListener("change", load);
     tagSel.addEventListener("change", load);
     document.getElementById("refresh").addEventListener("click", load);
-    load();
+    initSources();
   </script>
 </body>
 </html>
