@@ -26,6 +26,10 @@ class Store(Protocol):
         """Write a small public-read metadata doc for the site (e.g. 'sources')."""
         ...
 
+    def save_enrichment(self, item_id, *, kind, tags, embedding, story_id) -> None:
+        """기사에 Step-2 인리치 필드 기록(kind/tags/embedding/story_id). 기존 필드 보존."""
+        ...
+
     def get_open_stories(self, cutoff) -> list[dict]:
         """status=open이고 last_seen>=cutoff인 스토리: [{'id','centroid'}]. centroid=sum/count."""
         ...

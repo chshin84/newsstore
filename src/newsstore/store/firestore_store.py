@@ -132,6 +132,14 @@ class FirestoreStore:
                     changed += 1
         return changed
 
+    def save_enrichment(self, item_id, *, kind, tags, embedding, story_id) -> None:
+        ref = self.db.collection(_ITEMS).document(item_id)
+        d = ref.get().to_dict() or {}
+        d.update({"kind": kind, "tags": list(tags),
+                  "embedding": list(embedding) if embedding is not None else None,
+                  "story_id": story_id})
+        ref.set(d)
+
     def close(self) -> None:
         pass
 

@@ -42,6 +42,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_raw_unprocessed "
                      "ON raw_items(processed)")
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    # Step-2 enrichment 컬럼 (없으면 추가)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(raw_items)")}
+    for col, decl in [("kind", "TEXT"), ("tags", "TEXT"), ("embedding", "TEXT"), ("story_id", "TEXT")]:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE raw_items ADD COLUMN {col} {decl}")
     conn.commit()
 
 
@@ -138,6 +143,14 @@ class SqliteStore:
             "INSERT INTO meta (key,value) VALUES (?,?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (key, json.dumps(value)))
+        self.conn.commit()
+
+    def save_enrichment(self, item_id, *, kind, tags, embedding, story_id) -> None:
+        self.conn.execute(
+            "UPDATE raw_items SET kind=?, tags=?, embedding=?, story_id=? WHERE id=?",
+            (kind, json.dumps(list(tags)),
+             json.dumps(list(embedding)) if embedding is not None else None,
+             story_id, item_id))
         self.conn.commit()
 
     def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
