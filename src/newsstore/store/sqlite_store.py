@@ -165,8 +165,12 @@ class SqliteStore:
         out = []
         for r in self.conn.execute(
                 "SELECT id,centroid_sum,count,last_seen FROM stories WHERE status='open'"):
-            if datetime.fromisoformat(r["last_seen"]) >= cutoff:
-                csum = json.loads(r["centroid_sum"]); c = r["count"]
+            ls = datetime.fromisoformat(r["last_seen"])
+            if ls.tzinfo is None:
+                ls = ls.replace(tzinfo=timezone.utc)
+            if ls >= cutoff:
+                csum = json.loads(r["centroid_sum"])
+                c = r["count"]
                 out.append({"id": r["id"], "centroid": [x / c for x in csum]})
         return out
 
