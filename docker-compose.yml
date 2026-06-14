@@ -17,4 +17,4 @@ services:
       - ".:/app"
     env_file:
       - .env
-    command: python -m newsstore.run --force
+    command: python -m newsstore.entrypoints.run_collect --force

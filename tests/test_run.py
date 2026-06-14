@@ -1,6 +1,6 @@
 import types
 import httpx
-from newsstore import run
+from newsstore.entrypoints import run_collect as run
 
 FEEDS_YAML = (
     "feeds:\n"

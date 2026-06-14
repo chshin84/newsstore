@@ -76,7 +76,7 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 현재: `source+published_at`(소스필터), `tags+published_at`(태그필터), `processed+fetched_at`(Step-2 큐) — 전부 READY.
 
 ## E. Step-2 인리치먼트 Processor 배포 (Cloud Run Job #2) — ⚠️ 최초 1회 셋업
-수집기와 **별도 Job**. 같은 Dockerfile을 `INSTALL_ENRICH=true`로 빌드(google-genai 포함)해 **별 이미지**(`processor:latest`)로 올리고, CMD를 `python -m newsstore.process`로 돌린다. `GEMINI_API_KEY`는 **Secret Manager**로 주입(커밋/이미지/로그 금지 — 백엔드 전용 비밀).
+수집기와 **별도 Job**. 같은 Dockerfile을 `INSTALL_ENRICH=true`로 빌드(google-genai 포함)해 **별 이미지**(`processor:latest`)로 올리고, CMD를 `python -m newsstore.entrypoints.run_enrich`로 돌린다. `GEMINI_API_KEY`는 **Secret Manager**로 주입(커밋/이미지/로그 금지 — 백엔드 전용 비밀).
 
 > **선결: `requirements.lock`에 google-genai 추가.** lock이 constraints(-c)라 미포함이면 빌드 실패. `pip-compile`/`uv` 등으로 `enrich` extra 포함해 재생성 후 커밋. (httpx<1.0 등 기존 핀과 충돌 시 해소 필요 — 이게 첫 빌드 게이트.)
 
@@ -96,7 +96,7 @@ gcloud run jobs create newsstore-processor \
   --service-account=newsstore-job@daily-recap-498506.iam.gserviceaccount.com \
   --set-env-vars=NEWSSTORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
   --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
-  --command=python --args=-m,newsstore.process
+  --command=python --args=-m,newsstore.entrypoints.run_enrich
 # 4) 수동 1회 실행 + 로그 확인
 gcloud run jobs execute newsstore-processor --region=asia-northeast3 --wait
 gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-processor"' \

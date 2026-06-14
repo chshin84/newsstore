@@ -45,7 +45,7 @@ docker build -f infra/Dockerfile -t newsstore .
 
 # 1회 수집 (.env 설정 사용, named volume로 영속)
 docker run --rm --env-file .env -v newsstore_data:/data newsstore \
-  python -m newsstore.run --force
+  python -m newsstore.entrypoints.run_collect --force
 ```
 
 ### 테스트

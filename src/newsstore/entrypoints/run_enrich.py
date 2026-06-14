@@ -4,15 +4,15 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from .enrich.cluster import DEFAULT_THRESHOLD
-from .enrich.embedder import EMBED_CONCURRENCY
-from .enrich.gemini import GeminiClient, LLMError
-from .enrich.processor import (process_once, NONCLUSTER_SOURCES,
+from ..enrich.cluster import DEFAULT_THRESHOLD
+from ..enrich.embedder import EMBED_CONCURRENCY
+from ..enrich.gemini import GeminiClient, LLMError
+from ..enrich.processor import (process_once, NONCLUSTER_SOURCES,
                                OPEN_WINDOW, CLOSE_AFTER)
-from .enrich.taxonomy import load_taxonomy
-from .store.factory import make_store
+from ..enrich.taxonomy import load_taxonomy
+from ..store.factory import make_store
 
-log = logging.getLogger("newsstore.process")
+log = logging.getLogger("newsstore.entrypoints.run_enrich")
 
 # 한 실행이 소비할 최대 배치 수 (비용 상한 — advisor-nonfunctional). 0 = 무제한(권장 X).
 MAX_BATCHES = int(os.environ.get("NEWSSTORE_MAX_BATCHES", "1000"))
@@ -83,7 +83,7 @@ def main(argv=None) -> int:
                                       noncluster=noncluster, batch=args.batch,
                                       concurrency=concurrency)
             else:
-                from .enrich.tagger import tag_stories
+                from ..enrich.tagger import tag_stories
                 totals = tag_stories(store, client, taxonomy, batch=10,
                                      max_stories=MAX_BATCHES * 10 or None)
         except LLMError as e:
