@@ -1,5 +1,6 @@
 import pytest
-from newsstore.enrich.cluster import cosine, centroid, assign, add_vectors
+from newsstore.enrich.cluster import cosine, centroid, assign
+from newsstore.contracts.vectors import add_vectors
 
 def test_add_vectors_elementwise():
     assert add_vectors([1.0, 2.0], [3.0, 4.0]) == [4.0, 6.0]

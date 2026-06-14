@@ -3,7 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from ..contracts.models import RawItem
-from ..enrich.cluster import add_vectors
+from ..contracts.vectors import add_vectors
 
 SCHEMA_VERSION = 1
 

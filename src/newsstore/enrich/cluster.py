@@ -11,12 +11,6 @@ def cosine(a: list[float], b: list[float]) -> float:
     nb = math.sqrt(sum(y * y for y in b))
     return dot / (na * nb) if na and nb else 0.0
 
-def add_vectors(a: list[float], b: list[float]) -> list[float]:
-    """원소별 합 a+b. 차원이 다르면 ValueError (centroid_sum 누적의 무음 절단 방지 — 원칙3)."""
-    if len(a) != len(b):
-        raise ValueError(f"vector dim mismatch: {len(a)} vs {len(b)}")
-    return [x + y for x, y in zip(a, b)]
-
 # 클러스터 합류 코사인 임계값. 0.83은 스파이크의 Vertex 임베딩 기준(폐기). 프로덕션
 # 모델 gemini-embedding-001(768)을 실 Firestore 기사 120건으로 캘리브레이션:
 #   교차소스 같은 사건 0.71~0.86(이란 MOU·코스피·크립토법안), 노이즈 천장 p99≈0.66.

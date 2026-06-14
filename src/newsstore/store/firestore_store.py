@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from ..contracts.models import RawItem
-from ..enrich.cluster import add_vectors
+from ..contracts.vectors import add_vectors
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
