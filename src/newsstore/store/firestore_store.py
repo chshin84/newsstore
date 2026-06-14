@@ -116,31 +116,29 @@ class FirestoreStore:
         return [_from_doc(s.id, s.to_dict() or {}) for s in q.stream()]
 
     def mark_processed(self, ids: list[str], processed_at: datetime | None = None) -> int:
+        """processed 플래그를 merge-batch로 기록(읽기 없음). 반환 = 쓴 수.
+        Firestore batch는 ≤500 op이라 청크. (구버전의 '변경된 수' 멱등 카운트 의미는 폐기)"""
         if not ids:
             return 0
         ts = processed_at or datetime.now(timezone.utc)
-        changed = 0
         col = self.db.collection(_ITEMS)
-        # TODO: batch the reads with self.db.get_all([...]) once off MockFirestore (real client only)
-        for _id in ids:
-            ref = col.document(_id)
-            snap = ref.get()
-            if snap.exists:
-                d = snap.to_dict() or {}
-                if d.get("processed") is False:
-                    d["processed"] = True
-                    d["processed_at"] = ts
-                    ref.set(d)              # full-doc write, no merge=
-                    changed += 1
-        return changed
+        n = 0
+        for i in range(0, len(ids), 500):
+            batch = self.db.batch()
+            for _id in ids[i:i + 500]:
+                batch.set(col.document(_id),
+                          {"processed": True, "processed_at": ts}, merge=True)
+                n += 1
+            batch.commit()
+        return n
 
     def save_enrichment(self, item_id, *, kind, tags, embedding, story_id) -> None:
-        ref = self.db.collection(_ITEMS).document(item_id)
-        d = ref.get().to_dict() or {}
-        d.update({"kind": kind, "tags": list(tags),
-                  "embedding": list(embedding) if embedding is not None else None,
-                  "story_id": story_id})
-        ref.set(d)
+        # merge=True: 읽기 없이 enrich 필드만 갱신(기존 필드 보존). 왕복 절감.
+        self.db.collection(_ITEMS).document(item_id).set({
+            "kind": kind, "tags": list(tags),
+            "embedding": list(embedding) if embedding is not None else None,
+            "story_id": story_id,
+        }, merge=True)
 
     def close(self) -> None:
         pass
