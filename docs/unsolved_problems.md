@@ -6,7 +6,7 @@
 > ⚠️ **서브에이전트(worker) 주입 금지.** 이건 오케스트레이터/사용자용 백로그다. 격리된 worker가 받으면 🔴(사용자 결정 대기)를 "구현하라"로 오인 → 임의 구현 **사고**. 주입해야 한다면 "참고·구현 금지" 명시 + 🔴는 **사용자 승인 게이트** 뒤. (원칙 4: 구조가 실수를 막는다)
 
 ## 🔴 결정 필요
-- **infra.md 스킬 / docker-compose 부활** — 결론: infra **파일**(Dockerfile/cloudbuild)은 도구가 먹는 실파일이라 .md로 갈음 불가, "클론→셋업" 목표는 setup.md+.env.example로 이미 충족. **docker-compose를 Docker-only 편의용(린한 test/collect 서비스)으로 되살릴지**는 사용자 선택 대기.
+- ~~**infra.md 스킬 / docker-compose 부활**~~ — **해소.** infra **파일**(Dockerfile/cloudbuild)은 도구가 먹는 실파일이라 .md로 갈음 불가(결론 유지). docker-compose는 **이미 부활됨**(커밋 e6acedb, 린 test/collect 서비스 — `docker compose run --rm test`). 결정 대기 아님.
 - **Step-2 태그 통제 어휘(vocabulary)** — 어디까지 한정할지(티커 유니버스 / 엔티티: 연준·ECB·BOJ·재무부·OPEC… / 토픽: 금리·인플레·채권·FX·크립토·실적·M&A·지정학…). "이란 전쟁" 류 *사건*은 태그가 아니라 *스토리(클러스터)*로 잡기로 함.
 - **태깅 LLM 선택** — Haiku vs Gemini Flash (둘 다 무료/저가). 임베딩이 Gemini면 한 provider 이점.
 - **스토리 open/close 시간창** — 새 기사를 어느 기간의 "열린 스토리"와 비교할지(예 24~48h), 언제 close.

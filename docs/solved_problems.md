@@ -3,7 +3,7 @@
 작업 중 발견·해결된 문제 기록. 대부분 **사용자 지적/요청**이나 **코드 리뷰**에서 나왔다. 각 항목: 문제 → 원인 → 해결.
 (미해결·대기 항목은 `unsolved_problems.md`.)
 
-> ⏱ **이 로그는 *발생 시점(2026-06-12~13)의 사실*이다 — 현재 규칙이 아님.** 재사용 가능한 교훈은 `coding-principles.md`로 승격됨(여기엔 일회성 기록 위주, 중복 배제=SSOT). 서브에이전트는 이를 *과거 사실*로 읽을 것 — 살아있는 작업 지시가 아니다(예: "fxstreet 제거"는 이미 끝난 일).
+> ⏱ **이 로그는 *발생 시점(2026-06-12~14)의 사실*이다 — 현재 규칙이 아님.** 재사용 가능한 교훈은 `coding-principles.md`로 승격됨(여기엔 일회성 기록 위주, 중복 배제=SSOT). 서브에이전트는 이를 *과거 사실*로 읽을 것 — 살아있는 작업 지시가 아니다(예: "fxstreet 제거"는 이미 끝난 일).
 
 ## 핵심 gotchas (재발 방지 — 서브에이전트 주입용 다이제스트)
 *반복되는 cross-cutting 함정*만 추림. SDD/ultracode 서브에이전트엔 **이 섹션 + `coding-principles.md`를 주입**(전체 아카이브 말고). 배선: `docs/subagent-context.md`.
@@ -14,6 +14,7 @@
 - **인라인 주석 금지**: `.gitignore`/`.env`/`--env-file`은 줄끝 `# 주석`을 값/패턴에 섞음 → 주석은 별도 줄.
 - **프로덕션을 테스트에 맞춰 약화 금지**: 테스트 더블이 부실하면 *테스트*를 고쳐라(프로덕션 `client.close()`를 guard로 무르게 X).
 - **하드코딩 금지(SSOT)**: 리스트/설정은 원본(feeds.yaml 등)에서 도출, 두 곳 복제 X.
+- **`zip` 무음 절단**: `zip(a,b)`는 짧은 쪽에 맞춰 조용히 자름 → 길이 다른 벡터/리스트 연산이 가짜 결과를 냄(코사인·centroid_sum에서 3곳 재발). 길이 계약은 `len` 검증으로 fail-loud(원칙3). 합/내적은 `cluster.add_vectors`처럼 SSOT 헬퍼로 도출.
 
 ## 환경 / 툴링
 - **로컬 Python 없음** — 호스트 `python`은 Windows Store 스텁. → **Docker 전용 개발**(개발 원칙 7). 모든 실행·테스트는 Docker.
@@ -60,4 +61,4 @@
 ## 정리 / 리팩터
 - **SSOT 위반: `index.html` SRC_ORDER 하드코딩** — 사용자 지적. feeds.yaml 소스를 복제 → 드리프트 위험. → 수집기가 `meta/sources`를 feeds.yaml에서 도출·기록 → 사이트가 읽음. **중복 제거**(드리프트 테스트 불필요).
 - **firebaseConfig 인라인** — → `web/config.js` 분리.
-- **uv.lock / data;C / docker-compose / .env.example / .dockerignore** — uv.lock gitignore · `data;C` 빈 잔재 삭제 · 미사용 docker-compose 삭제 · 디스크 소실된 .env.example 복원 · .dockerignore에 tests/·web/·*.md 추가(런타임 이미지 순수화).
+- **uv.lock / data;C / docker-compose / .env.example / .dockerignore** — uv.lock gitignore · `data;C` 빈 잔재 삭제 · 미사용 docker-compose 삭제(→ **이후 e6acedb에서 린 compose로 부활: `docker compose run --rm test/collect`, 마운트 폴백 회피**) · 디스크 소실된 .env.example 복원 · .dockerignore에 tests/·web/·*.md 추가(런타임 이미지 순수화).
