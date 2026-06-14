@@ -92,21 +92,22 @@ def test_empty_queue_is_noop(tmp_path):
     assert stats["processed"] == 0
 
 
-def test_cluster_pass_cache_no_tagging(tmp_path):
-    # tag=False + in-memory candidates: 태깅 생략, Firestore 재조회 없이 캐시로 클러스터
+def test_cluster_pass_index_no_tagging(tmp_path):
+    # tag=False + VectorIndex 주입: 태깅 생략, 포트로 클러스터(Firestore 재조회 없음)
     import json
+    from newsstore.enrich.vector_index import InMemoryVectorIndex
     s = _store(tmp_path)
     s.upsert_items([_item("a", "Fed raises rates sharply today"),
                     _item("b", "Fed raises rates again right now")])
-    cache: list = []
+    idx = InMemoryVectorIndex()
     process_once(s, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW,
-                 tag=False, candidates=cache)
+                 tag=False, index=idx)
     rows = {r["id"]: r for r in s.conn.execute(
         "SELECT id,tags,story_id,embedding FROM raw_items")}
-    assert json.loads(rows["a"]["tags"]) == []           # 태깅 생략
+    assert json.loads(rows["a"]["tags"]) == []            # 태깅 생략
     assert rows["a"]["embedding"] is not None
-    assert rows["a"]["story_id"] == rows["b"]["story_id"]  # 캐시로 합류
-    assert len(cache) == 1 and cache[0]["count"] == 2     # 캐시 in-place 갱신
+    assert rows["a"]["story_id"] == rows["b"]["story_id"]  # 인덱스로 합류
+    assert idx.nearest([0.0] * EMBED_DIM, threshold=-2.0) is not None  # 스토리 존재
 
 
 def test_noncluster_source_tagged_not_clustered(tmp_path):

@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime, timedelta
 
 from .classify import classify_kind
-from .cluster import assign, best_match, DEFAULT_THRESHOLD
+from .cluster import DEFAULT_THRESHOLD
 from .embedder import embed_items, embed_text, EMBED_CONCURRENCY
-from ..contracts.ports import LLMClient
+from .vector_index import InMemoryVectorIndex
+from ..contracts.ports import LLMClient, VectorIndex
 from .tagger import tag_items
 
 _EMPTY_TAGS = {"tickers": [], "entities": [], "topics": []}
@@ -30,20 +31,22 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
                  close_after: timedelta = CLOSE_AFTER,
                  threshold: float = DEFAULT_THRESHOLD,
                  noncluster_sources=NONCLUSTER_SOURCES,
-                 tag: bool = True, candidates: list | None = None,
+                 tag: bool = True, index: VectorIndex | None = None,
                  close: bool = True,
                  embed_concurrency: int = EMBED_CONCURRENCY, id_factory=None) -> dict:
     """get_unprocessed 한 배치: classify → (story만) embed(병렬) → centroid 클러스터 →
     save_enrichment + mark_processed → close_stale. 비파괴.
 
     - tag=False: LLM 태깅 생략(클러스터 전용 패스, 빠름). 태깅은 클러스터 후 스토리 단위로 별도(tag_stories).
-    - candidates: in-memory centroid 캐시 [{'id','centroid','count'}]. 주면 Firestore 재조회 없이
-      메모리에서 best_match → create/append 시 캐시도 갱신(제곱 I/O 제거). None이면 매 항목 store 조회(구버전).
+    - index: VectorIndex(최근접 검색). 안 주면 배치당 1회 store에서 InMemory 인덱스를 구성
+      (per-item Firestore 재조회 제거). 풀런은 run_enrich가 인덱스를 1회 만들어 배치 간 공유.
     """
     id_factory = id_factory or (lambda: uuid.uuid4().hex)
     items = store.get_unprocessed(limit=batch)
     if not items:
         return {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
+    if index is None:
+        index = InMemoryVectorIndex.from_open_stories(store, now - open_window)
 
     kinds = {it.id: classify_kind(it.title, it.body or "") for it in items}
     story_items = [it for it in items if kinds[it.id] == "story"]
@@ -72,14 +75,14 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
                                   embedding=None, story_id=None)
             continue
         entities = _flat_tags(tg)
-        sid = _assign_and_persist(store, it, vec, entities, now, threshold,
-                                  open_window, candidates, id_factory)
-        if sid[1]:
+        sid, is_new = _assign_and_persist(store, index, it, vec, entities, now,
+                                          threshold, id_factory)
+        if is_new:
             created += 1
         else:
             joined += 1
         store.save_enrichment(it.id, kind="story", tags=_flat_tags(tg),
-                              embedding=vec, story_id=sid[0])
+                              embedding=vec, story_id=sid)
 
     for it in items:                          # spam/digest — kind만
         if kinds[it.id] != "story":
@@ -94,28 +97,16 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
     return stats
 
 
-def _assign_and_persist(store, it, vec, entities, now, threshold, open_window,
-                        candidates, id_factory) -> tuple[str, bool]:
-    """스토리 배정(메모리 캐시 또는 store 조회) + 영속화. 반환 (story_id, is_new)."""
-    if candidates is not None:                # in-memory 캐시 경로 (빠름)
-        idx = best_match(vec, candidates, threshold)
-        if idx < 0:
-            sid = id_factory()
-            store.create_story(sid, title=it.title, vec=vec, member_id=it.id,
-                               entities=entities, now=now)
-            candidates.append({"id": sid, "centroid": list(vec), "count": 1})
-            return sid, True
-        cand = candidates[idx]
-        sid, n = cand["id"], cand["count"]
-        store.append_to_story(sid, vec=vec, member_id=it.id, entities=entities, now=now)
-        cand["centroid"] = [(c * n + v) / (n + 1) for c, v in zip(cand["centroid"], vec)]
-        cand["count"] = n + 1
-        return sid, False
-    # 구버전 경로: 매 항목 Firestore 조회
-    sid = assign(vec, store.get_open_stories(cutoff=now - open_window), threshold=threshold)
+def _assign_and_persist(store, index, it, vec, entities, now, threshold,
+                        id_factory) -> tuple[str, bool]:
+    """VectorIndex로 최근접 스토리 배정 + store 영속화 + 인덱스 갱신. 반환 (story_id, is_new)."""
+    sid = index.nearest(vec, threshold=threshold)
     if sid is None:
         sid = id_factory()
-        store.create_story(sid, title=it.title, vec=vec, member_id=it.id, entities=entities, now=now)
+        store.create_story(sid, title=it.title, vec=vec, member_id=it.id,
+                           entities=entities, now=now)
+        index.add_story(sid, vec)
         return sid, True
     store.append_to_story(sid, vec=vec, member_id=it.id, entities=entities, now=now)
+    index.add_member(sid, vec)
     return sid, False

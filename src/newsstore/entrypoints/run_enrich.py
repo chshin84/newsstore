@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from ..enrich.cluster import DEFAULT_THRESHOLD
 from ..enrich.embedder import EMBED_CONCURRENCY
+from ..enrich.vector_index import InMemoryVectorIndex
 from ..enrich.gemini import GeminiClient, LLMError
 from ..enrich.processor import (process_once, NONCLUSTER_SOURCES,
                                OPEN_WINDOW, CLOSE_AFTER)
@@ -24,14 +25,14 @@ def _run_cluster(store, client, taxonomy, *, threshold, noncluster, batch, concu
     열린 스토리 centroid를 한 번만 로드해 메모리에서 best_match → Firestore 제곱 재조회 제거.
     """
     now0 = datetime.now(timezone.utc)
-    candidates = store.get_open_stories(cutoff=now0 - OPEN_WINDOW)   # 캐시 시드 [{id,centroid,count}]
-    log.info("cluster pass: seeded %d open-story centroids", len(candidates))
+    index = InMemoryVectorIndex.from_open_stories(store, now0 - OPEN_WINDOW)   # 1회 구성, 배치 간 공유
+    log.info("cluster pass: seeded %d open-story centroids", len(index._e))
     totals = {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
     for _ in range(MAX_BATCHES or 1_000_000):
         now = datetime.now(timezone.utc)
         stats = process_once(store, client, taxonomy, now=now, batch=batch,
                              threshold=threshold, noncluster_sources=noncluster,
-                             tag=False, candidates=candidates, close=False,
+                             tag=False, index=index, close=False,
                              embed_concurrency=concurrency)
         for k in totals:
             totals[k] += stats[k]
