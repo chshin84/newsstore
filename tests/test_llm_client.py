@@ -1,5 +1,5 @@
 import pytest
-from newsstore.enrich.llm import call_with_retry, LLMError
+from newsstore.enrich.gemini import call_with_retry, LLMError
 
 
 def test_retry_succeeds_after_transient():

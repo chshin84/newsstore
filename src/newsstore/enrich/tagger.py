@@ -3,7 +3,7 @@ import logging
 import re
 
 from ..contracts.ports import LLMClient
-from .llm import LLMError
+from .gemini import LLMError
 
 log = logging.getLogger("newsstore.enrich.tagger")
 

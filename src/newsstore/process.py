@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from .enrich.cluster import DEFAULT_THRESHOLD
 from .enrich.embedder import EMBED_CONCURRENCY
-from .enrich.llm import GeminiClient, LLMError
+from .enrich.gemini import GeminiClient, LLMError
 from .enrich.processor import (process_once, NONCLUSTER_SOURCES,
                                OPEN_WINDOW, CLOSE_AFTER)
 from .enrich.taxonomy import load_taxonomy

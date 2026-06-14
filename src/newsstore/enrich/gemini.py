@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any, Callable
 
-log = logging.getLogger("newsstore.enrich.llm")
+log = logging.getLogger("newsstore.enrich.gemini")
 
 
 class LLMError(RuntimeError):
