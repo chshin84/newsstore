@@ -2,8 +2,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone, timedelta
 import httpx
-from .models import FeedConfig
-from .store.base import Store
+from .feeds import FeedConfig
+from ..store.base import Store
 from .fetcher import fetch_feed
 from .parser import parse_feed
 

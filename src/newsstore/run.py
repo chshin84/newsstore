@@ -2,10 +2,10 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from .config import load_feeds, distinct_sources
-from .ssl_config import make_client
+from .collect.feeds import load_feeds, distinct_sources
+from .collect.ssl_config import make_client
 from .store.factory import make_store
-from .collector import collect_once
+from .collect.collector import collect_once
 
 log = logging.getLogger("newsstore")
 

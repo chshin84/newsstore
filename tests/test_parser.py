@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from pathlib import Path
-from newsstore.models import FeedConfig, make_id
-from newsstore.parser import parse_feed
+from newsstore.collect.feeds import FeedConfig, make_id
+from newsstore.collect.parser import parse_feed
 
 FEED = FeedConfig(feed_id="f1", url="u", source="Sample", asset_hint="us_stock", language="en")
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)

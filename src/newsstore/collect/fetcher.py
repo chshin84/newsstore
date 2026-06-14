@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import httpx
-from .models import FeedConfig
+from .feeds import FeedConfig
 
 @dataclass
 class FetchResult:

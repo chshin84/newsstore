@@ -1,4 +1,4 @@
-from newsstore.config import load_feeds
+from newsstore.collect.feeds import load_feeds
 
 def test_registry_loads_and_is_unique():
     feeds = load_feeds("config/feeds.yaml")

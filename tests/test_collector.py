@@ -1,8 +1,8 @@
 from datetime import datetime, timezone, timedelta
 import httpx
-from newsstore.models import FeedConfig
+from newsstore.collect.feeds import FeedConfig
 from newsstore.store.sqlite_store import SqliteStore
-from newsstore.collector import is_due, collect_once
+from newsstore.collect.collector import is_due, collect_once
 
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
 RSS = (b'<?xml version="1.0"?><rss version="2.0"><channel>'

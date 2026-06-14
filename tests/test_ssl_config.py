@@ -1,5 +1,5 @@
 import importlib, os
-from newsstore import ssl_config
+from newsstore.collect import ssl_config
 
 def test_home_uses_default_verify(monkeypatch):
     monkeypatch.setenv("APP_ENV", "home")

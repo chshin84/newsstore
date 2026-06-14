@@ -1,6 +1,6 @@
 import httpx
-from newsstore.models import FeedConfig
-from newsstore.fetcher import fetch_feed
+from newsstore.collect.feeds import FeedConfig
+from newsstore.collect.fetcher import fetch_feed
 
 FEED = FeedConfig(feed_id="f1", url="https://e/x.rss", source="S")
 
