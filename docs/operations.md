@@ -17,6 +17,8 @@
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
 | Cloud Run Job | `newsstore-collector` (env `NEWSSTORE_BACKEND=firestore`, `GOOGLE_CLOUD_PROJECT=daily-recap-498506`, `APP_ENV=home`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) |
+| Cloud Run Job #2 (계획) | `newsstore-processor` — Step-2 인리치(§E, 미배포: 키·lock 게이트) |
+| Cloud Scheduler #2 (계획) | `newsstore-enrich-hourly` (§E) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
 | Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |
@@ -72,6 +74,40 @@ gcloud firestore indexes composite create --collection-group=items \
 gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
 현재: `source+published_at`(소스필터), `tags+published_at`(태그필터), `processed+fetched_at`(Step-2 큐) — 전부 READY.
+
+## E. Step-2 인리치먼트 Processor 배포 (Cloud Run Job #2) — ⚠️ 최초 1회 셋업
+수집기와 **별도 Job**. 같은 Dockerfile을 `INSTALL_ENRICH=true`로 빌드(google-genai 포함)해 **별 이미지**(`processor:latest`)로 올리고, CMD를 `python -m newsstore.process`로 돌린다. `GEMINI_API_KEY`는 **Secret Manager**로 주입(커밋/이미지/로그 금지 — 백엔드 전용 비밀).
+
+> **선결: `requirements.lock`에 google-genai 추가.** lock이 constraints(-c)라 미포함이면 빌드 실패. `pip-compile`/`uv` 등으로 `enrich` extra 포함해 재생성 후 커밋. (httpx<1.0 등 기존 핀과 충돌 시 해소 필요 — 이게 첫 빌드 게이트.)
+
+```
+# 1) 비밀 생성 + Job SA에 접근 권한
+printf '%s' "<GEMINI_API_KEY>" | gcloud secrets create gemini-api-key --data-file=- --replication-policy=automatic
+gcloud secrets add-iam-policy-binding gemini-api-key \
+  --member=serviceAccount:newsstore-job@daily-recap-498506.iam.gserviceaccount.com \
+  --role=roles/secretmanager.secretAccessor
+# 2) Processor 이미지 빌드(enrich extra)
+gcloud builds submit --config infra/cloudbuild.processor.yaml \
+  --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest .
+# 3) Job #2 생성 (CMD 오버라이드 + 비밀 주입). SA는 수집기와 공유(datastore.user 보유)
+gcloud run jobs create newsstore-processor \
+  --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest \
+  --region=asia-northeast3 \
+  --service-account=newsstore-job@daily-recap-498506.iam.gserviceaccount.com \
+  --set-env-vars=NEWSSTORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
+  --command=python --args=-m,newsstore.process
+# 4) 수동 1회 실행 + 로그 확인
+gcloud run jobs execute newsstore-processor --region=asia-northeast3 --wait
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-processor"' \
+  --freshness=10m --format="value(textPayload)" | Select-String "enrichment done|aborted"
+# 5) Scheduler #2 (수집과 시차; 예: 매시 10분). HTTP로 Run Admin API의 Job:run 호출(수집기 패턴 동일)
+gcloud scheduler jobs create http newsstore-enrich-hourly --location=asia-northeast3 \
+  --schedule="10 * * * *" \
+  --uri="https://run.googleapis.com/v2/projects/daily-recap-498506/locations/asia-northeast3/jobs/newsstore-processor:run" \
+  --http-method=POST --oauth-service-account-email=newsstore-job@daily-recap-498506.iam.gserviceaccount.com
+```
+이후 코드/어휘 변경 반영은 §A와 동일하게 **2)+3) 재빌드→이미지 갱신**(`gcloud run jobs update newsstore-processor --image=...`). 복합 인덱스(스토리/태그 쿼리)가 필요하면 §D.
 
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.

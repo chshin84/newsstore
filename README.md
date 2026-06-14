@@ -68,8 +68,8 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pyt
 - 🚧 **Step-2 (LLM 태깅/스토리)**: 진행 중.
   - ✅ Plan 1 — `src/newsstore/enrich/`(taxonomy·classify·cluster, 휴리스틱 분류 + centroid 클러스터 순수로직).
   - ✅ Plan 2 — Store 확장: `save_enrichment`(kind/tags/embedding/story_id) + `stories`(centroid sum/count·get_open·close_stale), sqlite/firestore 양쪽.
-  - ⬜ Plan 3 — Gemini Flash 태깅+리뷰어 + 임베딩(Tier3) 런타임 연결.
-  - ⬜ Plan 4 — Processor Job(#2)+Scheduler 배포. 그러면 사이트 태그 드롭다운 자동 활성.
+  - ✅ Plan 3 — Gemini 태깅(`tagger`, 결정론 어휘/티커 검증)·임베딩(`embedder`, 768 dim 가드)·LLM 클라이언트(`llm`, timeout/retry/None가드). DI라 google-genai 없이 로직 테스트.
+  - ✅ Plan 4 (로직) — `enrich/processor.py`(get_unprocessed→classify→tag+embed→클러스터→save+mark) + `process.py` 엔트리포인트. **배포(Cloud Run Job#2 + GEMINI_API_KEY)는 사용자 게이트** — `docs/operations.md §E`. 배포되면 사이트 태그 드롭다운 자동 활성.
 
 ## 문서
 - 로드맵(Step 1~7): `docs/roadmap.md`
