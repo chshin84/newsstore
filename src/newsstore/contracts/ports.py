@@ -44,6 +44,18 @@ class Store(Protocol):
         """last_seen<cutoff인 open 스토리를 closed로. 변경 수 반환."""
         ...
 
+    # Step-3 요약 패스 계약 (플랜 A). 새 멤버가 생긴 스토리를 골라 LLM 요약을 채운다.
+    def get_stories_needing_summary(self, limit: int) -> list[dict]:
+        """last_seen desc 상위 limit개 중 count>summary_count(새 멤버)인 것만. [{'id','count'}]."""
+        ...
+    def get_story_members(self, story_id: str) -> list[dict]:
+        """story_id 멤버 기사 published_at asc. [{'title','body','source','published_at'}]."""
+        ...
+    def save_story_summary(self, story_id, *, title, summary, latest, developments,
+                           summary_count, now) -> None:
+        """요약 필드만 merge 저장(+summary_count, summary_at=now). 기존 필드(member_ids 등) 보존."""
+        ...
+
 
 class LLMClient(Protocol):
     def generate_json(self, prompt: str, *, timeout: float) -> dict: ...

@@ -110,6 +110,36 @@ gcloud scheduler jobs create http newsstore-enrich-hourly --location=asia-northe
 ```
 이후 코드/어휘 변경 반영은 §A와 동일하게 **2)+3) 재빌드→이미지 갱신**(`gcloud run jobs update newsstore-processor --image=...`). 복합 인덱스(스토리/태그 쿼리)가 필요하면 §D.
 
+## F. 스토리 요약 패스 배포 (Pass 3 — `--mode summary`, 시간당) — ⚠️ 돈/리소스: 사용자 확인 후 실행
+요약 패스는 **기존 `processor` 이미지를 그대로 재사용**한다(코드만 추가됨 — `run_enrich --mode summary`). cluster 패스(10분)와 별도로 **시간당** 돈다. Cloud Run Job의 `--args`는 생성 시 고정이라, 가장 단순한 길은 **같은 이미지로 두 번째 Job**(`newsstore-summarizer`, args=`--mode=summary`) + 전용 Scheduler.
+```
+# 0) 코드 반영: processor 이미지 재빌드 + 기존 cluster Job 이미지 갱신(§A의 2~3과 동일 패턴)
+gcloud builds submit --config infra/cloudbuild.processor.yaml \
+  --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest .
+gcloud run jobs update newsstore-processor \
+  --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest --region=asia-northeast3
+# 1) 요약 전용 Job(같은 이미지, args만 다름; 비밀·SA·env 동일)
+gcloud run jobs create newsstore-summarizer \
+  --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest \
+  --region=asia-northeast3 \
+  --service-account=newsstore-job@daily-recap-498506.iam.gserviceaccount.com \
+  --set-env-vars=NEWSSTORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
+  --command=python --args=-m,newsstore.entrypoints.run_enrich,--mode,summary
+# 2) 수동 1회 실행 + 확인
+gcloud run jobs execute newsstore-summarizer --region=asia-northeast3 --wait
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-summarizer"' \
+  --freshness=10m --format="value(textPayload)" | Select-String "summary pass|aborted"
+# 3) 시간당 Scheduler (cluster와 시차: 매시 5분). Bash가 cron 공백을 망가뜨리니 PowerShell에서.
+gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-northeast3 \
+  --schedule="5 * * * *" \
+  --uri="https://run.googleapis.com/v2/projects/daily-recap-498506/locations/asia-northeast3/jobs/newsstore-summarizer:run" \
+  --http-method=POST --oauth-service-account-email=newsstore-job@daily-recap-498506.iam.gserviceaccount.com
+```
+- **비용**: 시간당 720실행/월 × 분단위 과금 + flash-lite 콜(limit=10/run) ≈ **월 $2~4 추정 → 배포 후 콘솔 실측**. Scheduler 무료 3개 중 현재 2개 사용(여유 1).
+- 튜닝 env: `NEWSSTORE_SUMMARY_BATCH`(런당 스캔/요약 스토리 수, 기본 10).
+- 이후 코드 변경 반영은 §A처럼 재빌드 → **두 Job 모두** `--image` 갱신.
+
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
 - **본문은 "피드가 주면 사용, 안 주면 헤드라인".** 기사 페이지 스크래핑은 **안 함**(Cloud Run IP 차단·JS렌더·GN 리다이렉트로 fragile). 본문 부족하면 **피드를 더 추가**(Bloomberg 카테고리처럼).

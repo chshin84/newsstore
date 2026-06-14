@@ -63,9 +63,10 @@ class FirestoreStore:
         csum = add_vectors(list(d.get("centroid_sum", [])), list(vec))
         members = list(d.get("member_ids", [])) + [member_id]
         ents = list(dict.fromkeys(list(d.get("entities", [])) + list(entities)))
-        d.update({"centroid_sum": csum, "count": d.get("count", 0) + 1,
-                  "member_ids": members, "entities": ents, "last_seen": now})
-        ref.set(d)
+        # 필드 한정 merge(풀-doc set 아님): 요약 패스가 쓴 summary 필드를 read↔set 레이스로
+        # 되돌리지 않게(플랜 A D7). 자기 소유 cluster 필드만 갱신.
+        ref.set({"centroid_sum": csum, "count": d.get("count", 0) + 1,
+                 "member_ids": members, "entities": ents, "last_seen": now}, merge=True)
 
     def get_open_stories(self, cutoff) -> list[dict]:
         out = []
@@ -83,10 +84,45 @@ class FirestoreStore:
         for snap in col.where("status", "==", "open").stream():
             d = snap.to_dict() or {}
             if d.get("last_seen") and d["last_seen"] < cutoff:
-                d["status"] = "closed"
-                col.document(snap.id).set(d)
+                col.document(snap.id).set({"status": "closed"}, merge=True)
                 n += 1
         return n
+
+    # --- Step-3 요약 패스 (플랜 A) ---
+    def get_stories_needing_summary(self, limit: int) -> list[dict]:
+        # last_seen desc 상위 limit개 스캔 → 코드측에서 count>summary_count만(부등호+정렬
+        # 한 쿼리 불가). 새 멤버가 붙으면 last_seen이 갱신돼 상위로 떠오르므로 스캔창=대상창.
+        out = []
+        q = (self.db.collection("stories")
+             .order_by("last_seen", direction="DESCENDING")
+             .limit(int(limit)))
+        for snap in q.stream():
+            d = snap.to_dict() or {}
+            if d.get("count", 0) > d.get("summary_count", 0):
+                out.append({"id": snap.id, "count": d.get("count", 0)})
+        return out
+
+    def get_story_members(self, story_id: str) -> list[dict]:
+        # items(story_id, published_at) 복합 인덱스 사용(READY). published_at 없는 멤버는
+        # order_by가 정렬값으로 포함하되, grounding은 summarizer가 None 가드로 드롭.
+        q = (self.db.collection(_ITEMS)
+             .where("story_id", "==", story_id)
+             .order_by("published_at"))
+        out = []
+        for s in q.stream():
+            d = s.to_dict() or {}
+            out.append({"title": d.get("title", ""), "body": d.get("body") or "",
+                        "source": d.get("source", ""), "published_at": d.get("published_at")})
+        return out
+
+    def save_story_summary(self, story_id, *, title, summary, latest, developments,
+                           summary_count, now) -> None:
+        # merge=True: 요약 필드만 갱신, member_ids/centroid_sum/count 등 cluster 소유 필드 보존.
+        self.db.collection("stories").document(story_id).set({
+            "title": title, "summary": summary, "latest": latest,
+            "developments": list(developments), "summary_count": int(summary_count),
+            "summary_at": now,
+        }, merge=True)
 
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
