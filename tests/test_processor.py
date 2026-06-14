@@ -1,0 +1,92 @@
+from datetime import datetime, timezone, timedelta
+from newsstore.models import RawItem
+from newsstore.store.sqlite_store import SqliteStore
+from newsstore.enrich.embedder import EMBED_DIM
+from newsstore.enrich.processor import process_once
+
+NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
+TAX = {"entities": ["Fed"], "topics": ["rates"]}
+
+
+def _item(i, title, body=""):
+    return RawItem(id=i, feed_id="f", source="S", url=f"https://e/{i}",
+                   title=title, body=body, fetched_at=NOW)
+
+
+def _unit(idx):
+    v = [0.0] * EMBED_DIM
+    v[idx] = 1.0
+    return v
+
+
+class _FakeClient:
+    """generate_json: 모든 항목에 동일 태그. embed: 제목 키워드로 벡터 매핑(클러스터 제어)."""
+    def __init__(self, embed_map):
+        self.embed_map = embed_map
+    def generate_json(self, prompt, *, timeout=30.0):
+        return {"results": [{"tickers": [], "entities": ["Fed"], "topics": ["rates"]}
+                            for _ in range(10)]}
+    def embed(self, text, *, timeout=30.0):
+        for key, vec in self.embed_map.items():
+            if key in text:
+                return list(vec)
+        return [0.0] * EMBED_DIM
+
+
+def _store(tmp_path):
+    return SqliteStore(tmp_path / "db.sqlite")
+
+
+def test_spam_and_digest_excluded_from_embedding(tmp_path):
+    s = _store(tmp_path)
+    s.upsert_items([
+        _item("a", "Fed raises rates"),
+        _item("b", "ROSEN LAW reminds investors of class action deadline"),
+        _item("c", "Markets Wrap, More"),
+    ])
+    client = _FakeClient({"Fed raises": _unit(0)})
+    process_once(s, client, TAX, now=NOW)
+
+    rows = {r["id"]: r for r in s.conn.execute(
+        "SELECT id,kind,embedding,story_id,processed FROM raw_items")}
+    assert rows["a"]["kind"] == "story" and rows["a"]["embedding"] is not None
+    assert rows["b"]["kind"] == "spam" and rows["b"]["embedding"] is None
+    assert rows["c"]["kind"] == "digest" and rows["c"]["embedding"] is None
+    # 전부 processed 처리(비파괴 — 저장은 보존, kind만 분류)
+    assert all(rows[i]["processed"] == 1 for i in ("a", "b", "c"))
+    # spam/digest는 스토리에 안 들어감
+    assert rows["b"]["story_id"] is None and rows["c"]["story_id"] is None
+
+
+def test_similar_stories_cluster_distinct_stay_separate(tmp_path):
+    s = _store(tmp_path)
+    s.upsert_items([
+        _item("a", "Fed raises rates sharply"),
+        _item("b", "Fed raises rates again"),     # a와 동일 벡터 → 합류
+        _item("c", "Oil prices jump"),            # 직교 벡터 → 새 스토리
+    ])
+    client = _FakeClient({"Fed raises": _unit(0), "Oil prices": _unit(1)})
+    process_once(s, client, TAX, now=NOW)
+
+    sid = {r["id"]: r["story_id"] for r in s.conn.execute(
+        "SELECT id,story_id FROM raw_items")}
+    assert sid["a"] == sid["b"]          # 클러스터 합류
+    assert sid["c"] != sid["a"]          # 별도 스토리
+    # 스토리 2개, 'a' 스토리는 멤버 2
+    stories = list(s.get_open_stories(cutoff=NOW - timedelta(hours=1)))
+    assert len(stories) == 2
+
+
+def test_returns_stats(tmp_path):
+    s = _store(tmp_path)
+    s.upsert_items([_item("a", "Fed raises rates")])
+    stats = process_once(s, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW)
+    assert stats["processed"] == 1
+    assert stats["stories_created"] == 1
+    assert stats["stories_joined"] == 0
+
+
+def test_empty_queue_is_noop(tmp_path):
+    s = _store(tmp_path)
+    stats = process_once(s, _FakeClient({}), TAX, now=NOW)
+    assert stats["processed"] == 0
