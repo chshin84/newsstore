@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 import httpx
 from .feeds import FeedConfig
-from ..store.base import Store
+from ..contracts.ports import Store
 from .fetcher import fetch_feed
 from .parser import parse_feed
 

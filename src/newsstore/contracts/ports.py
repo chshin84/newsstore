@@ -1,7 +1,8 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
-from ..contracts.models import RawItem
+from .models import RawItem
+
 
 class Store(Protocol):
     def upsert_items(self, items: list[RawItem]) -> int:
@@ -31,7 +32,7 @@ class Store(Protocol):
         ...
 
     def get_open_stories(self, cutoff) -> list[dict]:
-        """status=open이고 last_seen>=cutoff인 스토리: [{'id','centroid'}]. centroid=sum/count."""
+        """status=open이고 last_seen>=cutoff인 스토리: [{'id','centroid','count'}]. centroid=sum/count."""
         ...
     def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
         """새 스토리: centroid_sum=vec, count=1, member_ids=[member_id], status=open."""
@@ -42,3 +43,8 @@ class Store(Protocol):
     def close_stale_stories(self, cutoff) -> int:
         """last_seen<cutoff인 open 스토리를 closed로. 변경 수 반환."""
         ...
+
+
+class LLMClient(Protocol):
+    def generate_json(self, prompt: str, *, timeout: float) -> dict: ...
+    def embed(self, text: str, *, timeout: float) -> list[float]: ...

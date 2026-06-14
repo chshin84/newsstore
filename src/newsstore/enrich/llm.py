@@ -2,18 +2,13 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Callable, Protocol
+from typing import Any, Callable
 
 log = logging.getLogger("newsstore.enrich.llm")
 
 
 class LLMError(RuntimeError):
     """LLM 호출 실패(타임아웃/레이트리밋/빈 응답/비JSON)를 호출자가 처리할 구조화 에러."""
-
-
-class LLMClient(Protocol):
-    def generate_json(self, prompt: str, *, timeout: float) -> dict: ...
-    def embed(self, text: str, *, timeout: float) -> list[float]: ...
 
 
 def call_with_retry(call_fn: Callable[[], Any], *, attempts: int = 3,

@@ -2,7 +2,8 @@ from __future__ import annotations
 import logging
 import re
 
-from .llm import LLMClient, LLMError
+from ..contracts.ports import LLMClient
+from .llm import LLMError
 
 log = logging.getLogger("newsstore.enrich.tagger")
 

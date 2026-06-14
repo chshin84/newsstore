@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from .classify import classify_kind
 from .cluster import assign, best_match, DEFAULT_THRESHOLD
 from .embedder import embed_items, embed_text, EMBED_CONCURRENCY
-from .llm import LLMClient
+from ..contracts.ports import LLMClient
 from .tagger import tag_items
 
 _EMPTY_TAGS = {"tickers": [], "entities": [], "topics": []}

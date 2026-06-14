@@ -1,7 +1,7 @@
 from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
-from .llm import LLMClient
+from ..contracts.ports import LLMClient
 
 EMBED_DIM = 768
 BODY_CAP = 500
