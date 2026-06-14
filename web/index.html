@@ -45,13 +45,72 @@
     .src { font-weight:600; }
     .empty, .error { color:var(--mut); text-align:center; padding:44px 16px; line-height:1.7; }
     .error code { color:var(--accent); }
+
+    /* ===== 탭 ===== */
+    .tabs { display:flex; gap:4px; margin-bottom:9px; }
+    .tab { font-weight:600; color:var(--mut); }
+    .tab.active { color:var(--fg); border-color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent); }
+    [hidden] { display:none !important; }
+
+    /* ===== 스토리 스트립 ===== */
+    .stripwrap { position:relative; }
+    .strip { display:flex; align-items:flex-start; gap:9px; overflow-x:auto; padding:4px 2px 14px; scroll-behavior:smooth; }
+    .strip::-webkit-scrollbar { height:7px; } .strip::-webkit-scrollbar-thumb { background:#d8d6cf; border-radius:8px; }
+    .scard { flex:0 0 170px; background:#fff; border:1px solid var(--line); border-top:3px solid var(--bar,#2563eb);
+      border-radius:9px; padding:10px 12px; display:flex; flex-direction:column; gap:5px; cursor:pointer;
+      transition:box-shadow .2s, transform .24s cubic-bezier(.2,.7,.2,1); }
+    .scard:hover { box-shadow:0 10px 24px rgba(40,40,40,.13); transform:translateY(-2px); }
+    .scard.sel { border-color:var(--accent); box-shadow:0 8px 22px rgba(37,99,235,.18); }
+    /* 호버 시 오른쪽 형제들을 transform으로 한 칸 밀기(리플로우 없음 → 스크롤과 안 싸움). 데스크톱 한정. */
+    @media (hover:hover) { .scard:hover ~ .scard { transform:translateX(14px); } }
+    .scard .st { font-size:13px; font-weight:600; line-height:1.34; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    .scard .ssum { font-size:11px; line-height:1.45; color:var(--sub); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    .scard .slatest { font-size:10.5px; color:var(--accent); font-weight:600; line-height:1.3; }
+    .scard .sfoot { margin-top:auto; display:flex; gap:5px; align-items:center; }
+    .scnt { background:var(--pill); color:var(--pill-fg); border-radius:999px; padding:1px 7px; font-size:10px; font-weight:700; }
+    .stm { color:var(--mut); font-size:9.5px; margin-left:auto; }
+    .snav { position:absolute; top:34px; width:32px; height:32px; border-radius:50%; background:#fff; border:1px solid var(--line);
+      cursor:pointer; font-size:15px; color:#3a4250; display:flex; align-items:center; justify-content:center;
+      box-shadow:0 3px 10px rgba(0,0,0,.08); z-index:4; }
+    .snav:hover { background:#f0f1f4; } .snav.l { left:-4px; } .snav.r { right:-4px; }
+
+    /* ===== 스토리 디테일 ===== */
+    .sdetail { margin:8px 0 24px; background:#faf9f6; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+    .sdetail .dt { font-size:18px; font-weight:700; margin:0 0 6px; }
+    .sdetail .dsum { font-size:13.5px; color:var(--sub); line-height:1.6; margin:0 0 5px; max-width:760px; }
+    .sdetail .dmeta { font-size:11.5px; color:var(--mut); margin-bottom:14px; }
+    .dgroup { display:grid; grid-template-columns:104px minmax(0,1fr); gap:22px; }
+    .tcol { position:relative; }
+    .tcol::before { content:""; position:absolute; left:6px; top:2px; bottom:-14px; width:2px; background:#e0ddd5; }
+    .dgroup:last-child .tcol::before { bottom:auto; height:16px; }
+    .tnode { position:relative; padding:0 0 16px 20px; }
+    .tdot { position:absolute; left:1px; top:3px; width:11px; height:11px; border-radius:50%; background:var(--accent); border:2px solid #faf9f6; }
+    .tnode.last .tdot { width:15px; height:15px; left:-1px; animation:spulse 1.8s infinite; }
+    .ttime { font-size:9.5px; color:var(--mut); }
+    .tdev { font-size:12.5px; font-weight:600; line-height:1.3; margin-top:2px; }
+    .tcnt { font-size:9.5px; color:var(--mut); margin-top:3px; }
+    @keyframes spulse { 0%{box-shadow:0 0 0 0 rgba(37,99,235,.45)} 70%{box-shadow:0 0 0 8px rgba(37,99,235,0)} 100%{box-shadow:0 0 0 0 rgba(37,99,235,0)} }
+    .darts { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:8px; align-items:start; padding-bottom:16px; }
+    .acard { background:#fff; border:1px solid var(--line); border-left-width:4px; border-radius:8px; padding:9px 12px; }
+    .acard:hover { background:#fbfbf9; }
+    .acard .aat a { color:var(--fg); text-decoration:none; font-size:13px; font-weight:600; line-height:1.4; }
+    .acard .aat a:hover { color:var(--accent); }
+    .acard .aax { font-size:11.5px; color:var(--sub); line-height:1.5; margin:3px 0 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .acard .aam { margin-top:6px; display:flex; gap:6px; align-items:center; font-size:10.5px; color:var(--mut); }
+    .amore { align-self:center; background:var(--pill); color:var(--pill-fg); border:none; border-radius:8px; padding:7px 11px; font-size:11px; font-weight:600; cursor:pointer; height:fit-content; }
+    .amore:hover { background:#e3e5ea; }
+    .sempty { color:var(--mut); text-align:center; padding:34px 16px; line-height:1.7; }
   </style>
 </head>
 <body>
   <header>
     <div class="wrap">
       <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
-      <div class="controls">
+      <div class="tabs">
+        <button class="tab active" id="tabFeed">피드</button>
+        <button class="tab" id="tabStories">스토리</button>
+      </div>
+      <div class="controls" id="feedControls">
         <label for="src">소스</label>
         <select id="src"><option value="__all__">전체</option></select>
         <label for="tag">태그</label>
@@ -61,7 +120,17 @@
       </div>
     </div>
   </header>
-  <main><div class="wrap" id="list"></div></main>
+  <main><div class="wrap">
+    <div id="feedView"><div id="list"></div></div>
+    <div id="storiesView" hidden>
+      <div class="stripwrap">
+        <button class="snav l" id="snavL" aria-label="왼쪽으로">‹</button>
+        <button class="snav r" id="snavR" aria-label="오른쪽으로">›</button>
+        <div class="strip" id="storiesStrip"></div>
+      </div>
+      <div id="storiesDetail"></div>
+    </div>
+  </div></main>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -203,7 +272,193 @@
     srcSel.addEventListener("change", load);
     tagSel.addEventListener("change", load);
     document.getElementById("refresh").addEventListener("click", load);
+
+    // ============================ 스토리 뷰 ============================
+    const feedView = document.getElementById("feedView");
+    const feedControls = document.getElementById("feedControls");
+    const storiesView = document.getElementById("storiesView");
+    const stripEl = document.getElementById("storiesStrip");
+    const detailEl = document.getElementById("storiesDetail");
+    const tabFeed = document.getElementById("tabFeed");
+    const tabStories = document.getElementById("tabStories");
+    let storiesLoaded = false, openStoryId = null, detailGroups = [];
+    const storyById = new Map();
+    const memberCache = new Map();         // story_id -> items[] (클릭당 1회 읽기, 캐시)
+
+    // === STORIES-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
+    function toMs(t) {
+      if (t == null) return null;
+      if (typeof t === "number") return t;
+      if (t && typeof t.toDate === "function") return t.toDate().getTime();   // Firestore Timestamp
+      if (t instanceof Date) return t.getTime();
+      const n = new Date(t).getTime();
+      return Number.isNaN(n) ? null : n;
+    }
+    function groupItemsByDevelopment(developments, items) {
+      const devs = (developments || [])
+        .map(d => ({ dev: d, ms: toMs(d && d.time) }))
+        .filter(x => x.ms != null)
+        .sort((a, b) => b.ms - a.ms);                          // 입력 순서 불신 → time DESC
+      const its = (items || [])
+        .map(it => ({ it, ms: toMs(it && it.published_at) }))
+        .filter(x => x.ms != null)                             // null published_at 제외(backend와 동일)
+        .sort((a, b) => b.ms - a.ms);                          // DESC
+      if (devs.length === 0)
+        return [{ dev: null, items: its.map(x => x.it) }];     // degrade: 단일 버킷
+      const groups = devs.map(d => ({ dev: d.dev, ms: d.ms, items: [] }));
+      for (const { it, ms } of its) {
+        let chosen = groups[groups.length - 1];                // 모든 전개보다 과거 → 가장 이른 전개
+        for (const g of groups) { if (g.ms <= ms) { chosen = g; break; } }  // ms 이하 중 최대(>= 경계)
+        chosen.items.push(it);
+      }
+      return groups.map(g => ({ dev: g.dev, items: g.items }));
+    }
+    function pickDisplayItems(groupItems, max) {
+      max = max || 2;
+      const shown = [], seen = new Set();
+      for (const it of groupItems) {                           // 1차: 서로 다른 source 우선
+        if (shown.length >= max) break;
+        const s = (it && it.source) || "";
+        if (!seen.has(s)) { seen.add(s); shown.push(it); }
+      }
+      for (const it of groupItems) {                           // 2차: 모자라면 같은 source로 채움
+        if (shown.length >= max) break;
+        if (!shown.includes(it)) shown.push(it);
+      }
+      return { shown, moreCount: Math.max(0, groupItems.length - shown.length) };
+    }
+    // === STORIES-LOGIC-END ===
+
+    function storyCardHtml(s) {
+      const c = srcColors(s.id);
+      const t = txt(s.title) || "(제목 없음)";
+      const summ = s.summary ? `<div class="ssum">${txt(s.summary)}</div>` : "";
+      const latest = s.latest ? `<div class="slatest">🔵 최신: ${txt(s.latest)}</div>` : "";
+      const last = s.last_seen && s.last_seen.toDate ? s.last_seen.toDate() : null;
+      return `<div class="scard" data-id="${esc(s.id)}" style="--bar:${c.bar}">
+        <div class="st">${t}</div>${summ}${latest}
+        <div class="sfoot"><span class="scnt">${Number(s.count) || 0}건</span>
+          <span class="stm">${relTime(last)}</span></div></div>`;
+    }
+    function articleCardHtml(it) {
+      const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
+      const isTS = it.source === "TruthSocial";
+      const titleHtml = isTS ? "Truth Social" : (txt(it.title) || "(제목 없음)");
+      const body = bodyHtml(isTS ? (it.title || it.body) : it.body);
+      const c = srcColors(it.source);
+      return `<article class="acard" style="border-left-color:${c.bar}">
+        <div class="aat"><a href="${esc(it.url)}" target="_blank" rel="noopener">${titleHtml}</a></div>
+        ${body ? `<p class="aax">${body}</p>` : ""}
+        <div class="aam"><span class="pill src" style="background:${c.bg};color:${c.fg}">${txt(it.source) || "?"}</span>
+          <span>${relTime(pub)}</span></div></article>`;
+    }
+    function renderDetail(s, items) {
+      const groups = groupItemsByDevelopment(s.developments || [], items);
+      detailGroups = groups;
+      const devCount = groups.filter(g => g.dev).length;
+      const meta = `${Number(s.count) || items.length}개 기사 · ${devCount}개 전개`;
+      const summ = s.summary ? `<div class="dsum">${txt(s.summary)}</div>` : "";
+      const rows = groups.map((g, gi) => {
+        const isDev = !!g.dev;
+        const devTime = isDev && g.dev.time && g.dev.time.toDate ? g.dev.time.toDate() : null;
+        const devText = isDev ? txt(g.dev.text) : "전체 기사";
+        const sc = isDev ? (Number(g.dev.source_count) || g.items.length) : g.items.length;
+        const { shown, moreCount } = pickDisplayItems(g.items, 2);
+        const arts = (shown.map(articleCardHtml).join("") ||
+                      `<div class="sempty">기사 없음</div>`) +
+          (moreCount > 0 ? `<button class="amore" data-gi="${gi}">+${moreCount}개 더</button>` : "");
+        return `<div class="dgroup">
+          <div class="tcol"><div class="tnode ${gi === 0 ? "last" : ""}"><span class="tdot"></span>
+            <div class="ttime">${isDev ? relTime(devTime) : ""}</div>
+            <div class="tdev">${devText}</div><div class="tcnt">${sc}개 소스</div></div></div>
+          <div class="darts" data-gi="${gi}">${arts}</div></div>`;
+      }).join("");
+      detailEl.innerHTML = `<div class="sdetail">
+        <div class="dt">${txt(s.title) || "(제목 없음)"}</div>${summ}
+        <div class="dmeta">${meta}</div>
+        ${rows || '<div class="sempty">이 스토리에 표시할 기사가 없습니다.</div>'}</div>`;
+    }
+    function closeDetail() {
+      openStoryId = null; detailEl.innerHTML = "";
+      [...stripEl.querySelectorAll(".scard")].forEach(c => c.classList.remove("sel"));
+    }
+    async function openStory(id) {
+      if (openStoryId === id) { closeDetail(); return; }       // 토글
+      openStoryId = id;
+      [...stripEl.querySelectorAll(".scard")].forEach(c => c.classList.toggle("sel", c.dataset.id === id));
+      const s = storyById.get(id);
+      if (!s) return;
+      detailEl.innerHTML = `<div class="sdetail"><div class="sempty">불러오는 중…</div></div>`;
+      let items = memberCache.get(id);
+      if (!items) {
+        try {
+          const qs = query(collection(db, "items"), where("story_id", "==", id), orderBy("published_at"));
+          items = (await getDocs(qs)).docs.map(d => d.data());
+          memberCache.set(id, items);
+        } catch (err) {
+          if (openStoryId === id)
+            detailEl.innerHTML = `<div class="sdetail"><div class="sempty">기사 불러오기 실패: <code>${esc(err.message)}</code></div></div>`;
+          return;
+        }
+      }
+      if (openStoryId !== id) return;                          // 사용자가 다른 카드로 이동
+      renderDetail(s, items);
+    }
+    async function loadStories() {
+      detailEl.innerHTML = ""; openStoryId = null;
+      stripEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
+      try {
+        const q2 = query(collection(db, "stories"), where("status", "==", "open"),
+                         orderBy("last_seen", "desc"), limit(40));
+        const all = (await getDocs(q2)).docs.map(d => ({ id: d.id, ...d.data() }));
+        const stories = all.filter(s => (Number(s.count) || 0) >= 2).slice(0, 20);   // 멤버 2+ (클라 필터)
+        storyById.clear(); stories.forEach(s => storyById.set(s.id, s));
+        if (!stories.length) {
+          stripEl.innerHTML = `<div class="sempty">아직 묶인 스토리가 없어요.<br>기사가 쌓이면 자동으로 묶여 나타납니다.</div>`;
+          return;
+        }
+        stripEl.innerHTML = stories.map(storyCardHtml).join("");
+      } catch (e) {
+        if (/requires an index|currently building/i.test(e.message)) {
+          stripEl.innerHTML = `<div class="sempty">스토리 인덱스를 만드는 중이에요(최초 1회, 보통 1~3분)…</div>`;
+          setTimeout(loadStories, 20000); return;
+        }
+        stripEl.innerHTML = `<div class="sempty">불러오기 실패: <code>${esc(e.message)}</code></div>`;
+      }
+    }
+
+    stripEl.addEventListener("click", e => {
+      const card = e.target.closest(".scard");
+      if (card) openStory(card.dataset.id);
+    });
+    detailEl.addEventListener("click", e => {                 // "+N개 더" 전개
+      const btn = e.target.closest(".amore");
+      if (!btn) return;
+      const g = detailGroups[Number(btn.dataset.gi)];
+      const box = detailEl.querySelector(`.darts[data-gi="${btn.dataset.gi}"]`);
+      if (g && box) box.innerHTML = g.items.map(articleCardHtml).join("");
+    });
+    stripEl.addEventListener("wheel", e => {                  // 세로 휠 → 가로 스크롤
+      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { stripEl.scrollLeft += e.deltaY; e.preventDefault(); }
+    }, { passive: false });
+    document.getElementById("snavL").addEventListener("click", () => stripEl.scrollBy({ left: -360, behavior: "smooth" }));
+    document.getElementById("snavR").addEventListener("click", () => stripEl.scrollBy({ left: 360, behavior: "smooth" }));
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && openStoryId) closeDetail(); });
+
+    function showTab(which) {
+      const stories = which === "stories";
+      feedView.hidden = stories; feedControls.hidden = stories; storiesView.hidden = !stories;
+      tabFeed.classList.toggle("active", !stories);
+      tabStories.classList.toggle("active", stories);
+      if (stories && !storiesLoaded) { storiesLoaded = true; loadStories(); }
+    }
+    function routeFromHash() { showTab(location.hash === "#stories" ? "stories" : "feed"); }
+    tabFeed.addEventListener("click", () => { location.hash = "#feed"; });
+    tabStories.addEventListener("click", () => { location.hash = "#stories"; });
+    window.addEventListener("hashchange", routeFromHash);
+
     initSources();
+    routeFromHash();
   </script>
 </body>
 </html>

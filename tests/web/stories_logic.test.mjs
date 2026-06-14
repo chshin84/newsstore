@@ -1,0 +1,103 @@
+// 플랜 B — 스토리 뷰 순수 로직 검증(node 단독, 브라우저/에뮬레이터 불필요).
+// web/index.html의 STORIES-LOGIC 마커 블록을 '문자열 슬라이스'(취약한 JS 정규식 파싱 X)해 eval →
+// 실제 배포되는 코드를 그대로 검증(복붙 드리프트 불가 — 단일 출처). 실행: node tests/web/stories_logic.test.mjs
+import { readFileSync } from "node:fs";
+import assert from "node:assert/strict";
+
+const html = readFileSync(new URL("../../web/index.html", import.meta.url), "utf8");
+const START = "// === STORIES-LOGIC-START";
+const END = "// === STORIES-LOGIC-END";
+const i = html.indexOf(START), j = html.indexOf(END);
+assert.ok(i !== -1 && j !== -1 && j > i, "STORIES-LOGIC 마커가 index.html에 있어야 한다(드리프트 가드)");
+const block = html.slice(i, j);
+const { toMs, groupItemsByDevelopment, pickDisplayItems } =
+  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems };")();
+
+let pass = 0, fail = 0;
+const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
+
+const H = (h) => new Date(Date.UTC(2026, 5, 13, h, 0, 0));     // 시각 헬퍼
+const item = (h, src) => ({ title: `t${h}`, source: src || "S", published_at: h == null ? null : H(h) });
+const dev = (h, text) => ({ text: text || `d${h}`, time: H(h), source_count: 1 });
+
+// --- toMs ---
+test("toMs: Date/number/Timestamp/null", () => {
+  assert.equal(toMs(null), null);
+  assert.equal(toMs(123), 123);
+  assert.equal(toMs(H(3)), H(3).getTime());
+  assert.equal(toMs({ toDate: () => H(4) }), H(4).getTime());
+});
+
+// --- groupItemsByDevelopment ---
+test("모든 비-null item이 정확히 1버킷(보존)", () => {
+  const devs = [dev(2), dev(6), dev(0)];
+  const items = [item(1), item(3), item(7), item(5), item(0)];
+  const g = groupItemsByDevelopment(devs, items);
+  const total = g.reduce((n, x) => n + x.items.length, 0);
+  assert.equal(total, items.length);
+});
+test("그룹은 time DESC, 각 그룹 내부도 published_at DESC", () => {
+  const g = groupItemsByDevelopment([dev(0), dev(6), dev(2)], [item(7), item(3), item(5), item(1)]);
+  const times = g.filter(x => x.dev).map(x => toMs(x.dev.time));
+  assert.deepEqual(times, [...times].sort((a, b) => b - a));   // DESC
+  for (const grp of g) {
+    const ms = grp.items.map(it => toMs(it.published_at));
+    assert.deepEqual(ms, [...ms].sort((a, b) => b - a));
+  }
+});
+test("경계 동률(item.ms == dev.ms) → 그 전개로(>=)", () => {
+  const g = groupItemsByDevelopment([dev(6), dev(2)], [item(2)]);
+  const g2 = g.find(x => toMs(x.dev.time) === H(2).getTime());
+  assert.equal(g2.items.length, 1);                            // 2시는 dev(2)로
+});
+test("모든 전개보다 과거인 item → 가장 이른 전개", () => {
+  const g = groupItemsByDevelopment([dev(6), dev(4)], [item(1)]);
+  const earliest = g[g.length - 1];                            // dev(4)
+  assert.equal(toMs(earliest.dev.time), H(4).getTime());
+  assert.equal(earliest.items.length, 1);
+});
+test("가장 최신 item → 최신 전개", () => {
+  const g = groupItemsByDevelopment([dev(6), dev(2)], [item(9)]);
+  assert.equal(toMs(g[0].dev.time), H(6).getTime());
+  assert.equal(g[0].items.length, 1);
+});
+test("developments 비면 단일 버킷(degrade)", () => {
+  const g = groupItemsByDevelopment([], [item(1), item(3)]);
+  assert.equal(g.length, 1);
+  assert.equal(g[0].dev, null);
+  assert.equal(g[0].items.length, 2);
+});
+test("items 비어도 throw 없이 빈 그룹", () => {
+  const g = groupItemsByDevelopment([dev(2), dev(6)], []);
+  assert.equal(g.length, 2);
+  assert.ok(g.every(x => x.items.length === 0));
+});
+test("null published_at item·null time dev 제외", () => {
+  const g = groupItemsByDevelopment([dev(2), { text: "x", time: null }], [item(3), item(null)]);
+  const total = g.reduce((n, x) => n + x.items.length, 0);
+  assert.equal(total, 1);                                      // null item 빠짐
+  assert.equal(g.length, 1);                                  // null-time dev 빠짐
+});
+
+// --- pickDisplayItems ---
+test("서로 다른 source 우선 ≤2 + moreCount", () => {
+  const items = [item(5, "A"), item(4, "A"), item(3, "B"), item(2, "C")];
+  const { shown, moreCount } = pickDisplayItems(items, 2);
+  assert.equal(shown.length, 2);
+  assert.deepEqual(shown.map(x => x.source), ["A", "B"]);     // A 다음 같은 A 건너뛰고 B
+  assert.equal(moreCount, 2);
+});
+test("source가 1종뿐이면 같은 source로 채움", () => {
+  const items = [item(5, "A"), item(4, "A"), item(3, "A")];
+  const { shown, moreCount } = pickDisplayItems(items, 2);
+  assert.equal(shown.length, 2);
+  assert.equal(moreCount, 1);
+});
+test("항목이 max 이하면 moreCount=0", () => {
+  const { shown, moreCount } = pickDisplayItems([item(1, "A")], 2);
+  assert.equal(shown.length, 1);
+  assert.equal(moreCount, 0);
+});
+
+console.log(`\nstories_logic: ${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);
