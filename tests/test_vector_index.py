@@ -21,6 +21,17 @@ def test_add_member_unknown_story_raises():
         InMemoryVectorIndex().add_member("nope", [1.0])
 
 
+def test_nearest_empty_index_is_none():
+    assert InMemoryVectorIndex().nearest([1.0, 0.0], threshold=0.5) is None
+
+
+def test_nearest_threshold_inclusive_boundary():
+    idx = InMemoryVectorIndex()
+    idx.add_story("s1", [1.0, 0.0])
+    # cosine([1,0],[1,0]) == 1.0, threshold 1.0 → 경계 포함(>=)이라 합류
+    assert idx.nearest([1.0, 0.0], threshold=1.0) == "s1"
+
+
 def test_from_open_stories_seeds_centroids():
     class FakeStore:
         def get_open_stories(self, cutoff):

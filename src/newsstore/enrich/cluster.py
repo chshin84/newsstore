@@ -23,25 +23,5 @@ def centroid(centroid_sum: list[float], count: int) -> list[float]:
         raise ValueError(f"count must be >= 1, got {count}")
     return [x / count for x in centroid_sum]
 
-def best_match(vec: list[float], candidates: list[dict],
-               threshold: float = DEFAULT_THRESHOLD) -> int:
-    """가장 유사한 candidate의 인덱스(코사인 ≥ threshold) 또는 -1(=새 스토리).
-    candidates: [{'centroid': list[float], ...}]. in-memory 캐시 클러스터링용(Firestore 재조회 회피)."""
-    best_i, best_s = -1, -1.0
-    for i, c in enumerate(candidates):
-        s = cosine(vec, c["centroid"])
-        if s > best_s:
-            best_s, best_i = s, i
-    return best_i if best_s >= threshold else -1
-
-
-def assign(vec: list[float], open_stories: list[dict],
-           threshold: float = DEFAULT_THRESHOLD) -> str | None:
-    """가장 유사한 '열린 스토리' id를 반환(코사인 ≥ threshold). 없으면 None(=새 스토리).
-    open_stories: [{'id': str, 'centroid': list[float]}]. centroid 기준이라 전이 연쇄 없음."""
-    best_id, best_sim = None, -1.0
-    for st in open_stories:
-        s = cosine(vec, st["centroid"])
-        if s > best_sim:
-            best_sim, best_id = s, st["id"]
-    return best_id if best_sim >= threshold else None
+# 최근접 스토리 검색은 enrich.vector_index.InMemoryVectorIndex(포트 구현)가 담당.
+# (과거 best_match/assign은 그 포트로 흡수됨)

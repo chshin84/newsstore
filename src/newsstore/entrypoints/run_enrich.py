@@ -22,7 +22,7 @@ MAX_BATCHES = int(os.environ.get("NEWSSTORE_MAX_BATCHES", "1000"))
 def _run_cluster(store, client, taxonomy, *, threshold, noncluster, batch, concurrency) -> dict:
     """Pass 1 — 클러스터 전용(빠름): embed(병렬) + in-memory centroid 캐시. LLM 태깅 없음.
 
-    열린 스토리 centroid를 한 번만 로드해 메모리에서 best_match → Firestore 제곱 재조회 제거.
+    열린 스토리 centroid를 InMemoryVectorIndex로 1회 로드 → 메모리 최근접 검색(Firestore 제곱 재조회 제거).
     """
     now0 = datetime.now(timezone.utc)
     index = InMemoryVectorIndex.from_open_stories(store, now0 - OPEN_WINDOW)   # 1회 구성, 배치 간 공유
