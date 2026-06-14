@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from .classify import classify_kind
-from .cluster import assign
+from .cluster import assign, DEFAULT_THRESHOLD
 from .embedder import embed_items
 from .llm import LLMClient
 from .tagger import tag_items
@@ -22,7 +22,8 @@ def _flat_tags(tg: dict) -> list[str]:
 
 def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
                  batch: int = 10, open_window: timedelta = OPEN_WINDOW,
-                 close_after: timedelta = CLOSE_AFTER, id_factory=None) -> dict:
+                 close_after: timedelta = CLOSE_AFTER,
+                 threshold: float = DEFAULT_THRESHOLD, id_factory=None) -> dict:
     """get_unprocessed 한 배치 처리: classify → (story만) tag+embed → centroid 클러스터 →
     save_enrichment + mark_processed → close_stale. 비파괴(원본 보존, kind로 분류만).
 
@@ -53,7 +54,7 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
         vec = vec_by_id[it.id]
         tg = tags_by_id[it.id]
         entities = _flat_tags(tg)
-        sid = assign(vec, store.get_open_stories(cutoff=now - open_window))
+        sid = assign(vec, store.get_open_stories(cutoff=now - open_window), threshold=threshold)
         if sid is None:
             sid = id_factory()
             store.create_story(sid, title=it.title, vec=vec, member_id=it.id,

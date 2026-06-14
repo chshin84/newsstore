@@ -24,3 +24,14 @@ def test_none_response_raises_llmerror():
     # 실 SDK는 빈 결과에 None 반환 가능 → AttributeError 대신 구조화 에러
     with pytest.raises(LLMError):
         call_with_retry(lambda: None, attempts=1, base_delay=0)
+
+
+def test_no_retry_when_not_transient():
+    # 비일시적 에러(4xx 404/400)는 재시도 낭비 없이 즉시 실패 (advisor-nonfunctional)
+    calls = {"n": 0}
+    def boom():
+        calls["n"] += 1
+        raise ValueError("404 not found")
+    with pytest.raises(LLMError):
+        call_with_retry(boom, attempts=3, base_delay=0, is_transient=lambda e: False)
+    assert calls["n"] == 1

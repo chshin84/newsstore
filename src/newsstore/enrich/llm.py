@@ -17,10 +17,12 @@ class LLMClient(Protocol):
 
 
 def call_with_retry(call_fn: Callable[[], Any], *, attempts: int = 3,
-                    base_delay: float = 0.5) -> Any:
+                    base_delay: float = 0.5,
+                    is_transient: Callable[[BaseException], bool] | None = None) -> Any:
     """지수 백오프 retry + None 가드. 모두 실패하면 LLMError.
 
     (비기능: advisor-nonfunctional — retry/None가드/구조화에러. timeout은 call_fn 내부 SDK에서.)
+    is_transient(e)가 False면 그 에러는 재시도하지 않고 즉시 실패(4xx 404/400 등 비일시적).
     """
     last: BaseException | None = None
     for i in range(attempts):
@@ -28,6 +30,9 @@ def call_with_retry(call_fn: Callable[[], Any], *, attempts: int = 3,
             r = call_fn()
         except Exception as e:               # transient: timeout/ratelimit/5xx
             last = e
+            if is_transient is not None and not is_transient(e):
+                log.warning("LLM call non-transient error, not retrying: %s", e)
+                break
             log.warning("LLM call failed (attempt %d/%d): %s", i + 1, attempts, e)
         else:
             if r is not None:
@@ -47,12 +52,24 @@ class GeminiClient:
     """
     DEFAULT_TIMEOUT = 30.0
 
-    def __init__(self, api_key: str, *, model: str = "gemini-2.0-flash",
-                 embed_model: str = "text-multilingual-embedding-002"):
+    # Gemini Developer API(GEMINI_API_KEY 경로) 모델명 — 라이브 models.list로 검증한 값.
+    # gemini-embedding-001은 기본 3072차원 → output_dimensionality=embed_dim(768)로 받음.
+    # (Vertex의 text-embedding-004/text-multilingual-embedding은 ADC 경로라 이 키에 없음)
+    def __init__(self, api_key: str, *, model: str = "gemini-2.5-flash",
+                 embed_model: str = "gemini-embedding-001", embed_dim: int = 768):
         from google import genai            # lazy
         self._client = genai.Client(api_key=api_key)
         self._model = model
         self._embed_model = embed_model
+        self._embed_dim = embed_dim
+
+    @staticmethod
+    def _is_transient(e: BaseException) -> bool:
+        """4xx(404/400 등)는 비일시적 → 재시도 X. 429/타임아웃/5xx/네트워크는 재시도."""
+        code = getattr(e, "code", None) or getattr(e, "status_code", None)
+        if isinstance(code, int) and 400 <= code < 500:
+            return code in (408, 429)
+        return True
 
     def generate_json(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
         from google.genai import types
@@ -65,16 +82,20 @@ class GeminiClient:
                     http_options=types.HttpOptions(timeout=int(timeout * 1000))))
             return getattr(r, "text", None)
 
-        raw = call_with_retry(_call)
+        raw = call_with_retry(_call, is_transient=self._is_transient)
         try:
             return json.loads(raw)
         except (TypeError, ValueError) as e:
             raise LLMError(f"non-JSON response: {e}") from e
 
     def embed(self, text: str, *, timeout: float = DEFAULT_TIMEOUT) -> list[float]:
+        from google.genai import types
+
         def _call():
-            r = self._client.models.embed_content(model=self._embed_model, contents=text)
+            r = self._client.models.embed_content(
+                model=self._embed_model, contents=text,
+                config=types.EmbedContentConfig(output_dimensionality=self._embed_dim))
             embs = getattr(r, "embeddings", None)
             return embs[0].values if embs else None
 
-        return list(call_with_retry(_call))
+        return list(call_with_retry(_call, is_transient=self._is_transient))

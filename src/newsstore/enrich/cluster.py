@@ -17,7 +17,11 @@ def add_vectors(a: list[float], b: list[float]) -> list[float]:
         raise ValueError(f"vector dim mismatch: {len(a)} vs {len(b)}")
     return [x + y for x, y in zip(a, b)]
 
-DEFAULT_THRESHOLD = 0.83
+# 클러스터 합류 코사인 임계값. 0.83은 스파이크의 Vertex 임베딩 기준(폐기) — 프로덕션
+# 모델 gemini-embedding-001(768)은 분포가 달라 라이브 측정으로 재캘리브레이션:
+#   같은 스토리 0.68~0.80 / 다른 스토리 0.47~0.56 → 경계 ~0.65 (소표본, 프로덕션 데이터로 정밀화 요).
+# env NEWSSTORE_CLUSTER_THRESHOLD로 오버라이드(코드 변경 없이 튜닝).
+DEFAULT_THRESHOLD = 0.65
 
 def centroid(centroid_sum: list[float], count: int) -> list[float]:
     """중심 = 누적합 / 개수. count는 ≥1 (스토리는 최소 1 멤버)."""

@@ -4,6 +4,7 @@ import logging
 import os
 from datetime import datetime, timezone
 
+from .enrich.cluster import DEFAULT_THRESHOLD
 from .enrich.llm import GeminiClient, LLMError
 from .enrich.processor import process_once
 from .enrich.taxonomy import load_taxonomy
@@ -37,14 +38,21 @@ def main(argv=None) -> int:
     if backend == "sqlite":
         os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
     taxonomy = load_taxonomy(args.taxonomy)
-    client = GeminiClient(api_key)
+    kw = {}
+    if os.environ.get("GEMINI_MODEL"):
+        kw["model"] = os.environ["GEMINI_MODEL"]
+    if os.environ.get("GEMINI_EMBED_MODEL"):
+        kw["embed_model"] = os.environ["GEMINI_EMBED_MODEL"]
+    client = GeminiClient(api_key, **kw)
 
+    threshold = float(os.environ.get("NEWSSTORE_CLUSTER_THRESHOLD", DEFAULT_THRESHOLD))
     totals = {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
     with make_store(backend, db_path=args.db) as store:
         for _ in range(MAX_BATCHES or 1_000_000):
             now = datetime.now(timezone.utc)
             try:
-                stats = process_once(store, client, taxonomy, now=now, batch=args.batch)
+                stats = process_once(store, client, taxonomy, now=now,
+                                     batch=args.batch, threshold=threshold)
             except LLMError as e:          # 구조화 에러 → 런 실패로 표면화
                 log.error("enrichment aborted: %s", e)
                 return 1
