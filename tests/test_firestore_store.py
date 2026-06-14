@@ -54,3 +54,26 @@ def test_upsert_preserves_processed_on_resee():
     assert s.mark_processed(["a"], processed_at=NOW) == 1
     assert s.upsert_items([_item("a")]) == 0            # re-seen, not re-written
     assert s.get_unprocessed() == []                    # still processed
+
+
+# 실 google client는 빈 문서에 exists=True여도 to_dict()=None을 준다 (MockFirestore는 못 잡는 gotcha).
+class _NoneSnap:
+    exists = True
+    def to_dict(self):
+        return None
+class _NoneRef:
+    def get(self):
+        return _NoneSnap()
+    def set(self, d):
+        raise AssertionError("빈 문서엔 write하면 안 됨")
+class _NoneCol:
+    def document(self, _id):
+        return _NoneRef()
+class _NoneDB:
+    def collection(self, _name):
+        return _NoneCol()
+
+def test_mark_processed_guards_none_document():
+    # to_dict()=None인 빈 문서를 만나도 AttributeError로 터지지 않고 조용히 건너뛴다 (or {} 가드).
+    s = FirestoreStore(_NoneDB())
+    assert s.mark_processed(["a"]) == 0
