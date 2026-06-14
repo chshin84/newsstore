@@ -55,6 +55,14 @@
 - **firestore `mark_processed` to_dict() None 가드 재발** — 같은 파일 6곳은 `or {}` 쓰는데 `mark_processed`(line 128)만 누락 → 실 client 빈 문서(exists=True, to_dict()=None)에서 AttributeError(MockFirestore는 못 잡음, 핵심 gotcha 재발). → `to_dict() or {}`로 일관화. 실 client 조건을 재현하는 최소 fake(exists=True·to_dict→None)로 회귀 테스트.
 - **SPAM_SIGNALS↔web JUNK 크로스언어 SSOT 드리프트** — backend `classify.SPAM_SIGNALS`와 `web/index.html` JUNK 25키워드가 각각 하드코딩(한쪽만 고치면 kind=spam과 뷰 isJunk 드리프트). 근본해소(뷰→`kind` 쿼리)는 Plan 3/4 잔여라, 최소 안전망으로 **드리프트 가드 테스트**(`tests/test_spam_signals_drift.py`: index.html JUNK 파싱 → set 동등성 fail-loud) 추가. probe 주입→FAIL로 가드 실효성 검증. (테스트 72→79)
 
+## Step-2 라이브 통합 (2026-06-14, 실 Gemini 스모크가 잡은 것)
+> 측정 먼저(원칙7)·검증 후 주장(원칙5)의 사례 — 유닛테스트(fake)는 다 통과했지만 라이브가 4개 버그를 드러냄.
+- **모델명은 라이브 `models.list`로 확정** — spec의 `gemini-2.0-flash`는 API에서 "no longer available"(404), `text-embedding-004`/`text-multilingual-embedding`은 이 **Developer API 키(GEMINI_API_KEY)에 없음**(그건 Vertex/ADC 경로). 실재: gen=`gemini-2.5-flash*`, embed=`gemini-embedding-001`만. → 추측 말고 `client.models.list()`로 확인 후 핀.
+- **gemini-embedding-001은 기본 3072차원** — 768로 받으려면 `EmbedContentConfig(output_dimensionality=768)` 명시. 안 하면 dim 가드(`embedder.EMBED_DIM=768`)가 fail-loud로 터짐(가드가 제 역할).
+- **retry는 4xx에 하면 낭비** — `call_with_retry`가 404(비일시적)에 3회 재시도. → `is_transient` 술어로 4xx(404/400)는 즉시 실패, 408/429/5xx/네트워크만 재시도(advisor-nonfunctional).
+- **클러스터 임계값은 임베딩 모델별로 재캘리브레이션** — 0.83은 *스파이크의 Vertex 모델* 기준. gemini-embedding-001(768) 실측: **같은 스토리 0.68~0.80 / 다른 스토리 0.47~0.56** → 0.83이면 아무것도 안 묶임. 0.65로 조정(소표본, 프로덕션 데이터로 정밀화 요), `NEWSSTORE_CLUSTER_THRESHOLD` env로 튜닝. **교훈: 임계값은 모델 종속 — 임베딩 모델 바꾸면 반드시 재측정.**
+- **태깅 통제어휘는 프롬프트 주입 시 잘 지켜짐** — `build_prompt`가 "entities ONLY from: …"로 어휘를 주입하면 모델이 캐노니컬 토큰(`Fed`,`rates`,`inflation`)을 그대로 반환 → `validate_tags` 결정론 필터 통과. (어휘 미주입 시엔 freeform "Federal Reserve" 반환 → 다 걸러짐. 즉 프롬프트 SSOT 주입이 핵심.)
+
 ## 설계 — 임베딩 클러스터링 (스파이크 검증)
 - **union-find 과병합** — naive 단일임계 쌍연결이 *전이 연쇄*로 무관한 한국어 금융기사 9건을 한 덩어리로. → **centroid 온라인 + 임계 0.83**(중심과 비교 → 사슬 차단). 실데이터 검증: 묶인 건 전부 진짜 스토리, 30/40 단독, 30건 ~12초.
 
