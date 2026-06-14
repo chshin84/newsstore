@@ -4,7 +4,7 @@
 
 - **라이브 사이트:** https://daily-recap-498506.web.app
 - **GitHub:** https://github.com/chshin84/newsstore (public)
-- LLM 없음(그건 Step-2). 이 repo는 수집(Step-1) + 저장 + 뷰어까지.
+- Step-1(수집)·저장·뷰어 라이브. Step-2 인리치먼트는 진행 중 — enrich 모듈(휴리스틱 분류/클러스터 순수로직)·Store 확장 완료, LLM(Gemini) 태깅·임베딩 런타임 연결은 다음(Plan 3/4). 자세한 진행은 아래 §진행 상황.
 
 ## 아키텍처
 
@@ -65,7 +65,11 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pyt
 ## 진행 상황
 - ✅ **Step-1 수집기**: 완료·배포·라이브 (Cloud Run Job + Scheduler */5 → Firestore).
 - ✅ **공개 사이트**: 라이브 (소스 필터·중복제거·스팸필터·소스별 색·호버 본문).
-- ⬜ **Step-2 (LLM 태깅)**: 다음. `items WHERE processed=false`를 Haiku/Gemini로 태깅 → 사이트 태그 드롭다운 자동 활성화. (`processed`/`get_unprocessed`/`mark_processed` 계약 + 인덱스 준비됨)
+- 🚧 **Step-2 (LLM 태깅/스토리)**: 진행 중.
+  - ✅ Plan 1 — `src/newsstore/enrich/`(taxonomy·classify·cluster, 휴리스틱 분류 + centroid 클러스터 순수로직).
+  - ✅ Plan 2 — Store 확장: `save_enrichment`(kind/tags/embedding/story_id) + `stories`(centroid sum/count·get_open·close_stale), sqlite/firestore 양쪽.
+  - ⬜ Plan 3 — Gemini Flash 태깅+리뷰어 + 임베딩(Tier3) 런타임 연결.
+  - ⬜ Plan 4 — Processor Job(#2)+Scheduler 배포. 그러면 사이트 태그 드롭다운 자동 활성.
 
 ## 문서
 - 로드맵(Step 1~7): `docs/roadmap.md`

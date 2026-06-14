@@ -49,6 +49,11 @@
 - **Reuters GN 중복** — 새 `reuters_top`이 기존 `gn_macro_reuters`(둘 다 site:reuters.com)와 겹침 + 헤드라인뿐. → `gn_macro_reuters` 제거, Reuters 단독화.
 - **본문 스크래핑 가능성** — 전 소스 curl 테스트 → Bloomberg 403·CoinDesk/CT/Investing JS렌더·GN 리다이렉트로 fragile. → **스크래핑 안 함, 피드 확충이 정답**(결정).
 
+## Step-2 하드닝 (2026-06-14, ultracode 감사 후 선처리)
+- **cosine/centroid_sum 무음 절단** — `cluster.cosine`이 `zip(a,b)`로 dot은 min(len)만 합산하되 노름은 전체로 계산 → 차원 다르면 가짜 유사도를 조용히 반환(fail-loud 위반). 같은 패턴이 두 스토어 `append_to_story`의 `centroid_sum += vec`에도 존재. → `cosine`에 `len` 검증 ValueError + `add_vectors(a,b)` SSOT 헬퍼 신설(cluster.py), 두 스토어가 도출. 회귀 테스트(차원 불일치 시 ValueError) 추가. (unsolved §14② 해소)
+- **firestore `mark_processed` to_dict() None 가드 재발** — 같은 파일 6곳은 `or {}` 쓰는데 `mark_processed`(line 128)만 누락 → 실 client 빈 문서(exists=True, to_dict()=None)에서 AttributeError(MockFirestore는 못 잡음, 핵심 gotcha 재발). → `to_dict() or {}`로 일관화. 실 client 조건을 재현하는 최소 fake(exists=True·to_dict→None)로 회귀 테스트.
+- **SPAM_SIGNALS↔web JUNK 크로스언어 SSOT 드리프트** — backend `classify.SPAM_SIGNALS`와 `web/index.html` JUNK 25키워드가 각각 하드코딩(한쪽만 고치면 kind=spam과 뷰 isJunk 드리프트). 근본해소(뷰→`kind` 쿼리)는 Plan 3/4 잔여라, 최소 안전망으로 **드리프트 가드 테스트**(`tests/test_spam_signals_drift.py`: index.html JUNK 파싱 → set 동등성 fail-loud) 추가. probe 주입→FAIL로 가드 실효성 검증. (테스트 72→79)
+
 ## 설계 — 임베딩 클러스터링 (스파이크 검증)
 - **union-find 과병합** — naive 단일임계 쌍연결이 *전이 연쇄*로 무관한 한국어 금융기사 9건을 한 덩어리로. → **centroid 온라인 + 임계 0.83**(중심과 비교 → 사슬 차단). 실데이터 검증: 묶인 건 전부 진짜 스토리, 30/40 단독, 30건 ~12초.
 

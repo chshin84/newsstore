@@ -5,7 +5,7 @@
 | Step | 내용 | 상태 |
 |------|------|------|
 | **1. Raw RSS 수집·저장** | 무료 RSS 5분마다 수집 → Firestore 중복제거 저장 (LLM 없음) | ✅ 완료·라이브 |
-| **2. LLM 태깅** | `items WHERE processed=false`를 **Haiku/Gemini Flash Lite**로 태깅 → `mark_processed`. 아이템별 독립이라 대량 pipeline 가능 | ⬜ **다음** (계약·인덱스 준비됨) |
+| **2. LLM 태깅** | `items WHERE processed=false`를 **Gemini Flash**로 태깅 → `mark_processed`. 아이템별 독립이라 대량 pipeline 가능 | 🚧 **진행 중** — Plan 1(enrich 순수로직)·Plan 2(Store 확장) ✅ / Plan 3(Gemini 태깅·임베딩)·Plan 4(Processor 배포) ⬜. 상세는 `docs/unsolved_problems.md` |
 | **3. 웹 게재** | 태그 드롭다운 + 최근 N개 뉴스 | ✅ 사이트 라이브. **소스 필터는 동작**, 태그 드롭다운은 Step-2가 태그 채우면 자동 활성 |
 | **4. 아키타입 시장 뷰** | 아키타입 정의 — 예 `(장기·롱·현금50%)`, `(단기·숏·현금50%)` + 손실 상황. 각 아키타입이 같은 태그뉴스를 보고 **시장 뷰 1~100** 산출 → **lowest/highest/median** 집계 | ⬜ (원래 이번 주 목표) |
 | **5. 기대/우려 추출** | 뉴스로부터 각 아키타입의 기대·걱정·염려 파악 | ⬜ |
