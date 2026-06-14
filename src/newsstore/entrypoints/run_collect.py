@@ -18,7 +18,6 @@ FAIL_RATE_ALERT = 0.5
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore collector (one pass)")
     ap.add_argument("--feeds", default="config/feeds.yaml")
-    ap.add_argument("--db", default=os.environ.get("NEWSSTORE_DB", "data/newsstore.db"))
     ap.add_argument("--force", action="store_true", help="ignore poll intervals (fetch all)")
     args = ap.parse_args(argv)
 
@@ -27,12 +26,9 @@ def main(argv=None) -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    backend = os.environ.get("NEWSSTORE_BACKEND", "sqlite").lower()
-    if backend == "sqlite":
-        os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
     feeds = load_feeds(args.feeds)
     client = make_client()
-    with make_store(backend, db_path=args.db) as store:
+    with make_store() as store:                  # Firestore(에뮬레이터 or 실)
         # SSOT: 사이트 소스 드롭다운 목록을 feeds.yaml에서 도출해 기록 (하드코딩 X)
         store.set_meta("sources", {"sources": distinct_sources(feeds)})
         try:

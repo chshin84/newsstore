@@ -1,16 +1,35 @@
 # 로컬 개발용 (Docker-only). compose가 `.` 경로를 자체 해석 → Git Bash 마운트 폴백 회피.
 #   docker compose build
-#   docker compose run --rm test        # 테스트
+#   docker compose run --rm test        # 테스트 (Firestore 에뮬레이터에 붙어서 실행)
 #   docker compose run --rm collect     # 1회 수집 (.env 필요: cp .env.example .env)
 services:
+  firestore-emulator:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:emulators
+    command: gcloud emulators firestore start --host-port=0.0.0.0:8080 --project=test
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('localhost',8080),2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   test:
     build:
       context: .
       dockerfile: infra/Dockerfile
-    image: newsstore
+      args:                       # dev(pytest)+gcp(google-cloud-firestore) — 에뮬레이터 테스트용
+        INSTALL_DEV: "true"
+        INSTALL_GCP: "true"
+    image: newsstore-test
+    depends_on:
+      firestore-emulator:
+        condition: service_healthy
+    environment:
+      FIRESTORE_EMULATOR_HOST: "firestore-emulator:8080"
+      GOOGLE_CLOUD_PROJECT: "test"
     volumes:
       - ".:/app"
     command: pytest -q
+
   collect:
     image: newsstore
     volumes:

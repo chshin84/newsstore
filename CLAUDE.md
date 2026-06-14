@@ -12,9 +12,8 @@
 
 ## 환경 (중요)
 - 로컬 Python 없음 → **Docker로만** 실행/테스트.
-  테스트: `MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pytest -q`
-  (Git Bash `$(pwd)`는 마운트가 stale 이미지로 폴백돼 테스트 수가 틀리게 나옴 → 위 형태 사용)
-- 설정은 루트 **`.env`** (`cp .env.example .env`): `APP_ENV` home|office · `NEWSSTORE_BACKEND` sqlite|firestore · `GOOGLE_CLOUD_PROJECT` · `GCP_REGION`.
+  테스트: **`MSYS_NO_PATHCONV=1 docker compose run --rm test`** (Firestore 에뮬레이터 자동 기동 후 pytest). store 테스트는 에뮬레이터에 붙음 — `mock-firestore`·sqlite 제거됨(store 단일=Firestore).
+- 설정은 루트 **`.env`** (`cp .env.example .env`): `APP_ENV` home|office · `GOOGLE_CLOUD_PROJECT` · `GCP_REGION`. **저장소=Firestore 단일**(로컬/테스트는 `FIRESTORE_EMULATOR_HOST`로 에뮬레이터; sqlite 백엔드 제거).
 - **비밀 구분**: `GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까

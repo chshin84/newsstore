@@ -22,36 +22,38 @@ def _patch_client(monkeypatch, handler):
 
 def test_main_returns_zero_on_success(tmp_path, monkeypatch):
     _patch_client(monkeypatch, lambda r: httpx.Response(200, content=RSS))
-    rc = run.main(["--feeds", str(_write_feeds(tmp_path)),
-                   "--db", str(tmp_path / "db.sqlite"), "--force"])
+    monkeypatch.setattr(run, "make_store", lambda *a, **k: _FakeStore())
+    rc = run.main(["--feeds", str(_write_feeds(tmp_path)), "--force"])
     assert rc == 0
 
 def test_main_returns_nonzero_when_all_feeds_fail(tmp_path, monkeypatch):
     _patch_client(monkeypatch, lambda r: httpx.Response(500))
-    rc = run.main(["--feeds", str(_write_feeds(tmp_path)),
-                   "--db", str(tmp_path / "db.sqlite"), "--force"])
+    monkeypatch.setattr(run, "make_store", lambda *a, **k: _FakeStore())
+    rc = run.main(["--feeds", str(_write_feeds(tmp_path)), "--force"])
     assert rc == 1   # systemic outage must not look like success to the scheduler
 
 
-def test_run_uses_factory_with_env_backend(monkeypatch, tmp_path):
-    captured = {}
+class _FakeStore:
+    def __enter__(self): return self
+    def __exit__(self, *exc): pass
+    def count(self): return 0          # run.main logs store.count()
+    def set_meta(self, k, v): pass     # run.main writes meta sources
+    def upsert_items(self, items): return len(items)
+    def get_feed_state(self, fid): return {}
+    def set_feed_state(self, fid, **kw): pass
 
-    class FakeStore:
-        def __enter__(self): return self
-        def __exit__(self, *exc): pass
-        def count(self): return 0          # run.main logs store.count()
-        def set_meta(self, k, v): pass     # run.main writes meta sources
 
-    def fake_make_store(backend, **kw):
-        captured["backend"] = backend
-        return FakeStore()
+def test_run_uses_injected_store(monkeypatch):
+    used = {}
 
-    monkeypatch.setenv("NEWSSTORE_BACKEND", "sqlite")
+    def fake_make_store(*a, **k):
+        used["called"] = True
+        return _FakeStore()
+
     monkeypatch.setattr(run, "make_store", fake_make_store)
     monkeypatch.setattr(run, "make_client", lambda: types.SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(run, "load_feeds", lambda p: [])
     monkeypatch.setattr(run, "collect_once", lambda *a, **k: {})
 
-    rc = run.main(["--db", str(tmp_path / "db.sqlite")])
-    assert rc == 0
-    assert captured["backend"] == "sqlite"
+    rc = run.main([])
+    assert rc == 0 and used["called"] is True

@@ -44,7 +44,6 @@ def _run_cluster(store, client, taxonomy, *, threshold, noncluster, batch, concu
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore Step-2 enrichment processor")
-    ap.add_argument("--db", default=os.environ.get("NEWSSTORE_DB", "data/newsstore.db"))
     ap.add_argument("--taxonomy", default="config/taxonomy.yaml")
     ap.add_argument("--mode", choices=["cluster", "tag"], default="cluster",
                     help="cluster=embed+cluster(빠름) / tag=스토리 단위 태깅(Pass 2)")
@@ -61,9 +60,6 @@ def main(argv=None) -> int:
         log.error("GEMINI_API_KEY not set — required for the enrichment processor")
         return 2
 
-    backend = os.environ.get("NEWSSTORE_BACKEND", "sqlite").lower()
-    if backend == "sqlite":
-        os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
     taxonomy = load_taxonomy(args.taxonomy)
     kw = {}
     if os.environ.get("GEMINI_MODEL"):
@@ -77,7 +73,7 @@ def main(argv=None) -> int:
                   if os.environ.get("NEWSSTORE_NONCLUSTER_SOURCES") else NONCLUSTER_SOURCES)
     concurrency = int(os.environ.get("NEWSSTORE_EMBED_CONCURRENCY", EMBED_CONCURRENCY))
 
-    with make_store(backend, db_path=args.db) as store:
+    with make_store() as store:                  # Firestore(에뮬레이터 or 실)
         try:
             if args.mode == "cluster":
                 totals = _run_cluster(store, client, taxonomy, threshold=threshold,
