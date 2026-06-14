@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime, timezone, timedelta
 from mockfirestore import MockFirestore
 from newsstore.store.sqlite_store import SqliteStore
@@ -37,3 +38,15 @@ def test_sqlite_close_stale(tmp_path):
 
 def test_firestore_close_stale():
     _check_close(_fs())
+
+def _check_append_dim_mismatch_raises(s):
+    # append_to_story가 다른 차원 vec을 받으면 무음 절단 말고 터뜨린다 (원칙3)
+    s.create_story("st1", title="t", vec=[1.0, 2.0], member_id="a", entities=[], now=NOW)
+    with pytest.raises(ValueError):
+        s.append_to_story("st1", vec=[1.0], member_id="b", entities=[], now=NOW)
+
+def test_sqlite_append_dim_mismatch_raises(tmp_path):
+    _check_append_dim_mismatch_raises(_sql(tmp_path))
+
+def test_firestore_append_dim_mismatch_raises():
+    _check_append_dim_mismatch_raises(_fs())

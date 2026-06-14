@@ -3,6 +3,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from ..models import RawItem
+from ..enrich.cluster import add_vectors
 
 SCHEMA_VERSION = 1
 
@@ -166,7 +167,7 @@ class SqliteStore:
         row = self.conn.execute(
             "SELECT centroid_sum,count,member_ids,entities FROM stories WHERE id=?",
             (story_id,)).fetchone()
-        csum = [a + b for a, b in zip(json.loads(row["centroid_sum"]), vec)]
+        csum = add_vectors(json.loads(row["centroid_sum"]), list(vec))
         members = json.loads(row["member_ids"]) + [member_id]
         ents = list(dict.fromkeys(json.loads(row["entities"]) + list(entities)))
         self.conn.execute(

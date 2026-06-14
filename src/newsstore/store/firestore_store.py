@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from ..models import RawItem
+from ..enrich.cluster import add_vectors
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
@@ -59,7 +60,7 @@ class FirestoreStore:
     def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
         ref = self.db.collection("stories").document(story_id)
         d = ref.get().to_dict() or {}
-        csum = [a + b for a, b in zip(d.get("centroid_sum", []), vec)]
+        csum = add_vectors(list(d.get("centroid_sum", [])), list(vec))
         members = list(d.get("member_ids", [])) + [member_id]
         ents = list(dict.fromkeys(list(d.get("entities", [])) + list(entities)))
         d.update({"centroid_sum": csum, "count": d.get("count", 0) + 1,
@@ -124,7 +125,7 @@ class FirestoreStore:
             ref = col.document(_id)
             snap = ref.get()
             if snap.exists:
-                d = snap.to_dict()
+                d = snap.to_dict() or {}
                 if d.get("processed") is False:
                     d["processed"] = True
                     d["processed_at"] = ts

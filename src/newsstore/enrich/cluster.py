@@ -2,11 +2,20 @@ from __future__ import annotations
 import math
 
 def cosine(a: list[float], b: list[float]) -> float:
-    """코사인 유사도. 영벡터면 0.0 (0division 회피)."""
+    """코사인 유사도. 영벡터면 0.0 (0division 회피).
+    차원이 다르면 ValueError (zip 무음 절단 방지 — fail-loud, 원칙3)."""
+    if len(a) != len(b):
+        raise ValueError(f"cosine dim mismatch: {len(a)} vs {len(b)}")
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))
     return dot / (na * nb) if na and nb else 0.0
+
+def add_vectors(a: list[float], b: list[float]) -> list[float]:
+    """원소별 합 a+b. 차원이 다르면 ValueError (centroid_sum 누적의 무음 절단 방지 — 원칙3)."""
+    if len(a) != len(b):
+        raise ValueError(f"vector dim mismatch: {len(a)} vs {len(b)}")
+    return [x + y for x, y in zip(a, b)]
 
 DEFAULT_THRESHOLD = 0.83
 
