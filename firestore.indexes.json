@@ -15,6 +15,22 @@
         { "fieldPath": "processed", "order": "ASCENDING" },
         { "fieldPath": "fetched_at", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "story_id", "order": "ASCENDING" },
+        { "fieldPath": "published_at", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "stories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "last_seen", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

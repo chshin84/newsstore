@@ -16,6 +16,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Step-2 스토리(내러티브 클러스터) — 사이트 타임라인 UI용 공개 읽기, 쓰기 금지
+    // (Processor Job은 Admin SDK라 규칙 우회해 기록)
+    match /stories/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // 내부 상태(조건부 GET 등)는 비공개
     match /feed_state/{id} {
       allow read, write: if false;
