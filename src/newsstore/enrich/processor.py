@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from .classify import classify_kind
 from .cluster import assign, DEFAULT_THRESHOLD
-from .embedder import embed_items
+from .embedder import embed_items, embed_text
 from .llm import LLMClient
 from .tagger import tag_items
 
@@ -13,6 +13,7 @@ log = logging.getLogger("newsstore.enrich.processor")
 
 OPEN_WINDOW = timedelta(hours=48)     # 비교 대상 '열린 스토리' 시간창 (spec §7)
 CLOSE_AFTER = timedelta(hours=24)     # 무활동 시 close
+MIN_EMBED_CHARS = 40                  # 이보다 얇으면 임베딩/클러스터 제외(노이즈 클러스터 방지; 실데이터 측정)
 
 
 def _flat_tags(tg: dict) -> list[str]:
@@ -38,21 +39,26 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
     kinds = {it.id: classify_kind(it.title, it.body or "") for it in items}
     story_items = [it for it in items if kinds[it.id] == "story"]
 
-    # 2. 태깅 + 임베딩 (kind=story만)
+    # 2. 태깅(story 전부) + 임베딩(텍스트 충분한 것만 — 얇은 건 노이즈 클러스터 유발)
     tags_by_id: dict[str, dict] = {}
     vec_by_id: dict[str, list[float]] = {}
     if story_items:
         tags = tag_items(story_items, client, taxonomy, batch=batch)
-        vecs = embed_items(story_items, client)
-        for it, tg, vc in zip(story_items, tags, vecs):
+        for it, tg in zip(story_items, tags):
             tags_by_id[it.id] = tg
+        embeddable = [it for it in story_items if len(embed_text(it)) >= MIN_EMBED_CHARS]
+        for it, vc in zip(embeddable, embed_items(embeddable, client)):
             vec_by_id[it.id] = vc
 
     created = joined = 0
     # 3. centroid 클러스터 (열린 스토리 매 항목 재조회 → 같은 배치 내 합류 가능)
     for it in story_items:
-        vec = vec_by_id[it.id]
         tg = tags_by_id[it.id]
+        vec = vec_by_id.get(it.id)
+        if vec is None:                       # 얇은 아이템: 태그만, 클러스터 제외(standalone)
+            store.save_enrichment(it.id, kind="story", tags=_flat_tags(tg),
+                                  embedding=None, story_id=None)
+            continue
         entities = _flat_tags(tg)
         sid = assign(vec, store.get_open_stories(cutoff=now - open_window), threshold=threshold)
         if sid is None:

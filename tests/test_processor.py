@@ -8,7 +8,7 @@ NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
 TAX = {"entities": ["Fed"], "topics": ["rates"]}
 
 
-def _item(i, title, body=""):
+def _item(i, title, body="default substantive article body, enough chars to embed"):
     return RawItem(id=i, feed_id="f", source="S", url=f"https://e/{i}",
                    title=title, body=body, fetched_at=NOW)
 
@@ -90,3 +90,17 @@ def test_empty_queue_is_noop(tmp_path):
     s = _store(tmp_path)
     stats = process_once(s, _FakeClient({}), TAX, now=NOW)
     assert stats["processed"] == 0
+
+
+def test_thin_story_item_not_embedded_or_clustered(tmp_path):
+    # 텍스트가 너무 얇은 story 아이템은 임베딩/클러스터에서 제외(노이즈 클러스터 방지).
+    # 여전히 kind=story·processed지만 embedding/story_id 없음(=standalone).
+    s = _store(tmp_path)
+    s.upsert_items([_item("a", "Fed raises rates sharply today"), _item("t", "Hi", body="")])
+    process_once(s, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW)
+    rows = {r["id"]: r for r in s.conn.execute(
+        "SELECT id,kind,embedding,story_id,processed FROM raw_items")}
+    assert rows["a"]["kind"] == "story" and rows["a"]["embedding"] is not None
+    assert rows["t"]["kind"] == "story"
+    assert rows["t"]["embedding"] is None and rows["t"]["story_id"] is None
+    assert rows["t"]["processed"] == 1
