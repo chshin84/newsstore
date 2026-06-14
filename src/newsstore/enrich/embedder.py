@@ -1,9 +1,11 @@
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor
 
 from .llm import LLMClient
 
 EMBED_DIM = 768
 BODY_CAP = 500
+EMBED_CONCURRENCY = 50      # 병렬 임베딩 동시 호출 수 (백필 가속)
 
 
 def embed_text(item) -> str:
@@ -11,12 +13,18 @@ def embed_text(item) -> str:
     return f"{item.title} {(item.body or '')[:BODY_CAP]}".strip()
 
 
-def embed_items(items: list, client: LLMClient) -> list[list[float]]:
-    """기사당 1회 임베딩. 차원 불일치는 fail-loud(원칙3 — cluster.cosine/add_vectors와 정합)."""
-    out: list[list[float]] = []
-    for it in items:
+def embed_items(items: list, client: LLMClient,
+                concurrency: int = EMBED_CONCURRENCY) -> list[list[float]]:
+    """기사당 1회 임베딩, 병렬(순서 보존). 차원 불일치는 fail-loud(원칙3)."""
+    if not items:
+        return []
+
+    def _one(it):
         vec = client.embed(embed_text(it), timeout=30.0)
         if len(vec) != EMBED_DIM:
             raise ValueError(f"embedding dim {len(vec)} != {EMBED_DIM}")
-        out.append(vec)
-    return out
+        return vec
+
+    workers = max(1, min(concurrency, len(items)))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        return list(ex.map(_one, items))   # map은 순서 보존

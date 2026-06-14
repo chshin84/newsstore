@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
-from ..models import RawItem
+from ..contracts.models import RawItem
 
 class Store(Protocol):
     def upsert_items(self, items: list[RawItem]) -> int:

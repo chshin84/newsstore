@@ -4,10 +4,12 @@ import uuid
 from datetime import datetime, timedelta
 
 from .classify import classify_kind
-from .cluster import assign, DEFAULT_THRESHOLD
-from .embedder import embed_items, embed_text
+from .cluster import assign, best_match, DEFAULT_THRESHOLD
+from .embedder import embed_items, embed_text, EMBED_CONCURRENCY
 from .llm import LLMClient
 from .tagger import tag_items
+
+_EMPTY_TAGS = {"tickers": [], "entities": [], "topics": []}
 
 log = logging.getLogger("newsstore.enrich.processor")
 
@@ -27,69 +29,93 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
                  batch: int = 10, open_window: timedelta = OPEN_WINDOW,
                  close_after: timedelta = CLOSE_AFTER,
                  threshold: float = DEFAULT_THRESHOLD,
-                 noncluster_sources=NONCLUSTER_SOURCES, id_factory=None) -> dict:
-    """get_unprocessed 한 배치 처리: classify → (story만) tag+embed → centroid 클러스터 →
-    save_enrichment + mark_processed → close_stale. 비파괴(원본 보존, kind로 분류만).
+                 noncluster_sources=NONCLUSTER_SOURCES,
+                 tag: bool = True, candidates: list | None = None,
+                 close: bool = True,
+                 embed_concurrency: int = EMBED_CONCURRENCY, id_factory=None) -> dict:
+    """get_unprocessed 한 배치: classify → (story만) embed(병렬) → centroid 클러스터 →
+    save_enrichment + mark_processed → close_stale. 비파괴.
 
-    벡터/LLM은 주입 client. story_id는 Processor 책임(uuid4) — Store 계약 아님.
+    - tag=False: LLM 태깅 생략(클러스터 전용 패스, 빠름). 태깅은 클러스터 후 스토리 단위로 별도(tag_stories).
+    - candidates: in-memory centroid 캐시 [{'id','centroid','count'}]. 주면 Firestore 재조회 없이
+      메모리에서 best_match → create/append 시 캐시도 갱신(제곱 I/O 제거). None이면 매 항목 store 조회(구버전).
     """
     id_factory = id_factory or (lambda: uuid.uuid4().hex)
     items = store.get_unprocessed(limit=batch)
     if not items:
         return {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
 
-    # 1. 선필터(kind) — 비파괴
     kinds = {it.id: classify_kind(it.title, it.body or "") for it in items}
     story_items = [it for it in items if kinds[it.id] == "story"]
 
-    # 2. 태깅(story 전부) + 임베딩(텍스트 충분한 것만 — 얇은 건 노이즈 클러스터 유발)
     tags_by_id: dict[str, dict] = {}
     vec_by_id: dict[str, list[float]] = {}
     if story_items:
-        tags = tag_items(story_items, client, taxonomy, batch=batch)
-        for it, tg in zip(story_items, tags):
-            tags_by_id[it.id] = tg
+        if tag:
+            for it, tg in zip(story_items, tag_items(story_items, client, taxonomy, batch=batch)):
+                tags_by_id[it.id] = tg
+        else:
+            for it in story_items:
+                tags_by_id[it.id] = _EMPTY_TAGS
         embeddable = [it for it in story_items
                       if it.source not in noncluster_sources
                       and len(embed_text(it)) >= MIN_EMBED_CHARS]
-        for it, vc in zip(embeddable, embed_items(embeddable, client)):
+        for it, vc in zip(embeddable, embed_items(embeddable, client, concurrency=embed_concurrency)):
             vec_by_id[it.id] = vc
 
     created = joined = 0
-    # 3. centroid 클러스터 (열린 스토리 매 항목 재조회 → 같은 배치 내 합류 가능)
     for it in story_items:
         tg = tags_by_id[it.id]
         vec = vec_by_id.get(it.id)
-        if vec is None:                       # 얇은 아이템: 태그만, 클러스터 제외(standalone)
+        if vec is None:                       # 얇은/비내러티브: 태그만, 클러스터 제외(standalone)
             store.save_enrichment(it.id, kind="story", tags=_flat_tags(tg),
                                   embedding=None, story_id=None)
             continue
         entities = _flat_tags(tg)
-        sid = assign(vec, store.get_open_stories(cutoff=now - open_window), threshold=threshold)
-        if sid is None:
-            sid = id_factory()
-            store.create_story(sid, title=it.title, vec=vec, member_id=it.id,
-                               entities=entities, now=now)
+        sid = _assign_and_persist(store, it, vec, entities, now, threshold,
+                                  open_window, candidates, id_factory)
+        if sid[1]:
             created += 1
         else:
-            store.append_to_story(sid, vec=vec, member_id=it.id, entities=entities, now=now)
             joined += 1
         store.save_enrichment(it.id, kind="story", tags=_flat_tags(tg),
-                              embedding=vec, story_id=sid)
+                              embedding=vec, story_id=sid[0])
 
-    # 4. spam/digest — kind만 기록(임베딩/스토리 없음)
-    for it in items:
+    for it in items:                          # spam/digest — kind만
         if kinds[it.id] != "story":
             store.save_enrichment(it.id, kind=kinds[it.id], tags=[],
                                   embedding=None, story_id=None)
 
-    # 5. 큐에서 제거
     store.mark_processed([it.id for it in items], processed_at=now)
-
-    # 6. 무활동 스토리 마감
-    closed = store.close_stale_stories(cutoff=now - close_after)
-
+    closed = store.close_stale_stories(cutoff=now - close_after) if close else 0
     stats = {"processed": len(items), "stories_created": created,
              "stories_joined": joined, "closed": closed}
     log.info("process_once: %s", stats)
     return stats
+
+
+def _assign_and_persist(store, it, vec, entities, now, threshold, open_window,
+                        candidates, id_factory) -> tuple[str, bool]:
+    """스토리 배정(메모리 캐시 또는 store 조회) + 영속화. 반환 (story_id, is_new)."""
+    if candidates is not None:                # in-memory 캐시 경로 (빠름)
+        idx = best_match(vec, candidates, threshold)
+        if idx < 0:
+            sid = id_factory()
+            store.create_story(sid, title=it.title, vec=vec, member_id=it.id,
+                               entities=entities, now=now)
+            candidates.append({"id": sid, "centroid": list(vec), "count": 1})
+            return sid, True
+        cand = candidates[idx]
+        sid, n = cand["id"], cand["count"]
+        store.append_to_story(sid, vec=vec, member_id=it.id, entities=entities, now=now)
+        cand["centroid"] = [(c * n + v) / (n + 1) for c, v in zip(cand["centroid"], vec)]
+        cand["count"] = n + 1
+        return sid, False
+    # 구버전 경로: 매 항목 Firestore 조회
+    sid = assign(vec, store.get_open_stories(cutoff=now - open_window), threshold=threshold)
+    if sid is None:
+        sid = id_factory()
+        store.create_story(sid, title=it.title, vec=vec, member_id=it.id, entities=entities, now=now)
+        return sid, True
+    store.append_to_story(sid, vec=vec, member_id=it.id, entities=entities, now=now)
+    return sid, False

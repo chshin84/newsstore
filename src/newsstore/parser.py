@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 import feedparser
 from bs4 import BeautifulSoup
-from .models import FeedConfig, RawItem, make_id
+from .models import FeedConfig, make_id
+from .contracts.models import RawItem
 
 log = logging.getLogger(__name__)
 

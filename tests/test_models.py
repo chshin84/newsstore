@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from newsstore.models import FeedConfig, RawItem, make_id
+from newsstore.models import FeedConfig, make_id
+from newsstore.contracts.models import RawItem
 
 def test_make_id_is_stable_and_url_based():
     a = make_id("https://x.com/a?utm=1")

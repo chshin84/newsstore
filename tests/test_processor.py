@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from newsstore.models import RawItem
+from newsstore.contracts.models import RawItem
 from newsstore.store.sqlite_store import SqliteStore
 from newsstore.enrich.embedder import EMBED_DIM
 from newsstore.enrich.processor import process_once
@@ -90,6 +90,23 @@ def test_empty_queue_is_noop(tmp_path):
     s = _store(tmp_path)
     stats = process_once(s, _FakeClient({}), TAX, now=NOW)
     assert stats["processed"] == 0
+
+
+def test_cluster_pass_cache_no_tagging(tmp_path):
+    # tag=False + in-memory candidates: 태깅 생략, Firestore 재조회 없이 캐시로 클러스터
+    import json
+    s = _store(tmp_path)
+    s.upsert_items([_item("a", "Fed raises rates sharply today"),
+                    _item("b", "Fed raises rates again right now")])
+    cache: list = []
+    process_once(s, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW,
+                 tag=False, candidates=cache)
+    rows = {r["id"]: r for r in s.conn.execute(
+        "SELECT id,tags,story_id,embedding FROM raw_items")}
+    assert json.loads(rows["a"]["tags"]) == []           # 태깅 생략
+    assert rows["a"]["embedding"] is not None
+    assert rows["a"]["story_id"] == rows["b"]["story_id"]  # 캐시로 합류
+    assert len(cache) == 1 and cache[0]["count"] == 2     # 캐시 in-place 갱신
 
 
 def test_noncluster_source_tagged_not_clustered(tmp_path):

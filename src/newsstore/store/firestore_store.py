@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import datetime, timezone
-from ..models import RawItem
+from ..contracts.models import RawItem
 from ..enrich.cluster import add_vectors
 
 _ITEMS = "items"
@@ -73,7 +73,8 @@ class FirestoreStore:
             d = snap.to_dict() or {}
             if d.get("last_seen") and d["last_seen"] >= cutoff:
                 c = d.get("count", 1) or 1
-                out.append({"id": snap.id, "centroid": [x / c for x in d.get("centroid_sum", [])]})
+                out.append({"id": snap.id, "centroid": [x / c for x in d.get("centroid_sum", [])],
+                            "count": c})
         return out
 
     def close_stale_stories(self, cutoff) -> int:

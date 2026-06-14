@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 from mockfirestore import MockFirestore
-from newsstore.models import RawItem
+from newsstore.contracts.models import RawItem
 from newsstore.store.sqlite_store import SqliteStore
 from newsstore.store.firestore_store import FirestoreStore
 

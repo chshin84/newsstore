@@ -55,7 +55,7 @@ class GeminiClient:
     # Gemini Developer API(GEMINI_API_KEY 경로) 모델명 — 라이브 models.list로 검증한 값.
     # gemini-embedding-001은 기본 3072차원 → output_dimensionality=embed_dim(768)로 받음.
     # (Vertex의 text-embedding-004/text-multilingual-embedding은 ADC 경로라 이 키에 없음)
-    def __init__(self, api_key: str, *, model: str = "gemini-2.5-flash",
+    def __init__(self, api_key: str, *, model: str = "gemini-3.1-flash-lite-preview",
                  embed_model: str = "gemini-embedding-001", embed_dim: int = 768):
         from google import genai            # lazy
         self._client = genai.Client(api_key=api_key)

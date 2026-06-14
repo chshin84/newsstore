@@ -1,6 +1,6 @@
 import sqlite3
 from datetime import datetime, timezone
-from newsstore.models import RawItem
+from newsstore.contracts.models import RawItem
 from newsstore.store.sqlite_store import SqliteStore
 
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)

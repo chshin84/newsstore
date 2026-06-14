@@ -1,6 +1,5 @@
 from __future__ import annotations
 import hashlib
-from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 def make_id(link: str, fallback: str = "") -> str:
@@ -17,15 +16,3 @@ class FeedConfig(BaseModel):
     poll_minutes: int = 60
     body_mode: str = "summary"   # full | summary | headline | calendar
     tz_offset: float | None = None   # hours; set for feeds emitting naive local time (infomax KST=9)
-
-class RawItem(BaseModel):
-    id: str
-    feed_id: str
-    source: str
-    asset_hint: str = ""
-    language: str = "en"
-    url: str
-    title: str
-    body: str = ""
-    published_at: datetime | None = None
-    fetched_at: datetime

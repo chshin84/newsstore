@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timezone
-from newsstore.models import RawItem
+from newsstore.contracts.models import RawItem
 from newsstore.enrich.embedder import embed_text, embed_items, EMBED_DIM, BODY_CAP
 
 NOW = datetime(2026, 6, 14, tzinfo=timezone.utc)

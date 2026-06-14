@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from mockfirestore import MockFirestore
-from newsstore.models import RawItem
+from newsstore.contracts.models import RawItem
 from newsstore.store.firestore_store import FirestoreStore
 
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)

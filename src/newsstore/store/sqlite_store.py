@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime, timezone
-from ..models import RawItem
+from ..contracts.models import RawItem
 from ..enrich.cluster import add_vectors
 
 SCHEMA_VERSION = 1
@@ -186,7 +186,7 @@ class SqliteStore:
             if ls >= cutoff:
                 csum = json.loads(r["centroid_sum"])
                 c = r["count"]
-                out.append({"id": r["id"], "centroid": [x / c for x in csum]})
+                out.append({"id": r["id"], "centroid": [x / c for x in csum], "count": c})
         return out
 
     def close_stale_stories(self, cutoff) -> int:

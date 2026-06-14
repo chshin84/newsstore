@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from newsstore.models import RawItem
+from newsstore.contracts.models import RawItem
 from newsstore.enrich.llm import LLMError
 from newsstore.enrich.tagger import validate_tags, build_prompt, tag_items, MAX_TICKERS
 

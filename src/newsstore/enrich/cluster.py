@@ -29,6 +29,18 @@ def centroid(centroid_sum: list[float], count: int) -> list[float]:
         raise ValueError(f"count must be >= 1, got {count}")
     return [x / count for x in centroid_sum]
 
+def best_match(vec: list[float], candidates: list[dict],
+               threshold: float = DEFAULT_THRESHOLD) -> int:
+    """가장 유사한 candidate의 인덱스(코사인 ≥ threshold) 또는 -1(=새 스토리).
+    candidates: [{'centroid': list[float], ...}]. in-memory 캐시 클러스터링용(Firestore 재조회 회피)."""
+    best_i, best_s = -1, -1.0
+    for i, c in enumerate(candidates):
+        s = cosine(vec, c["centroid"])
+        if s > best_s:
+            best_s, best_i = s, i
+    return best_i if best_s >= threshold else -1
+
+
 def assign(vec: list[float], open_stories: list[dict],
            threshold: float = DEFAULT_THRESHOLD) -> str | None:
     """가장 유사한 '열린 스토리' id를 반환(코사인 ≥ threshold). 없으면 None(=새 스토리).
