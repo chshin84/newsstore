@@ -17,9 +17,11 @@
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
 | Cloud Run Job | `newsstore-collector` (env `NEWSSTORE_BACKEND=firestore`, `GOOGLE_CLOUD_PROJECT=daily-recap-498506`, `APP_ENV=home`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) |
-| Cloud Run Job #2 | `newsstore-enricher` — Step-2 인리치(라이브, image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
+| Cloud Run Job #2 | `newsstore-enricher` — Step-2 클러스터 인리치(라이브, image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
 | Cloud Scheduler #2 | `newsstore-enrich-10min` (`*/10 * * * *`, 라이브) |
-| Secret Manager | `gemini-api-key` (Job#2에 `--set-secrets`로 주입; SA에 secretAccessor) |
+| Cloud Run Job #3 | `newsstore-summarizer` — Step-3 스토리 요약(라이브, 같은 image `processor:latest`, args `... run_enrich --mode summary`, secret 동일) |
+| Cloud Scheduler #3 | `newsstore-summary-hourly` (`5 * * * *`, 라이브) |
+| Secret Manager | `gemini-api-key` (Job#2·#3에 `--update-secrets`로 주입; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
 | Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |
@@ -110,13 +112,15 @@ gcloud scheduler jobs create http newsstore-enrich-hourly --location=asia-northe
 ```
 이후 코드/어휘 변경 반영은 §A와 동일하게 **2)+3) 재빌드→이미지 갱신**(`gcloud run jobs update newsstore-processor --image=...`). 복합 인덱스(스토리/태그 쿼리)가 필요하면 §D.
 
-## F. 스토리 요약 패스 배포 (Pass 3 — `--mode summary`, 시간당) — ⚠️ 돈/리소스: 사용자 확인 후 실행
-요약 패스는 **기존 `processor` 이미지를 그대로 재사용**한다(코드만 추가됨 — `run_enrich --mode summary`). cluster 패스(10분)와 별도로 **시간당** 돈다. Cloud Run Job의 `--args`는 생성 시 고정이라, 가장 단순한 길은 **같은 이미지로 두 번째 Job**(`newsstore-summarizer`, args=`--mode=summary`) + 전용 Scheduler.
+## F. 스토리 요약 패스 (Pass 3 — `--mode summary`, 시간당) — ✅ 라이브(2026-06-15 배포)
+요약 패스는 **기존 `processor` 이미지를 그대로 재사용**한다(`run_enrich --mode summary`). cluster 패스(10분)와 별도로 **시간당** 돈다. Cloud Run Job의 `--args`는 생성 시 고정이라 **같은 이미지로 두 번째 Job**(`newsstore-summarizer`, args에 `--mode summary`) + 전용 Scheduler `newsstore-summary-hourly`로 배포됨. 코드/어휘 변경 반영은 아래 0)+이미지 갱신.
 ```
-# 0) 코드 반영: processor 이미지 재빌드 + 기존 cluster Job 이미지 갱신(§A의 2~3과 동일 패턴)
+# 0) 코드 반영: processor 이미지 재빌드 + 두 인리치 Job(클러스터/요약) 이미지 갱신
 gcloud builds submit --config infra/cloudbuild.processor.yaml \
   --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest .
-gcloud run jobs update newsstore-processor \
+gcloud run jobs update newsstore-enricher \
+  --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest --region=asia-northeast3
+gcloud run jobs update newsstore-summarizer \
   --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest --region=asia-northeast3
 # 1) 요약 전용 Job(같은 이미지, args만 다름; 비밀·SA·env 동일)
 gcloud run jobs create newsstore-summarizer \
