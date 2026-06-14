@@ -80,13 +80,13 @@ class GeminiClient:
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     http_options=types.HttpOptions(timeout=int(timeout * 1000))))
-            return getattr(r, "text", None)
+            raw = getattr(r, "text", None)
+            if raw is None:
+                return None                      # None 가드 → call_with_retry가 재시도
+            return json.loads(raw)               # 파싱을 콜 안에서 → 일시적 malformed JSON도 재시도
 
-        raw = call_with_retry(_call, is_transient=self._is_transient)
-        try:
-            return json.loads(raw)
-        except (TypeError, ValueError) as e:
-            raise LLMError(f"non-JSON response: {e}") from e
+        # 파싱 실패(ValueError)는 call_with_retry가 재시도 후 소진 시 LLMError로 변환.
+        return call_with_retry(_call, is_transient=self._is_transient)
 
     def embed(self, text: str, *, timeout: float = DEFAULT_TIMEOUT) -> list[float]:
         from google.genai import types

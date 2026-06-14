@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from newsstore.models import RawItem
+from newsstore.enrich.llm import LLMError
 from newsstore.enrich.tagger import validate_tags, build_prompt, tag_items, MAX_TICKERS
 
 TAX = {"entities": ["Fed", "ECB"], "topics": ["rates", "inflation"]}
@@ -58,4 +59,15 @@ def test_tag_items_validates_and_preserves_order():
 def test_tag_items_fewer_results_fills_empty():
     # LLM이 결과를 적게 주면 빈 태그로 정렬 보존(fail-soft)
     out = tag_items([_item("a"), _item("b")], _FakeClient({"results": []}), TAX)
+    assert out == [{"tickers": [], "entities": [], "topics": []}] * 2
+
+
+class _RaisingClient:
+    def generate_json(self, prompt, *, timeout=30.0):
+        raise LLMError("non-JSON response")
+    def embed(self, text, *, timeout=30.0): ...
+
+def test_tag_items_failsoft_on_llmerror():
+    # 한 배치 태깅이 LLMError(malformed JSON 등)여도 전체를 죽이지 말고 빈 태그로 진행
+    out = tag_items([_item("a"), _item("b")], _RaisingClient(), TAX)
     assert out == [{"tickers": [], "entities": [], "topics": []}] * 2

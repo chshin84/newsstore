@@ -1,7 +1,10 @@
 from __future__ import annotations
+import logging
 import re
 
-from .llm import LLMClient
+from .llm import LLMClient, LLMError
+
+log = logging.getLogger("newsstore.enrich.tagger")
 
 MAX_TICKERS = 5
 _TICKER_RE = re.compile(r"^[A-Z0-9]{1,6}(\.[A-Z]{1,3})?$")   # NVDA, 000660.KS
@@ -45,7 +48,11 @@ def tag_items(items: list, client: LLMClient, taxonomy: dict, *, batch: int = 10
     out: list[dict] = []
     for s in range(0, len(items), batch):
         chunk = items[s:s + batch]
-        resp = client.generate_json(build_prompt(chunk, taxonomy), timeout=30.0)
+        try:
+            resp = client.generate_json(build_prompt(chunk, taxonomy), timeout=30.0)
+        except LLMError as e:        # 한 배치 실패가 전체를 죽이지 않게 fail-soft(빈 태그)
+            log.warning("tagging batch failed, continuing with empty tags: %s", e)
+            resp = {}
         results = (resp or {}).get("results", [])
         for j in range(len(chunk)):
             raw = results[j] if j < len(results) else {}
