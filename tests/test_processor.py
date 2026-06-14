@@ -92,6 +92,24 @@ def test_empty_queue_is_noop(tmp_path):
     assert stats["processed"] == 0
 
 
+def test_noncluster_source_tagged_not_clustered(tmp_path):
+    # TruthSocial 등 비내러티브 소스는 텍스트가 충분해도 클러스터 제외(보일러플레이트 오병합 방지).
+    s = _store(tmp_path)
+    a = _item("a", "Fed raises rates sharply today")
+    ts = RawItem(id="ts", feed_id="f", source="TruthSocial",
+                 url="https://e/ts", title="RT @realDonaldTrump",
+                 body="a retweet with enough characters to pass the thin guard easily",
+                 fetched_at=NOW)
+    s.upsert_items([a, ts])
+    process_once(s, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW,
+                 noncluster_sources={"TruthSocial"})
+    rows = {r["id"]: r for r in s.conn.execute(
+        "SELECT id,kind,embedding,story_id FROM raw_items")}
+    assert rows["ts"]["kind"] == "story"
+    assert rows["ts"]["embedding"] is None and rows["ts"]["story_id"] is None
+    assert rows["a"]["embedding"] is not None
+
+
 def test_thin_story_item_not_embedded_or_clustered(tmp_path):
     # 텍스트가 너무 얇은 story 아이템은 임베딩/클러스터에서 제외(노이즈 클러스터 방지).
     # 여전히 kind=story·processed지만 embedding/story_id 없음(=standalone).

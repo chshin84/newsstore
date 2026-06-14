@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from .enrich.cluster import DEFAULT_THRESHOLD
 from .enrich.llm import GeminiClient, LLMError
-from .enrich.processor import process_once
+from .enrich.processor import process_once, NONCLUSTER_SOURCES
 from .enrich.taxonomy import load_taxonomy
 from .store.factory import make_store
 
@@ -46,13 +46,16 @@ def main(argv=None) -> int:
     client = GeminiClient(api_key, **kw)
 
     threshold = float(os.environ.get("NEWSSTORE_CLUSTER_THRESHOLD", DEFAULT_THRESHOLD))
+    noncluster = (frozenset(s.strip() for s in os.environ["NEWSSTORE_NONCLUSTER_SOURCES"].split(",") if s.strip())
+                  if os.environ.get("NEWSSTORE_NONCLUSTER_SOURCES") else NONCLUSTER_SOURCES)
     totals = {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
     with make_store(backend, db_path=args.db) as store:
         for _ in range(MAX_BATCHES or 1_000_000):
             now = datetime.now(timezone.utc)
             try:
                 stats = process_once(store, client, taxonomy, now=now,
-                                     batch=args.batch, threshold=threshold)
+                                     batch=args.batch, threshold=threshold,
+                                     noncluster_sources=noncluster)
             except LLMError as e:          # 구조화 에러 → 런 실패로 표면화
                 log.error("enrichment aborted: %s", e)
                 return 1
