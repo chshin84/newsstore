@@ -17,8 +17,9 @@
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
 | Cloud Run Job | `newsstore-collector` (env `NEWSSTORE_BACKEND=firestore`, `GOOGLE_CLOUD_PROJECT=daily-recap-498506`, `APP_ENV=home`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) |
-| Cloud Run Job #2 (계획) | `newsstore-processor` — Step-2 인리치(§E, 미배포: 키·lock 게이트) |
-| Cloud Scheduler #2 (계획) | `newsstore-enrich-hourly` (§E) |
+| Cloud Run Job #2 | `newsstore-enricher` — Step-2 인리치(라이브, image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
+| Cloud Scheduler #2 | `newsstore-enrich-10min` (`*/10 * * * *`, 라이브) |
+| Secret Manager | `gemini-api-key` (Job#2에 `--set-secrets`로 주입; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
 | Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |

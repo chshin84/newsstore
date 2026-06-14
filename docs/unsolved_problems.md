@@ -30,6 +30,12 @@
 - ✅ ~~(감사) Plan 3 선결: Plan 문서·google-genai extra·비기능요건~~ → 2026-06-14 해소(Plan 3 구현). lock 재생성만 배포 게이트로 잔존(위).
 - **(2026-06-14 감사, low) 잔여 견고성 드리프트**: ① `append_to_story` member_ids가 published_at 순 미보장(spec §4 타임라인 계약) + member_id 중복 비방지(save+mark 비원자 시 재처리로 이중카운트) ② firestore N+1 read·비원자 RMW(close_stale batch화, get_open `where` 쿼리화) ③ sqlite `get_open_stories` count==0 가드 부재(firestore는 `or 1` — 비대칭) ④ firestore tz/누락 last_seen 가드가 sqlite와 비대칭 ⑤ `taxonomy.yaml` topics 표기(`energy`)가 spec §6(`energy/oil`)과 드리프트 ⑥ `load_taxonomy` 미지 키·빈 축 무음 통과 ⑦ `body_mode: calendar` 선언만·미구현(조용히 summary 폴백).
 
+## 🟡 Phase D 후속 (인리치 배포됨 — 리뷰 권고 follow-up)
+- **잡 실패 알림** — Scheduler는 잡을 `:run`으로 띄우고 **수락(200)만 받음 → 잡이 죽어도 Scheduler는 초록**(Fail-Loud 위반). Cloud Monitoring 알림(`newsstore-enricher` 실패 카운트>0) 추가 필요.
+- **requirements.lock에 google-genai 핀** — 현 processor 이미지는 google-genai를 unpinned로 해소(빌드는 됨). 재현성 위해 lock 재생성(전이의존 포함) 권장.
+- **Pass 2(스토리 태깅) 자동화** — 현재 cluster pass만 10분 자동화. 태깅은 수동(`--mode tag`). 별 Scheduler/주기 결정.
+- **인덱스 배포 확인** — `firestore.indexes.json`의 복합 인덱스가 실 Firestore에 READY인지(에뮬레이터는 인덱스 무시 → 계약 가드 테스트만으로는 실배포 미보장).
+
 ## 🔵 향후 / 선택
 - **Phase 2 — 스토리 타임라인 UI** — 스크린샷처럼 같은 내러티브를 타임라인으로(속보 N건). Phase 1이 `stories` 채운 뒤.
 - **서비스 단위 src 분할** — `src/newsstore/{collector,enrichment,store}` — Step-2 착수 시 자연스럽게.
