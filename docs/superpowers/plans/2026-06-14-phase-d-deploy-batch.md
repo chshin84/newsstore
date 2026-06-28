@@ -118,3 +118,5 @@ gcloud scheduler jobs create http newsstore-enrich-10min --location=asia-northea
 - **리스크**: mark_processed 멱등 반환 의미 변경 → 호출부 무영향 확인 + 테스트 갱신.
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

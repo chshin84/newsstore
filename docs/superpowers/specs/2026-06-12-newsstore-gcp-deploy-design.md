@@ -123,3 +123,5 @@ match /feed_state/{id} { allow read: if false; allow write: if false; }
 - 사무실 ePrism 프록시 ↔ Firestore gRPC 충돌 우려는 **수집기를 클라우드에서 돌려 회피**(회사 PC에서 Firestore 직접 쓰기 안 함).
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

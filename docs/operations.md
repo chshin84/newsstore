@@ -78,6 +78,8 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
 현재: `source+published_at`(소스필터), `tags+published_at`(태그필터), `processed+fetched_at`(Step-2 큐) — 전부 READY.
 
+> ⚠️ **소유권 안내 (2026-06-28 분할):** 아래 §E·§F의 인리치/요약 패스는 **`news-analytics` repo 소유**다(경계·계약: `docs/firestore-contract.md`). 단 **과도기로 코드·이미지·Job이 아직 newsstore에서 운영 중**이라(처리기 이미지를 newsstore Dockerfile로 빌드) 런북을 여기 유지한다. 코드 물리 이전 완료 시 이 두 섹션은 news-analytics 운영문서로 옮기고 여기엔 포인터만 남긴다.
+
 ## E. Step-2 인리치먼트 Processor 배포 (Cloud Run Job #2) — ⚠️ 최초 1회 셋업
 수집기와 **별도 Job**. 같은 Dockerfile을 `INSTALL_ENRICH=true`로 빌드(google-genai 포함)해 **별 이미지**(`processor:latest`)로 올리고, CMD를 `python -m newsstore.entrypoints.run_enrich`로 돌린다. `GEMINI_API_KEY`는 **Secret Manager**로 주입(커밋/이미지/로그 금지 — 백엔드 전용 비밀).
 

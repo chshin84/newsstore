@@ -1,6 +1,8 @@
-# newsstore 로드맵 (Step 1~7)
+# 로드맵 (Step 1~7)
 
 뉴스 → 태깅 → 아키타입 시장 뷰 → 시나리오/국면 대응으로 이어지는 단계. 결제는 **$0 유지**(무료 RSS + Gemini Flash 무료 한도).
+
+> ⚠️ **분할 안내 (2026-06-28):** 이 로드맵은 단일 repo를 전제로 쓰였다. 분할 후 소유는 **newsstore = Step 1(수집)·Step 3(웹 게재/UI)**, **news-analytics = Step 2(태깅)·Step 4~7(아키타입/시나리오/국면)**. 두 repo는 Firestore 스키마로만 만난다 — 경계·계약은 `docs/firestore-contract.md`. 아래 표의 각 Step은 이 분할을 따른다.
 
 | Step | 내용 | 상태 |
 |------|------|------|

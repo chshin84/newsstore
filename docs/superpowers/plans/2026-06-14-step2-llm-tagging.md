@@ -1,6 +1,6 @@
 # Step-2 인리치먼트 — Plan 3: LLM 태깅 + 리뷰어 + 임베딩 구현 계획
 
-> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+> 🔀 **분할 (2026-06-28) — 목표 소유: `news-analytics`.** 이 문서의 인리치/분석은 분리 후 별개 repo `news-analytics` 소유다. **단 코드·Job은 아직 newsstore에서 라이브(과도기 — 마이그레이션 미완)** — 운영 런북은 `docs/operations.md §E·§F`, 경계·계약·소유권 인덱스는 `docs/firestore-contract.md`. newsstore에선 이행 참조로 보존(폐기 아님).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development.
 > **이 기능은 런타임 LLM 호출** → `disciplined-coder:advisor-nonfunctional`(비기능 체크리스트)·`advisor-fit`(적합성) 적용. **각 서브에이전트에 `coding-principles` + `solved_problems`의 '핵심 gotchas' 주입**(`docs/subagent-context.md`). unsolved는 주입 X.
@@ -292,3 +292,5 @@ def embed_items(items: list, client: LLMClient) -> list[list[float]]:
 - **비파괴**: 검증 탈락 태그는 제거하되 원본 raw는 로깅(저장 tags만 필터). 결과수 불일치는 빈 태그로 정렬 보존.
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

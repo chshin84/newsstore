@@ -116,3 +116,5 @@ class LLMClient(Protocol):
 - 후속: 이 리스트럭처 위에서 **스토리 타임라인 UI**(Phase 2, 별도 spec).
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

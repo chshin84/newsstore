@@ -1,6 +1,6 @@
 # Step-2 인리치먼트 — Plan 4: Processor 오케스트레이션 + 배포
 
-> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+> 🔀 **분할 (2026-06-28) — 목표 소유: `news-analytics`.** 이 문서의 인리치/분석은 분리 후 별개 repo `news-analytics` 소유다. **단 코드·Job#2/#3은 아직 newsstore에서 라이브(과도기 — 마이그레이션 미완)** — 운영 런북은 `docs/operations.md §E·§F`, 경계·계약·소유권 인덱스는 `docs/firestore-contract.md`. newsstore에선 이행 참조로 보존(폐기 아님).
 
 > **상태(2026-06-14): 로직·엔트리포인트 구현·테스트 완료. 배포는 사용자 게이트(키·이미지 빌드).**
 
@@ -28,3 +28,5 @@
 - 비파괴: 전 아이템 mark_processed(저장 보존), spam/digest도 kind 기록.
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

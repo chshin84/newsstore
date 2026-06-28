@@ -1,5 +1,7 @@
 # newsstore 토픽 렌즈 재설계 (파편화 해소 + 위험/임팩트 큐레이션 + 델타 타임라인) — 마스터 설계
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 설계의 토픽 렌즈·클러스터·델타·점수·UI는 별개 repo **`news-analytics`** 소유다(newsstore에선 히스토리로 보존). **예외: §9 피드 볼륨업은 newsstore 작업**이며 `2026-06-28-feed-source-expansion-design.md`가 SSOT. 분할 경계·계약은 **`docs/firestore-contract.md`** 참조.
+
 _작성: 2026-06-28 · 상태: 설계(검토중) · 성격: **마스터 설계** — 5개 Phase로 분해, 각 Phase는 자기 plan을 별도로 가짐_
 
 > ⚠️ **세션 소유권 안내 (2026-06-28 갱신 — 다른 세션은 반드시 읽을 것)**

@@ -349,3 +349,5 @@ git commit -m "feat: save_enrichment (kind/tags/embedding/story_id) + sqlite ite
 - **Plan 4** — Processor 오케스트레이션(Plan 1 assign + Plan 2 store + Plan 3 LLM 결합) + Cloud Run Job #2 + Scheduler.
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

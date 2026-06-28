@@ -4,7 +4,7 @@
 
 - **라이브 사이트:** https://daily-recap-498506.web.app
 - **GitHub:** https://github.com/chshin84/newsstore (public)
-- Step-1(수집)·저장·뷰어 라이브. Step-2 인리치먼트는 진행 중 — enrich 모듈(휴리스틱 분류/클러스터 순수로직)·Store 확장 완료, LLM(Gemini) 태깅·임베딩 런타임 연결은 다음(Plan 3/4). 자세한 진행은 아래 §진행 상황.
+- Step-1(수집)·저장·뷰어 라이브. **인리치먼트(LLM 태깅·임베딩·클러스터·스토리·점수)는 별개 repo `news-analytics` 소유** — newsstore와는 **Firestore 스키마로만** 만난다(경계·계약 SSOT: `docs/firestore-contract.md`). 과도기로 코드는 아직 newsstore에 잔류(§진행 상황).
 
 ## 아키텍처
 
@@ -64,14 +64,11 @@ MSYS_NO_PATHCONV=1 docker compose run --rm test
 ## 진행 상황
 - ✅ **Step-1 수집기**: 완료·배포·라이브 (Cloud Run Job + Scheduler */5 → Firestore).
 - ✅ **공개 사이트**: 라이브 (소스 필터·중복제거·스팸필터·소스별 색·호버 본문).
-- 🚧 **Step-2 (LLM 태깅/스토리)**: 진행 중.
-  - ✅ Plan 1 — `src/newsstore/enrich/`(taxonomy·classify·cluster, 휴리스틱 분류 + centroid 클러스터 순수로직).
-  - ✅ Plan 2 — Store 확장: `save_enrichment`(kind/tags/embedding/story_id) + `stories`(centroid sum/count·get_open·close_stale), sqlite/firestore 양쪽.
-  - ✅ Plan 3 — Gemini 태깅(`tagger`, 결정론 어휘/티커 검증)·임베딩(`embedder`, 768 dim 가드)·LLM 클라이언트(`llm`, timeout/retry/None가드). DI라 google-genai 없이 로직 테스트.
-  - ✅ Plan 4 (로직) — `enrich/processor.py`(get_unprocessed→classify→tag+embed→클러스터→save+mark) + `process.py` 엔트리포인트. **배포(Cloud Run Job#2 + GEMINI_API_KEY)는 사용자 게이트** — `docs/operations.md §E`. 배포되면 사이트 태그 드롭다운 자동 활성.
+- 🔀 **인리치먼트(태깅/스토리/점수) → `news-analytics` repo 소유.** Cloud Run Job#2(`newsstore-enricher`)·#3(`newsstore-summarizer`)는 **라이브**이나 **과도기로 newsstore 이미지에서 운영 중**(`docs/operations.md §E·§F`). 코드 물리 이전(`src/newsstore/enrich/` 디렉터리·`ports.py` 분할)은 별도 작업. 경계·계약: `docs/firestore-contract.md`.
 
 ## 문서
 - 로드맵(Step 1~7): `docs/roadmap.md`
 - 최초 셋업(0→배포): `docs/setup.md` · 운영·재배포: `docs/operations.md`
 - 설계: `docs/superpowers/specs/` · 구현계획: `docs/superpowers/plans/`
+- **분할 경계·계약(newsstore ↔ news-analytics): `docs/firestore-contract.md`** (Firestore 스키마 SSOT + 스펙/플랜 소유권 인덱스)
 - 소스 선택 근거(히스토리): `docs/handoff/2026-06-12-session-handoff.md`

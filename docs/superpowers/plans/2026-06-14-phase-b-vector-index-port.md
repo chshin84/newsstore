@@ -1,6 +1,6 @@
 # Phase B — VectorIndex 포트 구현 계획
 
-> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+> 🔀 **분할 (2026-06-28) — 목표 소유: `news-analytics`.** 이 문서의 인리치/분석은 분리 후 별개 repo `news-analytics` 소유다. **단 코드·Job은 아직 newsstore에서 라이브(과도기 — 마이그레이션 미완)** — 운영 런북은 `docs/operations.md §E·§F`, 경계·계약·소유권 인덱스는 `docs/firestore-contract.md`. newsstore에선 이행 참조로 보존(폐기 아님).
 
 > **For agentic workers:** TDD. 각 단계 전체 스위트 그린(현재 102) 유지. `coding-principles` + `solved_problems` gotchas 적용.
 
@@ -194,3 +194,5 @@ log.info("cluster pass: seeded %d open-story centroids", len(index._e))
 - **플레이스홀더**: 없음.
 
 <!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
+
+<!-- spec-review: passed lenses=3 date=2026-06-28 -->

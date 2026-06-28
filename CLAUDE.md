@@ -17,6 +17,7 @@
 - **비밀 구분**: `GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
+- **스코프 경계 (중요):** newsstore = **수집·저장·호스팅(UI)**. **인리치/분석(LLM 태깅·임베딩·클러스터·스토리·risk/impact·아키타입)은 별개 repo `news-analytics` 소유** — 두 repo는 **Firestore 스키마로만** 결합(코드 import 없음). 경계·계약 SSOT: **`docs/firestore-contract.md`**. (과도기: `src/newsstore/enrich/` 코드와 Job#2/#3이 아직 newsstore에서 운영 중 — 물리 이전은 별도 작업.)
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - 로드맵(Step 1~7): `docs/roadmap.md`

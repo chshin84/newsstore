@@ -1,5 +1,7 @@
 # newsstore 스토리 타임라인 UI + 스토리 요약 — 설계
 
+> ⚠️ **부분 분할 (2026-06-28):** **백엔드 스토리 요약 패스는 `news-analytics` 소유**(경계·계약: **`docs/firestore-contract.md`**). **스토리 타임라인 UI(`web/index.html`)만 newsstore에 유효** — UI는 `stories`/`tags`를 Firestore에서 읽는 소비자다(Fail-soft 가드 필요).
+
 _작성: 2026-06-15 · 상태: 설계(검토중) · Visual Companion으로 인터랙션 확정(목업 `.superpowers/brainstorm/.../content/`)_
 
 ## 1. 목표 / 범위
