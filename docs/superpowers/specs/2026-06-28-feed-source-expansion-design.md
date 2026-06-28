@@ -161,6 +161,7 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 - **공시(EDGAR/DART)**: 고신호지만 firehose는 노이즈·볼륨 폭발 → **워치 종목/유형 스코프만**. 구조화 데이터 파싱은 후속 세션.
 - **데이터 릴리스 성격**: 캘린더성(주간/월간), body 얇음 → `headline`/`calendar` mode, 정기 중복 잦음 → dedup.
 - **통합 피드 중복**: BIS cbspeeches·Google News 경유 등 **aggregator는 개별 소스와 중복** → 수집기 dedup(기존 link 해시)에 의존, 동일 사건 다중 등장은 후속 세션 클러스터가 처리.
+- **주요 페이월 와이어(WSJ·FT)**: 공개 RSS의 **헤드라인/요약만 수용**(전문은 페이월) — **스크래핑 금지**(§9.1.6 정당성). WSJ RSS(`feeds.a.dj.com/rss/...`)는 안정적, FT(`ft.com/...?format=rss`)는 제한적 → 프로빙으로 가지치기. tier=wire(오피니언=analysis).
 - **프로빙이 진실의 원천**: 위 URL은 후보. **HTTP 200 + RSS 파싱 + body 유무**를 실증한 것만 등재(증거 후 주장). 실패는 사유를 주석으로(비파괴).
 - **tier 판단 기준**: 공식·1차·중앙은행·공시 = `primary`; 리서치·심층·칼럼·애널리스트 = `analysis`; 일반 뉴스 = `wire`. 후속 세션이 `primary>analysis>wire`로 신뢰도 prior.
 

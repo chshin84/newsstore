@@ -247,6 +247,30 @@ git commit -m "feat(feeds): add source tier field (primary/analysis/wire)"
 
 ---
 
+### Task 9b: 주요 페이월 와이어 (WSJ/FT — 공개 RSS, 헤드라인/요약만)
+
+**Files:** Modify `config/feeds.yaml` (신규 "── 주요 와이어(페이월; 공개 RSS만) ──" 블록)
+**Interfaces:** feed_id `wsj_markets`,`wsj_world`,`wsj_business`,`wsj_tech`,`wsj_opinion`,`ft_home`,`ft_markets`,`ft_economy`. **전문은 페이월 — 공개 RSS의 헤드라인/요약만 수용, 스크래핑 금지(spec §9.1.6).** body_mode는 Task 10 프로빙에서 description 유무로 확정. FT는 RSS 제한적 → 다수 가지치기 예상.
+
+- [ ] **Step 1: 블록 추가**
+
+```yaml
+  # ── 주요 와이어 (페이월; 공개 RSS 헤드라인/요약만, 스크래핑 금지) ──
+  - {feed_id: wsj_markets,  url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",   source: WSJ, asset_hint: us_market, poll_minutes: 15, body_mode: summary, tier: wire}
+  - {feed_id: wsj_world,    url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml",      source: WSJ, asset_hint: global, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: wsj_business, url: "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml",  source: WSJ, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: wsj_tech,     url: "https://feeds.a.dj.com/rss/RSSWSJD.xml",           source: WSJ, asset_hint: tech, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: wsj_opinion,  url: "https://feeds.a.dj.com/rss/RSSOpinion.xml",        source: WSJ, asset_hint: opinion, poll_minutes: 60, body_mode: summary, tier: analysis}
+  - {feed_id: ft_home,      url: "https://www.ft.com/rss/home",                      source: FT, asset_hint: global, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: ft_markets,   url: "https://www.ft.com/markets?format=rss",            source: FT, asset_hint: global_market, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: ft_economy,   url: "https://www.ft.com/global-economy?format=rss",     source: FT, asset_hint: macro, poll_minutes: 30, body_mode: headline, tier: wire}
+```
+
+- [ ] **Step 2: 등록 검증** — `MSYS_NO_PATHCONV=1 docker compose run --rm test pytest tests/test_registry_valid.py -v` → PASS
+- [ ] **Step 3: 커밋** — `git commit -am "feat(feeds): WSJ/FT major wires (public RSS, headline/summary only)"`
+
+---
+
 ### Task 10: 라이브 프로빙 — 도달성·본문 검증 + 가지치기 (Docker)
 
 **Files:** Create `scripts/probe_feeds.py`; Modify `config/feeds.yaml`(프로빙 실패 주석 + body_mode 보정).
