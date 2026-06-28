@@ -6,6 +6,7 @@ from .feeds import FeedConfig
 from ..contracts.ports import Store
 from .fetcher import fetch_feed
 from .parser import parse_feed
+from .body_fetch import enrich_bodies
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
                 summary[feed.feed_id] = -1     # transient failure; retried next pass
                 continue
             items = parse_feed(res.content, feed, fetched_at=now)
+            items = enrich_bodies(client, store, items)
             new = store.upsert_items(items)
             store.set_feed_state(feed.feed_id, etag=res.etag,
                                  last_modified=res.last_modified, last_fetched=now)

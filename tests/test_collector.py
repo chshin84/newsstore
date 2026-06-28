@@ -45,3 +45,24 @@ def test_collect_once_isolates_feed_failure(fsclient):
     assert s["bad"] == -1          # 실패는 격리되어 -1
     assert s["good"] == 1          # 나머지 피드는 정상 수집
     assert store.count() == 1
+
+
+def test_collect_once_fills_hankyung_body(monkeypatch, store):
+    from newsstore.collect import body_fetch
+    monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)
+
+    RSS_HK = ("<rss><channel><item><title>제목</title>"
+              "<link>https://www.hankyung.com/article/1</link>"
+              "<guid>https://www.hankyung.com/article/1</guid>"
+              "</item></channel></rss>")
+    ART = "<div class='article-body'>" + "한경 본문 내용. " * 10 + "</div>"
+    def handler(req):
+        return httpx.Response(200, text=ART if "article" in str(req.url) else RSS_HK)
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    feeds = [FeedConfig(feed_id="hk_economy", url="https://www.hankyung.com/feed/economy",
+                        source="한국경제", language="ko", body_mode="headline")]
+    collect_once(client, store, feeds, force=True)
+    saved = store.get_unprocessed()
+    hk = [it for it in saved if it.feed_id == "hk_economy"][0]
+    assert "한경 본문" in hk.body
