@@ -165,18 +165,12 @@
     function txt(s) { return esc(decode(s)); }
     function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 호버 시 전체
 
-    // 변호사/집단소송 PR 스팸 필터 — 제목+본문에 아래 시그널이 있으면 숨김 (고정밀)
-    const JUNK = ["lead plaintiff", "class action", "deadline alert", "shareholder rights law firm",
-      "suffered losses in", "encourages investors", "reminds investors", "securities fraud",
-      "bragar eagel", "rosen law", "pomerantz", "levi & korsinsky", "glancy prongay", "kahn swick",
-      "robbins geller", "faruqi", "schall law", "hagens berman", "kessler topaz", "bronstein, gewirtz",
-      "gross law firm", "johnson fistel", "kirby mcinerney",
-      // 벤징가 "$X 투자했다면 지금 얼마" 류 클릭베이트
-      "would be worth this much today", "if an investor had bought"];
-    function isJunk(it) {
-      const s = (decode(it.title) + " " + decode(it.body)).toLowerCase();
-      return JUNK.some(k => s.includes(k));
-    }
+    // === FEED-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
+    // 스팸·다이제스트는 백엔드 kind(news-analytics가 classify로 씀)로 숨긴다 — 어휘 SSOT는 classify.SPAM_SIGNALS.
+    // kind 없음(미인리치 fresh)·story·미지값 → 노출(fail-soft: 분석 멈춰도 raw 뉴스 보임).
+    const HIDDEN_KINDS = new Set(["spam", "digest"]);
+    function keepInFeed(it) { return !HIDDEN_KINDS.has(it && it.kind); }
+    // === FEED-LOGIC-END ===
     function relTime(d) {
       if (!d) return "시간 미상";
       const s = (Date.now() - d.getTime()) / 1000;
@@ -239,7 +233,7 @@
         // 제목(정규화) 기준 중복 제거 — 같은 뉴스가 URL만 달라 여러 번 들어온 경우 한 건만
         const seen = new Set(); const items = [];
         for (const it of rawItems) {
-          if (isJunk(it)) continue;                          // 집단소송 PR 스팸 제거
+          if (!keepInFeed(it)) continue;                     // 백엔드 kind=spam/digest 숨김(SSOT)
           const k = decode(it.title).trim().toLowerCase().replace(/\s+/g, " ");
           if (k && seen.has(k)) continue;
           if (k) seen.add(k);
