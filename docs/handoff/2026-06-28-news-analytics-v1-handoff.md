@@ -82,7 +82,7 @@ _§E 회신을 받으면 여기 기록하고, newsstore 반영(인덱스 추가�
 5. **story open→closed 트리거** — 생성 시 open(`create_story`), 멤버 합류 시 `last_seen` 갱신(`append_to_story`, `processor.py:106-111`). **`last_seen < now - CLOSE_AFTER(24h)`** 이면 `close_stale_stories`가 close(매 cluster 패스 실행, `processor.py:18,93`·`run_enrich.py:41`). `OPEN_WINDOW(48h)`는 매칭 후보창(벡터 인덱스 시딩, `processor.py:17`·`run_enrich.py:28`). 쿼리 술어 byte-level SSOT는 `firestore_store.close_stale_stories/get_open_stories`.
 
 **newsstore 측 TODO (회신 반영)**
-- [ ] **Firestore 인덱스 2종 추가** — 정확한 필드 스펙 미확보(회신 원문이 별 repo). news-analytics 또는 사용자가 스펙 제공 시 적용.
+- [x] **Firestore 인덱스 2종** — ✅ **둘 다 이미 `firestore.indexes.json`에 선언됨**(추가 불필요). `items`(processed ASC+fetched_at ASC, line 11-18)는 `get_unprocessed` 실쿼리와 일치, `stories`(status ASC+last_seen DESC, line 27-34)는 스펙 그대로. ⚠️ 잔존: **실 Firestore READY 배포 확인**(파일 선언≠배포; `unsolved_problems.md` Phase D "인덱스 배포 확인"). ⚠️ 실측 노트: 현 newsstore `get_open_stories`/`close_stale_stories`는 `where(status==open)`만 서버쿼리하고 `last_seen` 범위는 **파이썬 클라이언트측 필터**(`firestore_store.py:71-89`) — 즉 stories 복합인덱스는 현 코드가 안 쓰고, **news-analytics가 last_seen 범위를 서버측 쿼리로 돌릴 때** 쓰임(그 어댑터가 서버측 범위필터면 이 인덱스가 받쳐줌).
 - [ ] **`meta`에 source `tier` 발행** — `feeds.yaml`엔 `tier: analysis|wire` 존재(미기재=기본). meta 발행 배선 확인/추가 필요(과도기 처방).
 - [ ] (문서 드리프트) README/roadmap의 Gemini 모델명을 `gemini.py` 기준으로 교정 — 코드가 SSOT.
 
