@@ -36,8 +36,8 @@ feeds:
   - {feed_id: bz_crypto,   url: "https://www.benzinga.com/markets/cryptocurrency/feed", source: Benzinga, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   - {feed_id: bz_commod,   url: "https://www.benzinga.com/markets/commodities/feed",    source: Benzinga, asset_hint: commodity, poll_minutes: 60, body_mode: summary}
   - {feed_id: bz_largecap,   url: "https://www.benzinga.com/news/large-cap/feed",        source: Benzinga, asset_hint: us_stock, poll_minutes: 15, body_mode: summary, tier: wire}
-  # bz_smallcap 프로빙 실패(HTTP 404) 2026-06-28 — /topic/small-cap/feed 경로 없음, 제외
-  # - {feed_id: bz_smallcap,   url: "https://www.benzinga.com/topic/small-cap/feed",       source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  # bz_smallcap 재프로빙 실패(entries=0) 2026-06-28 UA적용 — /topic/small-caps/feed 응답 있으나 항목 없음, 제외
+  # - {feed_id: bz_smallcap,  url: "https://www.benzinga.com/topic/small-caps/feed",                source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
   - {feed_id: bz_insider,    url: "https://www.benzinga.com/news/insider-trades/feed",   source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
   - {feed_id: bz_tech,       url: "https://www.benzinga.com/tech/feed",                  source: Benzinga, asset_hint: tech,     poll_minutes: 15, body_mode: summary, tier: wire}
   - {feed_id: bz_ai,         url: "https://www.benzinga.com/topic/ai/feed",              source: Benzinga, asset_hint: tech,     poll_minutes: 30, body_mode: summary, tier: wire}
@@ -61,13 +61,13 @@ feeds:
   - {feed_id: investing_bond, url: "https://www.investing.com/rss/bonds.rss",            source: Investing, asset_hint: us_bond, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증); HTTP 200·RSS 정상
   # ── 중앙은행·1차 데이터 (primary; URL은 프로빙으로 확정) ──
   - {feed_id: bis_cbspeeches, url: "https://www.bis.org/doclist/cbspeeches.rss", source: BIS, asset_hint: global_policy, poll_minutes: 360, body_mode: summary, tier: primary}
-  # bis_pub 프로빙 실패(HTTP 404) 2026-06-28 — /doclist/all_rss.xml 경로 없음, 제외
-  # - {feed_id: bis_pub,        url: "https://www.bis.org/doclist/all_rss.xml",    source: BIS, asset_hint: global_policy, poll_minutes: 720, body_mode: headline, tier: primary}
+  # bis_pub 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /doclist/press.rss 경로도 없음, 제외
+  # - {feed_id: bis_pub,      url: "https://www.bis.org/doclist/press.rss",                         source: BIS, asset_hint: global_policy, poll_minutes: 720, body_mode: headline, tier: primary}
   - {feed_id: fed_speeches,   url: "https://www.federalreserve.gov/feeds/speeches.xml",        source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
   - {feed_id: fed_fomc,       url: "https://www.federalreserve.gov/feeds/press_monetary.xml", source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
   - {feed_id: eia_today,      url: "https://www.eia.gov/rss/todayinenergy.xml",  source: EIA, asset_hint: energy, poll_minutes: 360, body_mode: summary, tier: primary}
-  # bls_news 프로빙 실패(HTTP 403) 2026-06-28 — bls.gov Docker IP 차단, 제외
-  # - {feed_id: bls_news,       url: "https://www.bls.gov/feed/news_release.rss",  source: BLS, asset_hint: us_macro, poll_minutes: 720, body_mode: headline, tier: primary}
+  # bls_news 재프로빙 실패(HTTP 403) 2026-06-28 UA적용 — bls.gov Docker IP 차단 유지, 제외
+  # - {feed_id: bls_news,     url: "https://www.bls.gov/feed/news_release.rss",                     source: BLS, asset_hint: us_macro, poll_minutes: 720, body_mode: headline, tier: primary}
   # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ──
   - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: summary}   # description 채워짐 → 승격(2026-06-12 검증)
   - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech, poll_minutes: 15, body_mode: headline}
@@ -91,24 +91,23 @@ feeds:
   - {feed_id: axios,       url: "https://www.axios.com/feeds/feed.rss", source: Axios, asset_hint: "policy,scoop", poll_minutes: 60, body_mode: summary}
   # ── 무료 리서치 (analysis; 프로빙으로 확정, 실패는 주석 제외) ──
   - {feed_id: fed_liberty,     url: "https://libertystreeteconomics.newyorkfed.org/feed/", source: LibertyStreet, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: analysis}
-  # imf_blog 프로빙 실패(entries=0) 2026-06-28 — /en/Blogs/rss 응답 있으나 항목 없음, 제외
-  # - {feed_id: imf_blog,        url: "https://www.imf.org/en/Blogs/rss",                    source: IMF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
-  # voxeu 프로빙 실패(HTTP 404) 2026-06-28 — cepr.org/rss/voxeu.xml 경로 없음, 제외
-  # - {feed_id: voxeu,           url: "https://cepr.org/rss/voxeu.xml",                      source: VoxEU, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
+  # imf_blog 재프로빙 실패(HTTP 403) 2026-06-28 UA적용 — /en/blogs/rss 차단(이전 entries=0에서 403으로 변경), 제외
+  # - {feed_id: imf_blog,     url: "https://www.imf.org/en/blogs/rss",                              source: IMF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: voxeu,        url: "https://cepr.org/rss/vox-content",                              source: VoxEU, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: nber_wp,         url: "https://www.nber.org/rss/new.xml",                    source: NBER, asset_hint: research, poll_minutes: 720, body_mode: headline, tier: analysis}
   - {feed_id: boe_underground, url: "https://bankunderground.co.uk/feed/",                 source: BankUnderground, asset_hint: uk_policy, poll_minutes: 720, body_mode: summary, tier: analysis}
-  # cfr_setser 프로빙 실패(HTTP 404) 2026-06-28 — /blog/follow-money/rss.xml 경로 없음, 제외
-  # - {feed_id: cfr_setser,      url: "https://www.cfr.org/blog/follow-money/rss.xml",       source: CFR, asset_hint: flows, poll_minutes: 360, body_mode: summary, tier: analysis}
+  # cfr_setser 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /blog/setser.rss 경로 없음, 제외
+  # - {feed_id: cfr_setser,   url: "https://www.cfr.org/blog/setser.rss",                           source: CFR, asset_hint: flows, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: calculated_risk, url: "https://www.calculatedriskblog.com/feeds/posts/default", source: CalculatedRisk, asset_hint: us_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: damodaran,       url: "https://aswathdamodaran.blogspot.com/feeds/posts/default", source: Damodaran, asset_hint: equity, poll_minutes: 720, body_mode: summary, tier: analysis}
   - {feed_id: klement,         url: "https://klementoninvesting.substack.com/feed",        source: Klement, asset_hint: macro, poll_minutes: 720, body_mode: summary, tier: analysis}
   # ── 에너지·원자재 (사용자 신규 토픽; 프로빙) ──
-  # iea_news 프로빙 실패(HTTP 404) 2026-06-28 — iea.org/rss/news 경로 없음, 제외
-  # - {feed_id: iea_news,     url: "https://www.iea.org/rss/news",                                  source: IEA, asset_hint: energy, poll_minutes: 360, body_mode: headline, tier: primary}
-  # opec_press 프로빙 실패(HTTP 403) 2026-06-28 — opec.org Docker IP 차단, 제외
+  # iea_news 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /news.rss 경로도 없음, 제외
+  # - {feed_id: iea_news,     url: "https://www.iea.org/news.rss",                                  source: IEA, asset_hint: energy, poll_minutes: 360, body_mode: headline, tier: primary}
+  # opec_press 재프로빙 실패(HTTP 403) 2026-06-28 UA적용 — opec.org Docker IP 차단 유지, 제외
   # - {feed_id: opec_press,   url: "https://www.opec.org/opec_web/en/press_room/rss.xml",           source: OPEC, asset_hint: energy, poll_minutes: 720, body_mode: headline, tier: primary}
-  # kitco_metals 프로빙 실패(entries=0) 2026-06-28 — /news/category/mining/rss 응답 있으나 항목 없음, 제외
-  # - {feed_id: kitco_metals, url: "https://www.kitco.com/news/category/mining/rss",                source: Kitco, asset_hint: metals, poll_minutes: 60, body_mode: summary, tier: wire}
+  # kitco_metals 재프로빙 실패(entries=0) 2026-06-28 UA적용 — /news/category/mining/feed 응답 있으나 항목 없음, 제외
+  # - {feed_id: kitco_metals, url: "https://www.kitco.com/news/category/mining/feed",              source: Kitco, asset_hint: metals, poll_minutes: 60, body_mode: summary, tier: wire}
   # ── 한국 기관 (RSS 경로 불확실 — 프로빙, 미제공 시 주석 제외) ──
   # kcif_flash 프로빙 실패(HTTP 400) 2026-06-28 — RSS 경로 미확인, 제외
   # - {feed_id: kcif_flash,   url: "https://www.kcif.or.kr/rss/newsflash.xml",  source: KCIF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
