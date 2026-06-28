@@ -3,6 +3,14 @@ from dataclasses import dataclass
 import httpx
 from .feeds import FeedConfig
 
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    )
+}
+
 @dataclass
 class FetchResult:
     status: int
@@ -12,7 +20,7 @@ class FetchResult:
 
 def fetch_feed(client: httpx.Client, feed: FeedConfig,
                etag: str | None = None, last_modified: str | None = None) -> FetchResult:
-    headers = {}
+    headers = dict(DEFAULT_HEADERS)
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:

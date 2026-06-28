@@ -1,6 +1,7 @@
 from __future__ import annotations
 import hashlib
 from pathlib import Path
+from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict
 
@@ -20,6 +21,7 @@ class FeedConfig(BaseModel):
     poll_minutes: int = 60
     body_mode: str = "summary"   # full | summary | headline | calendar
     tz_offset: float | None = None   # hours; set for feeds emitting naive local time (infomax KST=9)
+    tier: Literal["primary", "analysis", "wire"] = "wire"   # 소스 신뢰도(spec §9.2)
 
 
 def load_feeds(path) -> list[FeedConfig]:
