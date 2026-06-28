@@ -7,15 +7,44 @@ feeds:
   - {feed_id: infomax_overseas, url: "https://news.einfomax.co.kr/rss/S1N21.xml", source: 인포맥스, asset_hint: us_stock, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
   - {feed_id: infomax_intl,     url: "https://news.einfomax.co.kr/rss/S1N23.xml", source: 인포맥스, asset_hint: macro, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
   - {feed_id: infomax_policy,   url: "https://news.einfomax.co.kr/rss/S1N15.xml", source: 인포맥스, asset_hint: kr_macro, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9}
+  - {feed_id: infomax_ib,          url: "https://news.einfomax.co.kr/rss/S1N7.xml",  source: 인포맥스, asset_hint: "kr_corp,ib", language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: analysis}
+  - {feed_id: infomax_feature,     url: "https://news.einfomax.co.kr/rss/S1N13.xml", source: 인포맥스, asset_hint: kr_market, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: analysis}
+  - {feed_id: infomax_column,      url: "https://news.einfomax.co.kr/rss/S1N9.xml",  source: 인포맥스, asset_hint: opinion, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: analysis}
+  - {feed_id: infomax_contrib_ext, url: "https://news.einfomax.co.kr/rss/S1N12.xml", source: 인포맥스, asset_hint: research, language: ko, poll_minutes: 360, body_mode: summary, tz_offset: 9, tier: analysis}
+  - {feed_id: infomax_contrib,     url: "https://news.einfomax.co.kr/rss/S1N19.xml", source: 인포맥스, asset_hint: research, language: ko, poll_minutes: 360, body_mode: summary, tz_offset: 9, tier: analysis}
+  - {feed_id: infomax_realestate,  url: "https://news.einfomax.co.kr/rss/S1N17.xml", source: 인포맥스, asset_hint: kr_realestate, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: wire}
   # ── 한국 독립 경제지 (연합 계열 밖) ──
   - {feed_id: hankyung,   url: "https://www.hankyung.com/feed/finance",  source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
+  - {feed_id: hk_economy,    url: "https://www.hankyung.com/feed/economy",       source: 한국경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: hk_realestate, url: "https://www.hankyung.com/feed/realestate",    source: 한국경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: hk_it,         url: "https://www.hankyung.com/feed/it",            source: 한국경제, asset_hint: kr_tech, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: hk_intl,       url: "https://www.hankyung.com/feed/international", source: 한국경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: hk_society,    url: "https://www.hankyung.com/feed/society",       source: 한국경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
   - {feed_id: mk_stock,   url: "https://www.mk.co.kr/rss/50200011/",     source: 매일경제, asset_hint: kr_stock, language: ko, poll_minutes: 30, body_mode: summary}
+  - {feed_id: mk_economy,    url: "https://www.mk.co.kr/rss/30100041/", source: 매일경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_politics,   url: "https://www.mk.co.kr/rss/30200030/", source: 매일경제, asset_hint: kr_politics, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_society,    url: "https://www.mk.co.kr/rss/50400012/", source: 매일경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_intl,       url: "https://www.mk.co.kr/rss/30300018/", source: 매일경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_corp,       url: "https://www.mk.co.kr/rss/50100032/", source: 매일경제, asset_hint: kr_corp, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_realestate, url: "https://www.mk.co.kr/rss/50300009/", source: 매일경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
   # ── 미국 주식/크립토/원자재 (Benzinga: /feed 열림, 요약 풍부) ──
   - {feed_id: bz_news,     url: "https://www.benzinga.com/news/feed",                   source: Benzinga, asset_hint: us_stock, poll_minutes: 5,  body_mode: summary}
   - {feed_id: bz_markets,  url: "https://www.benzinga.com/markets/feed",                source: Benzinga, asset_hint: us_market, poll_minutes: 5,  body_mode: summary}
   - {feed_id: bz_movers,   url: "https://www.benzinga.com/movers/feed",                 source: Benzinga, asset_hint: us_stock, poll_minutes: 5,  body_mode: summary}
   - {feed_id: bz_crypto,   url: "https://www.benzinga.com/markets/cryptocurrency/feed", source: Benzinga, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   - {feed_id: bz_commod,   url: "https://www.benzinga.com/markets/commodities/feed",    source: Benzinga, asset_hint: commodity, poll_minutes: 60, body_mode: summary}
+  - {feed_id: bz_largecap,   url: "https://www.benzinga.com/news/large-cap/feed",        source: Benzinga, asset_hint: us_stock, poll_minutes: 15, body_mode: summary, tier: wire}
+  - {feed_id: bz_smallcap,   url: "https://www.benzinga.com/topic/small-cap/feed",       source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_insider,    url: "https://www.benzinga.com/news/insider-trades/feed",   source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_tech,       url: "https://www.benzinga.com/tech/feed",                  source: Benzinga, asset_hint: tech,     poll_minutes: 15, body_mode: summary, tier: wire}
+  - {feed_id: bz_ai,         url: "https://www.benzinga.com/topic/ai/feed",              source: Benzinga, asset_hint: tech,     poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_etf,        url: "https://www.benzinga.com/etfs/feed",                  source: Benzinga, asset_hint: etf,      poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_rumors,     url: "https://www.benzinga.com/news/rumors/feed",           source: Benzinga, asset_hint: rumor,    poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_offerings,  url: "https://www.benzinga.com/news/offerings/feed",        source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_ideas,      url: "https://www.benzinga.com/trading-ideas/feed",         source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: bz_sotd,       url: "https://www.benzinga.com/topic/stock-of-the-day/feed", source: Benzinga, asset_hint: us_stock, poll_minutes: 60, body_mode: summary, tier: wire}
+  - {feed_id: bz_afterhours, url: "https://www.benzinga.com/after-hours-center/feed",    source: Benzinga, asset_hint: us_stock, poll_minutes: 60, body_mode: summary, tier: wire}
+  - {feed_id: bz_bonds,      url: "https://www.benzinga.com/markets/bonds/feed",         source: Benzinga, asset_hint: us_bond,  poll_minutes: 60, body_mode: summary, tier: wire}
   # ── 크립토 전용 ──
   - {feed_id: coindesk,      url: "https://www.coindesk.com/arc/outboundfeeds/rss/", source: CoinDesk, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   - {feed_id: cointelegraph, url: "https://cointelegraph.com/rss",                   source: Cointelegraph, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
@@ -26,7 +55,14 @@ feeds:
   # ── 채권/매크로/정책 ──
   - {feed_id: fed,           url: "https://www.federalreserve.gov/feeds/press_all.xml", source: Fed, asset_hint: us_policy, poll_minutes: 60, body_mode: summary}
   - {feed_id: ecb,           url: "https://www.ecb.europa.eu/rss/press.html",            source: ECB, asset_hint: eu_policy, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증); HTTP 200·RSS 정상
-  - {feed_id: investing_bond, url: "https://www.investing.com/rss/bonds.rss",            source: Investing, asset_hint: us_bond, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
+  - {feed_id: investing_bond, url: "https://www.investing.com/rss/bonds.rss",            source: Investing, asset_hint: us_bond, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증); HTTP 200·RSS 정상
+  # ── 중앙은행·1차 데이터 (primary; URL은 프로빙으로 확정) ──
+  - {feed_id: bis_cbspeeches, url: "https://www.bis.org/doclist/cbspeeches.rss", source: BIS, asset_hint: global_policy, poll_minutes: 360, body_mode: summary, tier: primary}
+  - {feed_id: bis_pub,        url: "https://www.bis.org/doclist/all_rss.xml",    source: BIS, asset_hint: global_policy, poll_minutes: 720, body_mode: headline, tier: primary}
+  - {feed_id: fed_speeches,   url: "https://www.federalreserve.gov/feeds/speeches.xml",        source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
+  - {feed_id: fed_fomc,       url: "https://www.federalreserve.gov/feeds/press_monetary.xml", source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
+  - {feed_id: eia_today,      url: "https://www.eia.gov/rss/todayinenergy.xml",  source: EIA, asset_hint: energy, poll_minutes: 360, body_mode: summary, tier: primary}
+  - {feed_id: bls_news,       url: "https://www.bls.gov/feed/news_release.rss",  source: BLS, asset_hint: us_macro, poll_minutes: 720, body_mode: headline, tier: primary}
   # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ──
   - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: summary}   # description 채워짐 → 승격(2026-06-12 검증)
   - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech, poll_minutes: 15, body_mode: headline}
@@ -38,6 +74,8 @@ feeds:
   - {feed_id: bbg_opinion,    url: "https://feeds.bloomberg.com/bview/news.rss",      source: Bloomberg, asset_hint: opinion,  poll_minutes: 30, body_mode: summary}
   - {feed_id: bbg_crypto,     url: "https://feeds.bloomberg.com/crypto/news.rss",     source: Bloomberg, asset_hint: crypto,   poll_minutes: 30, body_mode: summary}
   - {feed_id: bbg_wealth,     url: "https://feeds.bloomberg.com/wealth/news.rss",     source: Bloomberg, asset_hint: wealth,   poll_minutes: 30, body_mode: summary}
+  - {feed_id: bbg_industries, url: "https://feeds.bloomberg.com/industries/news.rss", source: Bloomberg, asset_hint: industries, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: bbg_green,      url: "https://feeds.bloomberg.com/green/news.rss",      source: Bloomberg, asset_hint: "esg,energy", poll_minutes: 30, body_mode: headline, tier: wire}
   # ── 매크로/루머 헤드라인 (Google News 쿼리; 본문 없음) ──
   - {feed_id: gn_rumor,         url: "https://news.google.com/rss/search?q=(reportedly+OR+%22in+talks%22+OR+%22sources+say%22)+(stock+OR+merger+OR+acquisition+OR+raise)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: rumor, poll_minutes: 30, body_mode: headline}
   - {feed_id: gn_kr_chips,      url: "https://news.google.com/rss/search?q=(%22SK+Hynix%22+OR+Samsung)+(hedge+fund+OR+leverage+OR+chip)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: kr_stock, poll_minutes: 30, body_mode: headline}
@@ -46,3 +84,29 @@ feeds:
   # ── 특수: 트럼프 원문 / Axios ──
   - {feed_id: trump_truth, url: "https://trumpstruth.org/feed",        source: TruthSocial, asset_hint: "trump,policy", poll_minutes: 15, body_mode: full}
   - {feed_id: axios,       url: "https://www.axios.com/feeds/feed.rss", source: Axios, asset_hint: "policy,scoop", poll_minutes: 60, body_mode: summary}
+  # ── 무료 리서치 (analysis; 프로빙으로 확정, 실패는 주석 제외) ──
+  - {feed_id: fed_liberty,     url: "https://libertystreeteconomics.newyorkfed.org/feed/", source: LibertyStreet, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: imf_blog,        url: "https://www.imf.org/en/Blogs/rss",                    source: IMF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: voxeu,           url: "https://cepr.org/rss/voxeu.xml",                      source: VoxEU, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: nber_wp,         url: "https://www.nber.org/rss/new.xml",                    source: NBER, asset_hint: research, poll_minutes: 720, body_mode: headline, tier: analysis}
+  - {feed_id: boe_underground, url: "https://bankunderground.co.uk/feed/",                 source: BankUnderground, asset_hint: uk_policy, poll_minutes: 720, body_mode: summary, tier: analysis}
+  - {feed_id: cfr_setser,      url: "https://www.cfr.org/blog/follow-money/rss.xml",       source: CFR, asset_hint: flows, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: calculated_risk, url: "https://www.calculatedriskblog.com/feeds/posts/default", source: CalculatedRisk, asset_hint: us_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: damodaran,       url: "https://aswathdamodaran.blogspot.com/feeds/posts/default", source: Damodaran, asset_hint: equity, poll_minutes: 720, body_mode: summary, tier: analysis}
+  - {feed_id: klement,         url: "https://klementoninvesting.substack.com/feed",        source: Klement, asset_hint: macro, poll_minutes: 720, body_mode: summary, tier: analysis}
+  # ── 에너지·원자재 (사용자 신규 토픽; 프로빙) ──
+  - {feed_id: iea_news,     url: "https://www.iea.org/rss/news",                                  source: IEA, asset_hint: energy, poll_minutes: 360, body_mode: headline, tier: primary}
+  - {feed_id: opec_press,   url: "https://www.opec.org/opec_web/en/press_room/rss.xml",           source: OPEC, asset_hint: energy, poll_minutes: 720, body_mode: headline, tier: primary}
+  - {feed_id: kitco_metals, url: "https://www.kitco.com/news/category/mining/rss",                source: Kitco, asset_hint: metals, poll_minutes: 60, body_mode: summary, tier: wire}
+  # ── 한국 기관 (RSS 경로 불확실 — 프로빙, 미제공 시 주석 제외) ──
+  - {feed_id: kcif_flash,   url: "https://www.kcif.or.kr/rss/newsflash.xml",  source: KCIF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
+  - {feed_id: bok_press,    url: "https://www.bok.or.kr/portal/bbs/B0000338/rss.do", source: 한국은행, asset_hint: kr_policy, poll_minutes: 360, body_mode: headline, tier: primary}
+  # ── 주요 와이어 (페이월; 공개 RSS 헤드라인/요약만, 스크래핑 금지) ──
+  - {feed_id: wsj_markets,  url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",   source: WSJ, asset_hint: us_market, poll_minutes: 15, body_mode: summary, tier: wire}
+  - {feed_id: wsj_world,    url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml",      source: WSJ, asset_hint: global, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: wsj_business, url: "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml",  source: WSJ, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: wsj_tech,     url: "https://feeds.a.dj.com/rss/RSSWSJD.xml",           source: WSJ, asset_hint: tech, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: wsj_opinion,  url: "https://feeds.a.dj.com/rss/RSSOpinion.xml",        source: WSJ, asset_hint: opinion, poll_minutes: 60, body_mode: summary, tier: analysis}
+  - {feed_id: ft_home,      url: "https://www.ft.com/rss/home",                      source: FT, asset_hint: global, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: ft_markets,   url: "https://www.ft.com/markets?format=rss",            source: FT, asset_hint: global_market, poll_minutes: 30, body_mode: headline, tier: wire}
+  - {feed_id: ft_economy,   url: "https://www.ft.com/global-economy?format=rss",     source: FT, asset_hint: macro, poll_minutes: 30, body_mode: headline, tier: wire}
