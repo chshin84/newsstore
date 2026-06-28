@@ -22,18 +22,13 @@ feeds:
   - {feed_id: hk_intl,       url: "https://www.hankyung.com/feed/international", source: 한국경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
   - {feed_id: hk_society,    url: "https://www.hankyung.com/feed/society",       source: 한국경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
   - {feed_id: mk_stock,   url: "https://www.mk.co.kr/rss/50200011/",     source: 매일경제, asset_hint: kr_stock, language: ko, poll_minutes: 30, body_mode: summary}   # 프로빙 HTTP 403(2026-06-28) — 기존 피드, 범위 밖
-  # mk_economy 프로빙 실패(HTTP 403) 2026-06-28 — mk.co.kr Docker IP 차단, 제외
-  # - {feed_id: mk_economy,    url: "https://www.mk.co.kr/rss/30100041/", source: 매일경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
-  # mk_politics 프로빙 실패(HTTP 403) 2026-06-28 — mk.co.kr Docker IP 차단, 제외
-  # - {feed_id: mk_politics,   url: "https://www.mk.co.kr/rss/30200030/", source: 매일경제, asset_hint: kr_politics, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
-  # mk_society 프로빙 실패(HTTP 403) 2026-06-28 — mk.co.kr Docker IP 차단, 제외
-  # - {feed_id: mk_society,    url: "https://www.mk.co.kr/rss/50400012/", source: 매일경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
-  # mk_intl 프로빙 실패(HTTP 403) 2026-06-28 — mk.co.kr Docker IP 차단, 제외
-  # - {feed_id: mk_intl,       url: "https://www.mk.co.kr/rss/30300018/", source: 매일경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
-  # mk_corp 프로빙 실패(HTTP 403) 2026-06-28 — mk.co.kr Docker IP 차단, 제외
-  # - {feed_id: mk_corp,       url: "https://www.mk.co.kr/rss/50100032/", source: 매일경제, asset_hint: kr_corp, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
-  # mk_realestate 프로빙 실패(HTTP 403) 2026-06-28 — mk.co.kr Docker IP 차단, 제외
-  # - {feed_id: mk_realestate, url: "https://www.mk.co.kr/rss/50300009/", source: 매일경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  # mk.co.kr: Docker 프로빙은 403(IP 차단)이나 프로덕션·브라우저 정상 — 활성 유지
+  - {feed_id: mk_economy,    url: "https://www.mk.co.kr/rss/30100041/", source: 매일경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_politics,   url: "https://www.mk.co.kr/rss/30200030/", source: 매일경제, asset_hint: kr_politics, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_society,    url: "https://www.mk.co.kr/rss/50400012/", source: 매일경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_intl,       url: "https://www.mk.co.kr/rss/30300018/", source: 매일경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_corp,       url: "https://www.mk.co.kr/rss/50100032/", source: 매일경제, asset_hint: kr_corp, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
+  - {feed_id: mk_realestate, url: "https://www.mk.co.kr/rss/50300009/", source: 매일경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
   # ── 미국 주식/크립토/원자재 (Benzinga: /feed 열림, 요약 풍부) ──
   - {feed_id: bz_news,     url: "https://www.benzinga.com/news/feed",                   source: Benzinga, asset_hint: us_stock, poll_minutes: 5,  body_mode: summary}
   - {feed_id: bz_markets,  url: "https://www.benzinga.com/markets/feed",                source: Benzinga, asset_hint: us_market, poll_minutes: 5,  body_mode: summary}
