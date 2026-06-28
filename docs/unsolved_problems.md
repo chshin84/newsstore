@@ -6,6 +6,8 @@
 > ⚠️ **서브에이전트(worker) 주입 금지.** 이건 오케스트레이터/사용자용 백로그다. 격리된 worker가 받으면 🔴(사용자 결정 대기)를 "구현하라"로 오인 → 임의 구현 **사고**. 주입해야 한다면 "참고·구현 금지" 명시 + 🔴는 **사용자 승인 게이트** 뒤. (원칙 4: 구조가 실수를 막는다)
 
 ## 🔴 결정 필요
+- **본문 스크래핑 정책 오버라이드 (한경 body 인리치 spec)** — *증상/트리거*: spec `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`(타 세션 작성, untracked)가 한경 6피드의 **개별 기사 페이지 fetch로 본문 채움**을 제안. 그러나 `operations.md:151,157`이 "**기사 페이지 스크래핑은 안 함**(Cloud Run IP 차단·JS렌더·리다이렉트로 fragile), 본문 부족하면 피드 추가"로 **이미 결정**해 둠. spec은 이를 "wholesale 긁기만 금지였다"고 재해석하며 "사용자 의도상 허용"이라 주장하나, **그 승인 맥락은 이 세션에서 검증 불가**. domain-spec-review 3렌즈 중 grounding·adversarial이 동일 critical 지목 → **escalated**(spec 마커 escalated). *처방(다음엔 이렇게)*: 사용자가 **무스크래핑 정책 오버라이드를 명시 승인**해야 진행. 승인 시 ⓐ operations.md 정책 줄도 같이 갱신(SSOT 드리프트 방지) ⓑ 구현 전 아래 major 4건 반영. **🔴 누구도 자율 구현 금지.**
+  - (review major, 승인 시 반영) ① **동시 폴링 레이스** — `filter_new_ids`가 upsert 전이라 폴 겹치면 같은 항목 이중 fetch 가능(가드 없음). ② **레이트리밋 부재** — 폴당 신규 N건을 연속 동기 GET → 프로덕션 IP 차단 위험(repo의 IP-비대칭 교훈 직결). ③ **드리프트 수동탐지** — 빈본문률 로그만 있고 알람 임계 없음(한경 HTML 변경 시 조용히 헤드라인 강등). ④ **타임아웃 미명시** — `fetch_body`가 ssl_config 기본 90s 상속, 한 기사 hang이 피드 전체 90s 블록. (consistency 렌즈는 무결, minor `filter_new_ids`는 "새 메서드"인데 spec이 "기존 로직 재사용"으로 오기 — §4.2 문구 교정 권장.)
 - ~~**infra.md 스킬 / docker-compose 부활**~~ — **해소.** infra **파일**(Dockerfile/cloudbuild)은 도구가 먹는 실파일이라 .md로 갈음 불가(결론 유지). docker-compose는 **이미 부활됨**(커밋 e6acedb, 린 test/collect 서비스 — `docker compose run --rm test`). 결정 대기 아님.
 - **Step-2 태그 통제 어휘(vocabulary)** — 어디까지 한정할지(티커 유니버스 / 엔티티: 연준·ECB·BOJ·재무부·OPEC… / 토픽: 금리·인플레·채권·FX·크립토·실적·M&A·지정학…). "이란 전쟁" 류 *사건*은 태그가 아니라 *스토리(클러스터)*로 잡기로 함.
 - **태깅 LLM 선택** — Haiku vs Gemini Flash (둘 다 무료/저가). 임베딩이 Gemini면 한 provider 이점.
