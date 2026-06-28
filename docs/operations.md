@@ -148,11 +148,11 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
 
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
-- **본문은 "피드가 주면 사용, 안 주면 헤드라인".** 기사 페이지 스크래핑은 **안 함**(Cloud Run IP 차단·JS렌더·GN 리다이렉트로 fragile). 본문 부족하면 **피드를 더 추가**(Bloomberg 카테고리처럼).
+- **본문 정책(2026-06-28 갱신 — 무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.
 - **피드 추가 전 curl 실측**(HTTP·item수·desc 유무) → 되는 것만 등록 → A 재배포.
 - **콘솔 수동 대신 REST**로 GCP/Firebase 운영(인증 공유).
 - 환경 두 축(`APP_ENV`=home/office, `NEWSSTORE_BACKEND`=sqlite/firestore)은 `README.md` 표 참조.
 
 ## 알아둘 함정
-- 수집기는 **Cloud Run 데이터센터 IP**라 일부 사이트가 차단함(fxstreet 제거됨, Bloomberg 기사본문 403). 본문은 **피드 자체 description**으로만 — 기사 스크래핑은 안 함.
+- 수집기는 **Cloud Run 데이터센터 IP**라 일부 사이트가 차단함(fxstreet 제거됨, Bloomberg 기사본문 403). → 기사 본문 fetch는 **도달 실증된 화이트리스트만**(한경 OK; Investing/Bloomberg/FT 기사페이지 403). 화이트리스트 fetch가 IP를 막히게 하면 RSS 수집까지 영향이므로 **바운드(상한·타임아웃·스로틀)+배포 스모크**로 관리(본문 정책 §접근 방식).
 - 피드 추가는 "되는지 curl 테스트 → feeds.yaml → A 재배포" 순서.
