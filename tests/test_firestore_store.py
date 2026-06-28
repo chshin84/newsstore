@@ -51,3 +51,14 @@ def test_upsert_preserves_processed_on_resee(store):
     assert store.mark_processed(["a"], processed_at=NOW) == 1
     assert store.upsert_items([_item("a")]) == 0            # re-seen, not re-written
     assert store.get_unprocessed() == []                    # still processed
+
+
+def test_filter_new_ids_returns_only_unstored(store):
+    from datetime import datetime, timezone
+    from newsstore.contracts.models import RawItem
+    now = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
+    stored = RawItem(id="aaa", feed_id="f", source="S", url="https://e/a", title="t", fetched_at=now)
+    store.upsert_items([stored])
+    out = store.filter_new_ids(["aaa", "bbb", "ccc"])
+    assert out == ["bbb", "ccc"]          # 저장된 aaa 제외, 순서 보존
+    assert store.filter_new_ids([]) == []

@@ -176,6 +176,14 @@ class FirestoreStore:
             "story_id": story_id,
         }, merge=True)
 
+    def filter_new_ids(self, ids: list[str]) -> list[str]:
+        if not ids:
+            return []
+        col = self.db.collection(_ITEMS)
+        refs = [col.document(i) for i in ids]
+        existing = {s.id for s in self.db.get_all(refs) if s.exists}
+        return [i for i in ids if i not in existing]
+
     def close(self) -> None:
         pass
 

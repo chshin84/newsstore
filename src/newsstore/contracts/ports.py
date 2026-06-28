@@ -23,6 +23,10 @@ class Store(Protocol):
         """Mark ids processed (idempotent). Returns rows actually changed."""
         ...
 
+    def filter_new_ids(self, ids: list[str]) -> list[str]:
+        """`items`에 아직 없는 id만(입력 순서 보존)."""
+        ...
+
     def set_meta(self, key: str, value: dict) -> None:
         """Write a small public-read metadata doc for the site (e.g. 'sources')."""
         ...
