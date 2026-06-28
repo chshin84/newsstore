@@ -66,8 +66,8 @@ feeds:
   - {feed_id: fed_speeches,   url: "https://www.federalreserve.gov/feeds/speeches.xml",        source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
   - {feed_id: fed_fomc,       url: "https://www.federalreserve.gov/feeds/press_monetary.xml", source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
   - {feed_id: eia_today,      url: "https://www.eia.gov/rss/todayinenergy.xml",  source: EIA, asset_hint: energy, poll_minutes: 360, body_mode: summary, tier: primary}
-  # bls_news/opec_press: Docker 프로빙 403(IP 차단)이나 비권위 — 활성 유지, 배포 스모크에서 최종 검증
-  - {feed_id: bls_news,    url: "https://www.bls.gov/feed/news_release.rss",            source: BLS, asset_hint: us_macro, poll_minutes: 720, body_mode: headline, tier: primary}
+  # bls_news/opec_press: 배포 스모크에서 프로덕션(Cloud Run IP)도 403 차단 확인(2026-06-28) — 제외
+  # - {feed_id: bls_news,    url: "https://www.bls.gov/feed/news_release.rss",            source: BLS, asset_hint: us_macro, poll_minutes: 720, body_mode: headline, tier: primary}
   # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ──
   - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: summary}   # description 채워짐 → 승격(2026-06-12 검증)
   - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech, poll_minutes: 15, body_mode: headline}
@@ -104,7 +104,8 @@ feeds:
   # ── 에너지·원자재 (사용자 신규 토픽; 프로빙) ──
   # iea_news 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /news.rss 경로도 없음, 제외
   # - {feed_id: iea_news,     url: "https://www.iea.org/news.rss",                                  source: IEA, asset_hint: energy, poll_minutes: 360, body_mode: headline, tier: primary}
-  - {feed_id: opec_press,  url: "https://www.opec.org/opec_web/en/press_room/rss.xml", source: OPEC, asset_hint: energy, poll_minutes: 720, body_mode: headline, tier: primary}
+  # opec_press: 배포 스모크에서 프로덕션(Cloud Run IP)도 403 차단 확인(2026-06-28) — 제외
+  # - {feed_id: opec_press,  url: "https://www.opec.org/opec_web/en/press_room/rss.xml", source: OPEC, asset_hint: energy, poll_minutes: 720, body_mode: headline, tier: primary}
   # kitco_metals 재프로빙 실패(entries=0) 2026-06-28 UA적용 — /news/category/mining/feed 응답 있으나 항목 없음, 제외
   # - {feed_id: kitco_metals, url: "https://www.kitco.com/news/category/mining/feed",              source: Kitco, asset_hint: metals, poll_minutes: 60, body_mode: summary, tier: wire}
   # ── 한국 기관 (RSS 경로 불확실 — 프로빙, 미제공 시 주석 제외) ──
