@@ -1,5 +1,7 @@
 # newsstore Step-2 — 인리치먼트(태깅·임베딩·스토리 클러스터) 설계
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+
 _작성: 2026-06-13 · 상태: 결정 완료, 구현 계획 대기 · 스파이크로 핵심 검증됨_
 
 ## 1. 목표 / 범위
@@ -91,3 +93,5 @@ for 새 기사 i (kind=story, 임베딩 있음):
 7. (Phase 2) 사이트 타임라인 UI.
 
 > 구현은 SDD로, **각 서브에이전트에 `coding-principles` + `solved_problems`의 gotchas 주입**(`docs/subagent-context.md`).
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

@@ -1,5 +1,7 @@
 # newsstore — GCP 배포 + 뷰어 사이트 설계
 
+> ⚠️ **부분 분할 (2026-06-28):** 이 문서의 **인리치 스키마(`processed`·`tags`·임베딩 등)와 큐 인덱스는 `news-analytics` 경계**로 이전됐다 — 그 부분의 SSOT는 **`docs/firestore-contract.md`**. **GCP 배포·뷰어 사이트·수집 부분만 newsstore에 유효.**
+
 _작성: 2026-06-12 · 상태: 승인됨, 구현 계획 대기_
 
 ## 1. 목표 / 범위
@@ -119,3 +121,5 @@ match /feed_state/{id} { allow read: if false; allow write: if false; }
 - 호스트에 로컬 Python 없음 → 로컬 실행/테스트는 Docker.
 - infomax 5피드 naive-KST pubDate → `tz_offset:9` 보정(기존 로직).
 - 사무실 ePrism 프록시 ↔ Firestore gRPC 충돌 우려는 **수집기를 클라우드에서 돌려 회피**(회사 PC에서 Firestore 직접 쓰기 안 함).
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

@@ -1,5 +1,7 @@
 # Phase B — VectorIndex 포트 구현 계획
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+
 > **For agentic workers:** TDD. 각 단계 전체 스위트 그린(현재 102) 유지. `coding-principles` + `solved_problems` gotchas 적용.
 
 **Goal:** "열린 스토리 중 가장 가까운 것 찾기"를 `VectorIndex` 포트로 추상화하고, processor가 포트를 통해 클러스터링하게 한다. InMemory 어댑터 1개만(Firestore find_nearest는 이연).
@@ -190,3 +192,5 @@ log.info("cluster pass: seeded %d open-story centroids", len(index._e))
 - **경계**: InMemoryVectorIndex는 enrich(클러스터 수학 사용) → store 경계 안 건드림. 포트는 contracts. 경계 가드 테스트 계속 그린.
 - **동작 보존**: 클러스터 결과 동일(같은 cosine·threshold). 기본 경로가 per-item→per-batch로 *개선*(회귀 아님).
 - **플레이스홀더**: 없음.
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

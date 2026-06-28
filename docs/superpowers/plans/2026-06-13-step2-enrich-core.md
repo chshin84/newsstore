@@ -1,5 +1,7 @@
 # Step-2 인리치먼트 — Plan 1: 순수 로직 (taxonomy · classify · cluster) 구현 계획
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development (권장) 또는 executing-plans. 스텝은 `- [ ]` 체크박스.
 > **SDD 시 각 서브에이전트 프롬프트에 `docs/coding-principles.md` + `docs/solved_problems.md`의 '핵심 gotchas'를 주입**(`docs/subagent-context.md`). unsolved는 주입 X.
 
@@ -310,3 +312,5 @@ git commit -m "feat: centroid + assign (online story matching, threshold 0.83, n
 - **Plan 2** — Store 확장: `items` enrichment 쓰기(kind/tags/embedding/story_id) + `stories` 컬렉션 + `get_open_stories(window)` + `create_story`/`append_to_story`(centroid 증분). sqlite+firestore, mock 테스트.
 - **Plan 3** — Gemini Flash 태깅(10배치)+리뷰어 + Gemini 임베딩(Tier3 키). 모킹 테스트 + 라이브 소량.
 - **Plan 4** — Processor 오케스트레이션 + Cloud Run Job #2 + Scheduler 배포.
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

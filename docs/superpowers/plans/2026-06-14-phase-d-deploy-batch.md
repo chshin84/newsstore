@@ -1,5 +1,7 @@
 # Phase D — 쓰기 배치화 + Cloud Run 인리치 배포 구현 계획
 
+> ⚠️ **부분 분할 (2026-06-28):** **Cloud Run 인리치 배포(Job#2/#3)는 `news-analytics` 소유**(과도기로 newsstore 이미지에서 운영 — `docs/operations.md §E·§F`, 경계: **`docs/firestore-contract.md`**). 수집 측 쓰기 배치화만 newsstore 유효.
+
 > **For agentic workers:** TDD(배치쓰기) + 운영(배포). `coding-principles` + `solved_problems` gotchas.
 
 **Goal:** 인리치의 Firestore 왕복을 줄이고(배치 쓰기), 인리치를 **Cloud Run Job#2**(서울, 10분)로 서버사이드 배포해 over-internet 병목을 근본 제거한다.
@@ -114,3 +116,5 @@ gcloud scheduler jobs create http newsstore-enrich-10min --location=asia-northea
 - **YAGNI**: find_nearest·Pass2 자동화 제외. 배치쓰기는 비용↓(서울 vCPU-s↓).
 - **외부작용**: Task3만 과금·자원생성(사용자 승인 게이트). Task1·2는 안전.
 - **리스크**: mark_processed 멱등 반환 의미 변경 → 호출부 무영향 확인 + 테스트 갱신.
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

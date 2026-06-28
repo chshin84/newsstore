@@ -1,5 +1,7 @@
 # 플랜 A — 스토리 요약 패스 (백엔드) · 구현 계획
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+
 _근거 설계: `docs/superpowers/specs/2026-06-15-newsstore-story-timeline-ui-design.md` (3렌즈 리뷰 통과). 이 플랜은 그 §3·§5·§6의 백엔드 절반만 구현한다(프론트=플랜 B). TDD — 실패 테스트 먼저, Docker 에뮬레이터로 green._
 
 ## 0. 목표 한 줄

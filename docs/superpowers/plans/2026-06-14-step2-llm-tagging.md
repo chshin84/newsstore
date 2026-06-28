@@ -1,5 +1,7 @@
 # Step-2 인리치먼트 — Plan 3: LLM 태깅 + 리뷰어 + 임베딩 구현 계획
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:test-driven-development.
 > **이 기능은 런타임 LLM 호출** → `disciplined-coder:advisor-nonfunctional`(비기능 체크리스트)·`advisor-fit`(적합성) 적용. **각 서브에이전트에 `coding-principles` + `solved_problems`의 '핵심 gotchas' 주입**(`docs/subagent-context.md`). unsolved는 주입 X.
 
@@ -288,3 +290,5 @@ def embed_items(items: list, client: LLMClient) -> list[list[float]]:
 - **disciplined-coder**: 비기능 8항목 = Task1(timeout/retry/None/에러/비용배치/관측/비밀) · 적합성 = Task2 결정론 validator(코드 우선) · 차원계약 = Task3.
 - **타입 일관**: `LLMClient.generate_json(prompt,*,timeout)->dict` · `embed(text,*,timeout)->list[float]` 전 모듈 일관. DI라 google-genai 없이 로직 테스트.
 - **비파괴**: 검증 탈락 태그는 제거하되 원본 raw는 로깅(저장 tags만 필터). 결과수 불일치는 빈 태그로 정렬 보존.
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

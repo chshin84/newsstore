@@ -1,5 +1,7 @@
 # Step-2 인리치먼트 — Plan 2: Store 확장 (stories + item enrichment) 구현 계획
 
+> ⚠️ **부분 분할 (2026-06-28):** 이 문서가 추가한 **인리치 store 메서드(`save_enrichment`·`stories` CRUD·요약)는 `news-analytics` 경계**다 — 분리 시 `ports.py`에서 분할 대상. 그 부분의 SSOT는 **`docs/firestore-contract.md`**. 수집 store 메서드만 newsstore 유효.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: superpowers:subagent-driven-development.
 > **SDD 시 각 서브에이전트에 `coding-principles` + `solved_problems`의 '핵심 gotchas'를 주입**(`docs/subagent-context.md`). unsolved는 주입 X.
 
@@ -345,3 +347,5 @@ git commit -m "feat: save_enrichment (kind/tags/embedding/story_id) + sqlite ite
 ## 다음 Plan
 - **Plan 3** — Gemini Flash 태깅(10배치)+리뷰어 + Gemini 임베딩(Tier3 키), 모킹 테스트.
 - **Plan 4** — Processor 오케스트레이션(Plan 1 assign + Plan 2 store + Plan 3 LLM 결합) + Cloud Run Job #2 + Scheduler.
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

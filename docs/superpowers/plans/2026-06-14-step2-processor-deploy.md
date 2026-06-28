@@ -1,5 +1,7 @@
 # Step-2 인리치먼트 — Plan 4: Processor 오케스트레이션 + 배포
 
+> 🔀 **DEPRECATED (분할 · 2026-06-28):** 이 문서가 다루는 인리치/분석은 별개 repo **`news-analytics`** 소유다. newsstore에선 히스토리로만 보존한다. 경계·계약과 소유권 인덱스는 **`docs/firestore-contract.md`** 참조.
+
 > **상태(2026-06-14): 로직·엔트리포인트 구현·테스트 완료. 배포는 사용자 게이트(키·이미지 빌드).**
 
 **Goal:** Plan 1(classify/assign)·Plan 2(store)·Plan 3(tagger/embedder)를 엮는 Processor를 만들고, Cloud Run Job #2로 5분/시간 주기 배포한다.
@@ -24,3 +26,5 @@
 - Spec §3 파이프라인 ①~⑤ = `process_once` 전 단계 커버. §12 step5(클러스터 배선)·step6(Job배포) = 본 Plan.
 - disciplined-coder: 비용 상한(배치/MAX_BATCHES)·비밀 분리(Secret Manager·fail-loud)·구조화 에러(LLMError→exit) 반영.
 - 비파괴: 전 아이템 mark_processed(저장 보존), spam/digest도 kind 기록.
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->

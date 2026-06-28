@@ -1,5 +1,7 @@
 # newsstore 모듈러 리스트럭처 + 벡터검색 포트화 — 설계
 
+> ⚠️ **부분 분할 (2026-06-28):** 이 문서의 **`enrich/` 모듈·VectorIndex·인리치 store 포트는 `news-analytics` 소유**로 이전 대상이다(경계·계약: **`docs/firestore-contract.md`**). **`collect`/`store`(수집)/`contracts` 구조만 newsstore에 유효.**
+
 _작성: 2026-06-14 · 상태: 설계(검토중) · 동기: 코드 깔끔함/관심사 분리, 벡터검색 정식화, 서버사이드 인리치_
 
 ## 1. 목표 / 범위
@@ -112,3 +114,5 @@ class LLMClient(Protocol):
 ## 10. 연결
 - 코드 원칙: `docs/coding-principles.md`(SSOT·Fail-Loud·강건성). 함정: `solved_problems.md`.
 - 후속: 이 리스트럭처 위에서 **스토리 타임라인 UI**(Phase 2, 별도 spec).
+
+<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
