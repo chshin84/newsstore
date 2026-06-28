@@ -41,3 +41,14 @@ def test_distinct_sources_preserves_order_and_dedups():
              FeedConfig(feed_id="b", url="u", source="인포맥스"),
              FeedConfig(feed_id="c", url="u", source="Bloomberg")]
     assert distinct_sources(feeds) == ["Bloomberg", "인포맥스"]
+
+def test_tier_defaults_to_wire_and_accepts_known_values():
+    from newsstore.collect.feeds import FeedConfig
+    assert FeedConfig(feed_id="a", url="https://e/a", source="S").tier == "wire"
+    assert FeedConfig(feed_id="b", url="https://e/b", source="S", tier="primary").tier == "primary"
+
+def test_tier_rejects_unknown_value():
+    import pytest
+    from newsstore.collect.feeds import FeedConfig
+    with pytest.raises(Exception):
+        FeedConfig(feed_id="a", url="https://e/a", source="S", tier="bogus")
