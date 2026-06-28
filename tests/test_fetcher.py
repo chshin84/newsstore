@@ -1,6 +1,6 @@
 import httpx
 from newsstore.collect.feeds import FeedConfig
-from newsstore.collect.fetcher import fetch_feed
+from newsstore.collect.fetcher import fetch_feed, DEFAULT_HEADERS
 
 FEED = FeedConfig(feed_id="f1", url="https://e/x.rss", source="S")
 
@@ -15,6 +15,16 @@ def test_200_returns_content_and_validators():
         res = fetch_feed(c, FEED)
         assert res.status == 200 and res.content == b"<rss/>"
         assert res.etag == "W/\"v1\"" and res.last_modified == "Mon"
+
+def test_fetch_sends_browser_user_agent():
+    seen = {}
+    def handler(req):
+        seen["ua"] = req.headers.get("user-agent", "")
+        return httpx.Response(200, content=b"<rss/>")
+    with _client(handler) as c:
+        fetch_feed(c, FEED)
+    assert seen["ua"].startswith("Mozilla/"), f"Got UA: {seen['ua']!r}"
+
 
 def test_conditional_headers_sent_and_304_handled():
     seen = {}
