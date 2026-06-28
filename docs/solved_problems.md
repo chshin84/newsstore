@@ -15,6 +15,7 @@
 - **프로덕션을 테스트에 맞춰 약화 금지**: 테스트 더블이 부실하면 *테스트*를 고쳐라(프로덕션 `client.close()`를 guard로 무르게 X).
 - **하드코딩 금지(SSOT)**: 리스트/설정은 원본(feeds.yaml 등)에서 도출, 두 곳 복제 X.
 - **`zip` 무음 절단**: `zip(a,b)`는 짧은 쪽에 맞춰 조용히 자름 → 길이 다른 벡터/리스트 연산이 가짜 결과를 냄(코사인·centroid_sum에서 3곳 재발). 길이 계약은 `len` 검증으로 fail-loud(원칙3). 합/내적은 `cluster.add_vectors`처럼 SSOT 헬퍼로 도출.
+- **피드 도달성은 IP별로 다름 (양방향)**: 사이트가 IP/UA로 차단 → **Docker 프로빙 호스트 IP ≠ 프로덕션 Cloud Run IP**라 결과가 다르다. mk.co.kr·매경은 Docker에서 `403`이나 Cloud Run(서울)에선 `200`(라이브 수집 확인); bls.gov·opec.org는 Cloud Run에서도 `403`(fxstreet 동류). → **프로빙의 `403`/타임아웃은 *비권위*(`404`만 경로 권위), 최종 판정은 배포 스모크 로그.** 수집기는 브라우저 User-Agent 전송(`collect/fetcher.py` `DEFAULT_HEADERS`)으로 UA 기반 차단 일부 회피(IP 기반은 못 푼다). 2026-06-28 소스 확장 시 확립.
 
 ## 환경 / 툴링
 - **로컬 Python 없음** — 호스트 `python`은 Windows Store 스텁. → **Docker 전용 개발**(개발 원칙 7). 모든 실행·테스트는 Docker.
