@@ -21,3 +21,16 @@ def test_spam_clickbait():
 def test_normal_story():
     assert classify_kind("Fed holds rates steady amid inflation concerns",
                          "The Federal Reserve kept rates unchanged.") == "story"
+
+
+def test_sports_kbo():
+    assert classify_kind("KBO 한국시리즈 1차전, LG 트윈스 끝내기 승리") == "sports"
+
+
+def test_sports_epl():
+    assert classify_kind("Tottenham beat Arsenal in the Premier League derby") == "sports"
+
+
+def test_finance_not_flagged_sports():
+    # 금융 기사는 sports로 오분류되면 안 됨 (느슨한 시그널 추가 시 회귀 가드)
+    assert classify_kind("Global bond yields climb as central banks signal caution") == "story"

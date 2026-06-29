@@ -193,9 +193,9 @@
     function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 호버 시 전체
 
     // === FEED-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
-    // 스팸·다이제스트는 백엔드 kind(news-analytics가 classify로 씀)로 숨긴다 — 어휘 SSOT는 classify.SPAM_SIGNALS.
+    // 스팸·다이제스트·스포츠는 백엔드 kind(classify로 씀)로 숨긴다 — 어휘 SSOT는 classify.SPAM_SIGNALS/SPORTS_SIGNALS.
     // kind 없음(미인리치 fresh)·story·미지값 → 노출(fail-soft: 분석 멈춰도 raw 뉴스 보임).
-    const HIDDEN_KINDS = new Set(["spam", "digest"]);
+    const HIDDEN_KINDS = new Set(["spam", "digest", "sports"]);
     function keepInFeed(it) { return !HIDDEN_KINDS.has(it && it.kind); }
     // === FEED-LOGIC-END ===
     function relTime(d) {
