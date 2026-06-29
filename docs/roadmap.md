@@ -22,7 +22,7 @@ newsstore = **수집·저장·호스팅 + 분석을 통합 개발**(전략: 메�
 | Phase | 내용 | 의존 | 상태 |
 |---|---|---|---|
 | **0 피드 볼륨업** | 소스 확장(델타가 보일 밀도) | — | ✅ 대부분 완료(feed-source-expansion) |
-| **1 하이브리드 렌즈 + 개체-aware 클러스터** | Tier1 큐레이션 거시렌즈(채권·FX·유가·귀금속·원자재·부동산·정책·중앙은행·산업·리스크) + Tier2 워치종목 + Tier3 emergent. `config/topics.yaml`(렌즈 SSOT, type=standing/development/sector/watch/risk) + 멀티라벨 분류 | 0 | 🚧 **클러스터 ✅ / 렌즈 Stage1(결정론) ✅**(146 green) / **Stage2 LLM ⬜** ← 측정상 Stage1 커버리지 28%라 Stage2 필요(다음). spec/plan: `2026-06-29-phase1-topic-lenses*` |
+| **1 하이브리드 렌즈 + 개체-aware 클러스터** | Tier1 큐레이션 거시렌즈(채권·FX·유가·귀금속·원자재·부동산·정책·중앙은행·산업·리스크) + Tier2 워치종목 + Tier3 emergent. `config/topics.yaml`(렌즈 SSOT, type=standing/development/sector/watch/risk) + 멀티라벨 분류 | 0 | ✅ **코드 완료**(149 green): 클러스터 이식 + **렌즈 LLM 1차 분류**(asset_hint prior + LLM + 결정론 validator + fail-soft, `--mode lenses`, flash-lite ~$0.3/일). **남음: 라이브 배포 + 실측 커버리지 검증.** spec/plan: `2026-06-29-phase1-topic-lenses*` |
 | **2 델타** | 2-타임스탬프(published_at·delta_time) + milestone 판정(recap 비생성) | 1 | ⬜ |
 | **3 dual score** | risk(렌즈 정렬) + impact(스토리 정렬) LLM 1콜 + 결정론 가드. **임계 이하 노출만 숨김(비파괴)** | 1·2 | ⬜ |
 | **4 UI** | Now Brief(상단 합성) + 좌 이벤트/우 기사시간 타임라인, risk/impact 정렬 | 1·2·3 | ⬜ |
