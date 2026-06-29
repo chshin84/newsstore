@@ -148,6 +148,35 @@ class FirestoreStore:
                         "count": count, "lenses": d.get("lenses", [])})
         return out
 
+    # --- Phase 3 dual score 패스 ---
+    def get_stories_for_scoring(self, cutoff) -> list[dict]:
+        # incremental: 새 멤버가 생긴(count > scored_count) 또는 미채점 스토리만. 48h창은 cutoff.
+        # get_stories_for_lensing 미러 + 게이트·입력 구성용 필드(lenses/summary/developments).
+        out = []
+        for snap in self.db.collection("stories").where("status", "==", "open").stream():
+            d = snap.to_dict() or {}
+            if not (d.get("last_seen") and d["last_seen"] >= cutoff):
+                continue
+            count = d.get("count", len(d.get("member_ids", [])))
+            if count <= d.get("scored_count", -1):      # 변화 없음 → 스킵(중복 채점 차단)
+                continue
+            out.append({"id": snap.id, "title": d.get("title", ""), "count": count,
+                        "lenses": d.get("lenses", []), "summary": d.get("summary", ""),
+                        "developments": d.get("developments", [])})
+        return out
+
+    def save_story_score(self, story_id, *, risk, impact, risk_reason, impact_reason,
+                         count=None, now=None) -> None:
+        # merge=True: 점수 필드만 갱신(read 없음, cross-field batch 없음) → summary/lenses/cluster
+        # 필드 보존(비파괴 by construction). save_story_lenses/save_story_summary 미러.
+        doc = {"risk": int(risk), "impact": int(impact),
+               "risk_reason": risk_reason, "impact_reason": impact_reason}
+        if count is not None:
+            doc["scored_count"] = int(count)            # incremental: 이 멤버수까지 채점함
+        if now is not None:
+            doc["scored_at"] = now
+        self.db.collection("stories").document(story_id).set(doc, merge=True)
+
     def get_story_member_signals(self, member_ids: list) -> dict:
         """멤버 기사 분류 신호를 **배치(get_all)**로 집계(per-member 읽기 금지).
         반환 {asset_hints, languages, tags(flat), keyword_text}."""
