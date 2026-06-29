@@ -24,7 +24,7 @@ newsstore = **수집·저장·호스팅 + 분석을 통합 개발**(전략: 메�
 | **0 피드 볼륨업** | 소스 확장(델타가 보일 밀도) | — | ✅ 대부분 완료(feed-source-expansion) |
 | **1 하이브리드 렌즈 + 개체-aware 클러스터** | Tier1 큐레이션 거시렌즈(채권·FX·유가·귀금속·원자재·부동산·정책·중앙은행·산업·리스크) + Tier2 워치종목 + Tier3 emergent. `config/topics.yaml`(렌즈 SSOT, type=standing/development/sector/watch/risk) + 멀티라벨 분류 | 0 | ✅ **코드 완료**(149 green): 클러스터 이식 + **렌즈 LLM 1차 분류**(asset_hint prior + LLM + 결정론 validator + fail-soft, `--mode lenses`, flash-lite ~$0.3/일). **남음: 라이브 배포 + 실측 커버리지 검증.** spec/plan: `2026-06-29-phase1-topic-lenses*` |
 | **2 델타** | 2-타임스탬프(published_at·delta_time) + milestone 판정(recap 비생성) | 1 | ⬜ |
-| **3 dual score** | risk(렌즈 정렬) + impact(스토리 정렬) LLM 1콜 + 결정론 가드. **임계 이하 노출만 숨김(비파괴)** | 1·2 | ⬜ |
+| **3 dual score** | risk(렌즈 정렬) + impact(스토리 정렬) LLM 1콜 + 결정론 가드. **임계 이하 노출만 숨김(비파괴)** | 1(·2) | ✅ **코드 완료**(169 green): type-aware 게이트(standing/watch=상시 / 그 외·emergent·unknown=멤버수≥MIN) + dual score LLM 1콜(`{risk,impact,reason}` 0~3, 결정론 validator·fail-soft) + incremental(`count>scored_count`) + `--mode score`. 입력=요약 패스 산출(델타 통합은 Phase 2 후속, 의존성 완화). **남음: 라이브 배포 + 스케일 캘리브레이션. 🔴 사용자 결정: 0~3 스케일 의미·게이트 임계(MIN=2).** spec/plan: `2026-06-29-phase3-score*` |
 | **4 UI** | Now Brief(상단 합성) + 좌 이벤트/우 기사시간 타임라인, risk/impact 정렬 | 1·2·3 | ⬜ |
 
 > **score 트리거 실험 교훈(2026-06-29):** emergent-only 구조 신호(소스확증·노벨티·velocity)는 material recall **~35–48% 천장**, 놓치는 ~60%가 단일소스 스쿠프 → **렌즈 멤버십(Phase 1)이 그 신호**다. ⇒ **Phase 1 렌즈 먼저, 그 다음 score.** velocity는 게이트로 부적합(와이어 옴니버스가 최고속도). 메모리 `hybrid-topic-lens-model`.
