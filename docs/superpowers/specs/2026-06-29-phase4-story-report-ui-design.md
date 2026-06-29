@@ -1,20 +1,18 @@
 # Phase 4 — 스토리 리포트 리더 (헤드라인·리드·아티클 생성 + 발생시각 + 전일대비 + UI) — 설계
 
-_작성: 2026-06-29 · 상태: 설계(3렌즈 리뷰 반영) · 성격: 분석 레이어 Phase 4(UI + 생성 백엔드). 상위: `docs/analysis-design.md` §8 · 순서: `docs/roadmap.md` · 계약: `docs/firestore-contract.md` · 토대: Phase 1 렌즈 · Phase 2 델타(`developments[].delta_time`) · Phase 3 score(`risk`/`impact`). 확정 목업: `docs/superpowers/specs/assets/phase4-report-mockup.html`_
+_성격: 분석 레이어 Phase 4(UI + 생성 백엔드). 상위: `docs/analysis-design.md` §8 · 계약: `docs/firestore-contract.md` · 토대: Phase 1 렌즈 · Phase 2 델타(`developments[].delta_time`) · Phase 3 score(`risk`/`impact`). 확정 목업: `docs/superpowers/specs/assets/phase4-report-mockup.html`_
 
 ## 1. 목표 / 범위
 **스토리를 "기사 더미"가 아니라 합성된 보고서로 보여준다.** 기사는 메인이 아니라 타임라인 조각의 *부품(출처)*. 섹션(렌즈)별 메인 스토리를 골라 **헤드라인 + 리드 + bullet 합성 아티클 + 발생/보도 2-타임스탬프 타임라인**으로 렌더.
 
-사용자 확정(2026-06-29, 목업 5회 반복): 가로 셀렉터(디폴트)·섹션별 메인 스토리·`delta×impact` 순 / 스토리=보고서(`headline`+`lead`+bullet `article`) / 시간 2축(발생 vs 보도) + 정렬 토글, 지연막대 폐기 / 번역·원문 토글 / impact·risk **전일대비**(▲▼)+신규 `NEW` / 스토리는 섹션 비배타·기사는 스토리 단일멤버십 / Warm Light 팔레트.
+설계 결정: 가로 셀렉터(디폴트)·섹션별 메인 스토리·`delta×impact` 순 / 스토리=보고서(`headline`+`lead`+bullet `article`) / 시간 2축(발생 vs 보도) + 정렬 토글, 지연막대 폐기 / 번역·원문 토글 / impact·risk **전일대비**(▲▼)+신규 `NEW` / 스토리는 섹션 비배타·기사는 스토리 단일멤버십 / Warm Light 팔레트.
 
 **포함**: ① **summary 패스 확장** — 같은 LLM 콜에서 `developments[].event_time`(발생시각) 추출(summary가 developments 단독 소유, §5). ② **생성 패스 `run_enrich --mode article`**(새 모듈 `enrich/article.py`) — `headline`/`lead`/`article` + 전일대비 ref(`risk_ref`/`impact_ref`/`score_ref_at`) LLM 1콜 + 결정론 validator + fail-soft. **article 패스는 `developments`를 절대 쓰지 않는다(자기 필드만 merge — 비파괴 by construction, §4).** ③ store 메서드(`get_stories_for_article`/`save_story_article`) + `ports.py` Protocol. ④ `web/index.html` 스토리 탭 재설계(셀렉터·보고서·2축 타임라인·토글·delta 배지·Warm Light) — UI는 `stories` 문서를 **클라가 직접 read**(신규 read 메서드 불요, §9). ⑤ `firestore-contract.md`/`analysis-design.md §8` 갱신.
 
 **제외(후속)**: 영문 본문 *진짜* 한국어 번역 패스(v1은 AI 합성이 한국어, 원문은 원어 노출) · 기사 멀티-스토리 소프트 멤버십 · 렌즈 risk 집계 정렬 고급화 · 응용 레이어(아키타입) · 0~3 스케일·게이트 캘리브레이션(Phase 3 후속과 공유, §15 🔴).
 
-> **신규 메서드/모드/모듈은 본 spec이 *처방*하는 것**(`--mode article`·`save_story_article`·`get_stories_for_article`·`enrich/article.py`) — 현재 코드에 없음이 정상(plan이 구현). Phase 3에서 `get_stories_for_scoring`이 동일하게 처방→구현된 선례.
-
 ## 2. 핵심 제약 (Phase 1~3 컨벤션 상속)
-- **뉴스-온리·advisory·$0 목표**: 가격 데이터 없음, 생성물=LLM advisory. 비용 $0 유지 목표(roadmap 도입부 — 무료 RSS + Gemini Flash 무료 한도), `$3/일`은 상한. flash-lite 1콜/스토리, **incremental 게이트**(`count > articled_count`)가 콜 수 통제.
+- **뉴스-온리·advisory·$0 목표**: 가격 데이터 없음, 생성물=LLM advisory. 비용 $0 유지 목표(무료 RSS + Gemini Flash 무료 한도), `$3/일`은 상한. flash-lite 1콜/스토리, **incremental 게이트**(`count > articled_count`)가 콜 수 통제.
 - **비파괴 by construction(핵심 — adversarial critical 반영)**: 각 패스는 **자기 소유 필드만** `set(..., merge=True)`로 쓴다 — read-modify-write·cross-field batch 없음. 특히 **공유 배열 `developments`는 summary 패스 단독 writer**. article 패스는 `developments`를 *읽기만* 하고 자기 필드(`headline`/`lead`/`article`/ref/`articled_*`)만 쓴다. → article·summary 동시 실행이 서로의 필드를 고아화·되돌릴 경로가 *구조적으로 없다*(save_story_score와 동일 안전성).
 - **fail-soft(스토리 단위)**: LLM 장애·빈 결과·validator 실패 → 그 스토리만 스킵(다음 런 재시도), 패스 안 죽임. 예외는 로그(코드 버그=traceback, FAIL-LOUD).
 - **결정론 우선 검증**: LLM 출력은 결정론 validator가 먼저 거른다(필수키·타입·길이상한·매직넘버 금지).
@@ -109,22 +107,6 @@ flash-lite: summary 1콜(+event_time 동봉, 추가 콜 0) · article 1콜/스�
 - 실행: `MSYS_NO_PATHCONV=1 docker compose run --rm test` → FAIL=0. UI: node 순수함수.
 
 ## 15. 범위 밖 / 후속 (Phase 표시)
-- **🔴 캘리브레이션(사용자 결정, provisional)**: `article` 톤·길이·`MAX_BULLETS`, 헤드라인 delta 가중, `REF_WINDOW`, `EVENT_SANITY_DAYS`, `IMPACT_PRIOR`, 0~3 의미(Phase 3 공유). 라이브로 조정.
+- **캘리브레이션 대상**: `article` 톤·길이·`MAX_BULLETS`, 헤드라인 delta 가중, `REF_WINDOW`, `EVENT_SANITY_DAYS`, `IMPACT_PRIOR`, 0~3 의미(Phase 3 공유). 라이브로 조정.
 - 영문→한국어 번역 패스 · 기사 멀티-스토리 소프트 멤버십 · 렌즈 risk 집계 고급화 · 응용 레이어.
-- **운영**: 새 Cloud Run Job `newsstore-article` + 스케줄러(렌즈/스코어 10분과 함께 배선, operations.md). 이미지 재빌드 시 `--mode article` 포함. **배포는 무인 실행 제외**(회사망 SSL 워크어라운드·바깥 동작 — 사용자와).
-
-## 16. 3렌즈 리뷰 (2026-06-29)
-독립 리뷰어(grounding·consistency·adversarial, 읽기전용 서브에이전트) 디스패치 → 반영:
-- **[adversarial, critical]** `developments` 배열을 article 패스가 통째로 덮어써 summary가 추가한 새 전개 손실(비파괴 위반·레이스). → **근본 해소**: `event_time` 추출을 **summary 패스로 이동**(developments 단일 writer), article은 `developments`를 *읽기만* 하고 자기 필드만 merge(save_story_article 시그니처에서 developments 제거). §2·§4·§5·§10·§14.
-- **[adversarial, major]** 헤드라인 staleness(재채점 후 재생성 안 됨) → 헤드라인 텍스트를 **delta 주도**로, impact는 UI 정렬·배지(라이브)로만 분리. §4·§7.
-- **[adversarial, major]** ref가 article 의존이라 "영원히 NEW"·stale → **NEW를 `first_seen`만으로** 판정(ref 무관), delta는 best-effort(ref 없으면 화살표 생략). §6.
-- **[adversarial, major]** event_time 인덱스 병합 순서 어긋남 → summary 단일 writer로 **병합 자체 제거**. §5.
-- **[adversarial, major]** 미채점 impact=0 정렬 매몰(콜드스타트) → `storyRank`에서 결측 impact를 `IMPACT_PRIOR`(중립)로. §7.
-- **[consistency, major]** UI read 메서드 미명시 → UI는 `stories` 문서를 **클라가 직접 read**(신규 메서드 불요) 명시. §9.
-- **[consistency, minor]** 병합 규칙 모호·상수값 부재 → 병합 제거 + 상수 명시(`REF_WINDOW`/`MAX_BULLETS`/`ARTICLE_MAX_MEMBERS`/`IMPACT_PRIOR`). §3.
-- **[grounding, critical×3]** `--mode article`·`save_story_article`·`article.py` 미존재 → **오독**(spec이 처방하는 신규 자산, plan이 구현; Phase 3 `get_stories_for_scoring` 선례). §1 주석 명시.
-- **[grounding, minor]** roadmap "§1" 인용 오류 → "도입부"로 정정. §2.
-
-decision: **regenerate 반영 완료** — critical(비파괴)을 구조적으로 제거(공유 배열 단일 writer), major 5건 해소, grounding critical은 오독 확인. 설계 폐기 없음.
-
-<!-- spec-review: passed lenses=3 date=2026-06-29 -->
+- **운영**: 새 Cloud Run Job `newsstore-article` + 스케줄러(렌즈/스코어 10분과 함께 배선, operations.md). 이미지 재빌드 시 `--mode article` 포함.

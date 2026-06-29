@@ -1,6 +1,6 @@
 # newsstore 뉴스 소스 확장 (RSS 볼륨업 + 무료 리서치 + 소스 tier) — 설계
 
-_작성: 2026-06-28 · 상태: **확정**(소스 레이어) · 성격: **자기완결 독립 스펙** — 뉴스 *소스*만 다룬다._
+_작성: 2026-06-28 · 성격: **자기완결 독립 스펙** — 뉴스 *소스*만 다룬다._
 
 > **이 스펙의 경계 (다른 세션과의 분리)**
 > - **포함**: `config/feeds.yaml` 카탈로그 확장, `FeedConfig`에 `tier` 필드 1개 추가, 라이브 프로빙, 배포.
@@ -10,7 +10,7 @@ _작성: 2026-06-28 · 상태: **확정**(소스 레이어) · 성격: **자기�
 ## 1. 목표 / 배경
 토픽/델타 같은 후속 기능은 **기사 밀도**가 받쳐줘야 의미가 있다(기사가 적으면 델타가 안 보임). 현재 `config/feeds.yaml`은 각 소스의 일부 섹션만 켜져 있다(예: 인포맥스 5/18 섹션, 한경 1섹션, 매경 1섹션). 가용 섹션을 확장하고, **가격 정보는 별도 루트**이므로 뉴스 소스는 **분석·1차 출처(중앙은행·리서치)에 가중**한다.
 
-## 2. 확정된 결정
+## 2. 거버넌스 규칙
 1. **볼륨업 = 전 소스**: 인포맥스·한경·매경·Bloomberg·Benzinga의 미추가 섹션 + **무료 리서치** 채널.
 2. **소스 tier**: `feeds.yaml`에 `tier` 필드 추가(SSOT) — `primary`(중앙은행·공시·1차) / `analysis`(리서치·심층기획·칼럼) / `wire`(헤드라인·일반 뉴스). 후속 세션의 스코어링·랭킹이 결정론 prior로 소비(본 스펙은 *필드 제공*까지만).
 3. **비파괴 검증**: 신규 피드는 **라이브 프로빙(Docker, KR IP)**으로 도달성·본문 유무 실증 후 등재. 실패는 삭제가 아니라 주석으로 남김.
@@ -144,17 +144,7 @@ URL `https://www.mk.co.kr/rss/{code}/`. 전부 `tier: wire`. 스킵: 헤드라�
 Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도 후속.
 
 ### 4.8 전문가 커버리지 체크리스트 (빈틈을 Fail-Loud로)
-프로 데스크가 커버하는 카테고리 대비 현 상태. 빈틈을 명시해 "다뤄진 척"을 막는다(원칙3·4).
-| 카테고리 | 이전 | 본 스펙 후 | 잔여 빈틈 |
-|---|---|---|---|
-| 일반 뉴스 wire | 충분 | 대폭 확대 | — |
-| 중앙은행 발언 | Fed/ECB press만 | +BIS cbspeeches 통합·Fed 허브 | 개별 CB(BOJ·PBOC) 후속 |
-| 1차 경제데이터 | 없음 | +EIA·(BLS/BEA 프로빙) | 글로벌 통계청 일부 |
-| 에너지·원자재 | Benzinga commod만 | +EIA·IEA·Kitco | Baker Hughes(RSS 미제공 가능) |
-| 기업 공시 | 없음 | EDGAR/DART(워치 스코프) | firehose·구조화 파싱(후속) |
-| 독립 애널리스트 | 없음 | +Setser·CR·Damodaran 등 | **이메일/X 전용은 RSS 불가**(§4.9) |
-| 지정학·싱크탱크 | 없음 | +CFR·PIIE 등(프로빙) | — |
-| 한국 기관 | 없음 | KCIF·BOK 등(프로빙) | RSS 미제공 기관 |
+빈틈을 명시해 "다뤄진 척"을 막는다(원칙3·4).
 
 ### 4.9 중요 노트 / 판단 (전문가 관점 — 자기 빈틈 인식)
 - **RSS로 못 닫는 빈틈(정직히)**: 엘리트 소스 상당수가 **이메일·X(트위터) 전용** — Apollo *Daily Spark*(Torsten Slok)·Fed whisperer(Nick Timiraos) 등. RSS 없음 → **본 스펙 미충족, 미래 ingest(email/X 브리지)로 후속**. 빈칸을 채운 척하지 않는다.
@@ -169,9 +159,6 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 - **등록 검증(오프라인)**: `tests/test_registry_valid.py`·`test_config.py`의 불변식 재사용 — 유니크 feed_id, `body_mode` enum, url http 시작, `tier` enum. **개수 매직넘버 금지**(floor만).
 - **라이브 프로빙(Docker, KR IP)**: 일회성 스크립트로 신규 피드를 기존 파서(`collect/parser.py`)로 fetch → `entries>0` + 본문 유무 리포트. 0건/에러 피드(특히 리서치 후보)는 feeds.yaml에서 주석 처리(비파괴), description 풍부한데 headline인 것은 summary 승격.
 - **증거 후 주장**: 프로빙 리포트 로그를 근거로 등재 확정.
-
-## 6. 배포 (사용자 게이트)
-피드 변경은 이미지 `COPY`라 **재빌드 + Cloud Run Job 갱신 + 1패스 실행** 필요(`docs/operations.md`). **사용자 승인 후에만.** 배포 후 라이브 스모크(신규 소스 items가 사이트에 노출되는지)로 검증, `docs/operations.md` 인벤토리 갱신.
 
 ## 7. 범위 밖
 - 토픽 렌즈·클러스터링·델타·스코어링·UI (다른 세션 소유).
@@ -205,12 +192,3 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 - **tz_offset**: naive-local 피드만(infomax KST=9). 그 외 생략.
 - **asset_hint**: 렌즈 라우팅 키, 멀티값은 콤마.
 
-### 9.3 방법 개선 — 채택/보류 (YAGNI 판단)
-- ✅ **SSOT 드리프트 가드**: 사이트 소스 목록은 `distinct_sources(feeds)`에서만 도출. `web/index.html` 하드코딩과 어긋나면 테스트로 터뜨림(원칙2). 가드 부재 시 Phase 0에서 추가.
-- ✅ **프로빙 = 등재 게이트**: 추측 URL 금지, 실증만(§9.1.7).
-- ✅ **aggregator 중복 명시**: BIS cbspeeches·Google News는 개별 소스와 겹침 → link 해시 dedup 의존, 근사중복은 후속.
-- ⏸ **피드 헬스 자동 prune**(연속 N회 실패 시 자동 비활성+로그): 가치 있으나 **후속**(운영 자동화). 지금은 프로빙+수동 주석으로 충분(YAGNI).
-- ⏸ **poll 케이던스 코드 도출**(velocity 클래스→poll 자동): 지금은 §9.2 규칙을 사람이 적용. 피드 수 더 늘면 코드화 검토(YAGNI).
-- ❌ **tier 소비(가중·랭킹)**: 다른 세션 소유(범위 밖).
-
-<!-- spec-review: passed lenses=3 date=2026-06-28 note=FINALIZED; added §9 selection-criteria+field-standards+method(adopt/defer); self-consistent with §4.8/§4.9/§5 -->

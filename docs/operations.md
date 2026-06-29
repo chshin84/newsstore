@@ -1,12 +1,12 @@
 # 운영 / 재배포 런북
 
-배포는 **이미 완료**돼 라이브다. 이 문서는 이후 **변경분을 클라우드에 반영**하는 명령 모음이다.
-**0→배포 최초 셋업 절차(프로젝트/Firestore/Cloud Run/Scheduler/IAM/Firebase/규칙/Hosting 생성)는 `docs/setup.md` 참조** — 이미 끝났으니 평소엔 불필요.
+이 문서는 **변경분을 클라우드에 반영**하는 명령 모음이다.
+**0→배포 최초 셋업 절차(프로젝트/Firestore/Cloud Run/Scheduler/IAM/Firebase/규칙/Hosting 생성)는 `docs/setup.md` 참조.**
 
 ## 전제
 - `gcloud`가 사용자 프로필에 인증돼 있어야 함 (`chshin84@gmail.com`, 프로젝트 `daily-recap-498506`).
   - gcloud 풀경로(머신별): 집=`C:\Users\ho381\...`, 사내=`C:\Users\CHSHIN\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`.
-  - **✅ 사내(office) SSL 차단 — 해소(레거시 편법으로 뚫음).** ePrism MITM 프록시가 최신 gcloud(urllib3 v2 strict)의 AKI 검증(`certificate verify failed: Missing Authority Key Identifier`)을 막던 문제를 **옛 gcloud(402) 컨테이너 + ePrism CA** 편법으로 우회(`scripts/deploy-office.ps1`, Cloud Run Jobs는 `beta` 트랙). → **사내·집 양쪽에서 배포 가능**(집은 MITM 없어 평범하게 §A/§F, 사내는 위 스크립트). 정공법(IT의 AKI 준수 인증서 / GitHub→Cloud Build 트리거)은 선택.
+  - **사내(office)에서 gcloud SSL 차단 시 우회:** ePrism MITM 프록시가 최신 gcloud(urllib3 v2 strict)의 AKI 검증(`certificate verify failed: Missing Authority Key Identifier`)을 막으면 **옛 gcloud(402) 컨테이너 + ePrism CA** 편법으로 우회한다(`scripts/deploy-office.ps1`, Cloud Run Jobs는 `beta` 트랙). 집은 MITM 없어 평범하게 §A/§F, 사내는 위 스크립트. 정공법(IT의 AKI 준수 인증서 / GitHub→Cloud Build 트리거)은 선택.
 - **Firebase 관리/규칙/호스팅 REST 호출 시 quota project 헤더 필수**: `x-goog-user-project: daily-recap-498506` (없으면 403). 토큰은 `gcloud auth print-access-token`.
 - 프로젝트/리전 변수는 루트 **`.env`**(`GOOGLE_CLOUD_PROJECT`, `GCP_REGION`). PowerShell 로드법은 `docs/setup.md` 참조.
 
@@ -18,10 +18,10 @@
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
 | Cloud Run Job | `newsstore-collector` (env `NEWSSTORE_BACKEND=firestore`, `GOOGLE_CLOUD_PROJECT=daily-recap-498506`, `APP_ENV=home`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) |
-| Cloud Run Job #2 | `newsstore-enricher` — Step-2 클러스터 인리치(라이브, image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
-| Cloud Scheduler #2 | `newsstore-enrich-10min` (`*/10 * * * *`, 라이브) |
-| Cloud Run Job #3 | `newsstore-summarizer` — Step-3 스토리 요약(라이브, 같은 image `processor:latest`, args `... run_enrich --mode summary`, secret 동일) |
-| Cloud Scheduler #3 | `newsstore-summary-hourly` (`5 * * * *`, 라이브) |
+| Cloud Run Job #2 | `newsstore-enricher` — Step-2 클러스터 인리치(image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
+| Cloud Scheduler #2 | `newsstore-enrich-10min` (`*/10 * * * *`) |
+| Cloud Run Job #3 | `newsstore-summarizer` — Step-3 스토리 요약(같은 image `processor:latest`, args `... run_enrich --mode summary`, secret 동일) |
+| Cloud Scheduler #3 | `newsstore-summary-hourly` (`5 * * * *`) |
 | Secret Manager | `gemini-api-key` (Job#2·#3에 `--update-secrets`로 주입; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
@@ -77,11 +77,11 @@ gcloud firestore indexes composite create --collection-group=items \
   --field-config=field-path=published_at,order=descending --async
 gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
-현재: `source+published_at`(소스필터), `tags+published_at`(태그필터), `processed+fetched_at`(Step-2 큐) — 전부 READY.
+인덱스: `source+published_at`(소스필터), `tags+published_at`(태그필터), `processed+fetched_at`(Step-2 큐).
 
-> ⚠️ **소유권 안내 (2026-06-28 분할):** 아래 §E·§F의 인리치/요약 패스는 **`news-analytics` repo 소유**다(경계·계약: `docs/firestore-contract.md`). 단 **과도기로 코드·이미지·Job이 아직 newsstore에서 운영 중**이라(처리기 이미지를 newsstore Dockerfile로 빌드) 런북을 여기 유지한다. 코드 물리 이전 완료 시 이 두 섹션은 news-analytics 운영문서로 옮기고 여기엔 포인터만 남긴다.
+> ⚠️ **소유권 안내:** 아래 §E·§F의 인리치/요약 패스는 **`news-analytics` repo 소유**다(경계·계약: `docs/firestore-contract.md`). 코드·이미지·Job이 newsstore에서 운영되므로(처리기 이미지를 newsstore Dockerfile로 빌드) 런북을 여기 유지한다.
 
-## E. Step-2 인리치먼트 Processor 배포 (Cloud Run Job #2) — ⚠️ 최초 1회 셋업
+## E. Step-2 인리치먼트 Processor 배포 (Cloud Run Job #2)
 수집기와 **별도 Job**. 같은 Dockerfile을 `INSTALL_ENRICH=true`로 빌드(google-genai 포함)해 **별 이미지**(`processor:latest`)로 올리고, CMD를 `python -m newsstore.entrypoints.run_enrich`로 돌린다. `GEMINI_API_KEY`는 **Secret Manager**로 주입(커밋/이미지/로그 금지 — 백엔드 전용 비밀).
 
 > **선결: `requirements.lock`에 google-genai 추가.** lock이 constraints(-c)라 미포함이면 빌드 실패. `pip-compile`/`uv` 등으로 `enrich` extra 포함해 재생성 후 커밋. (httpx<1.0 등 기존 핀과 충돌 시 해소 필요 — 이게 첫 빌드 게이트.)
@@ -115,8 +115,8 @@ gcloud scheduler jobs create http newsstore-enrich-hourly --location=asia-northe
 ```
 이후 코드/어휘 변경 반영은 §A와 동일하게 **2)+3) 재빌드→이미지 갱신**(`gcloud run jobs update newsstore-processor --image=...`). 복합 인덱스(스토리/태그 쿼리)가 필요하면 §D.
 
-## F. 스토리 요약 패스 (Pass 3 — `--mode summary`, 시간당) — ✅ 라이브(2026-06-15 배포)
-요약 패스는 **기존 `processor` 이미지를 그대로 재사용**한다(`run_enrich --mode summary`). cluster 패스(10분)와 별도로 **시간당** 돈다. Cloud Run Job의 `--args`는 생성 시 고정이라 **같은 이미지로 두 번째 Job**(`newsstore-summarizer`, args에 `--mode summary`) + 전용 Scheduler `newsstore-summary-hourly`로 배포됨. 코드/어휘 변경 반영은 아래 0)+이미지 갱신.
+## F. 스토리 요약 패스 (Pass 3 — `--mode summary`, 시간당)
+요약 패스는 **기존 `processor` 이미지를 그대로 재사용**한다(`run_enrich --mode summary`). cluster 패스(10분)와 별도로 **시간당** 돈다. Cloud Run Job의 `--args`는 생성 시 고정이라 **같은 이미지로 두 번째 Job**(`newsstore-summarizer`, args에 `--mode summary`) + 전용 Scheduler `newsstore-summary-hourly`로 배포한다. 코드/어휘 변경 반영은 아래 0)+이미지 갱신.
 ```
 # 0) 코드 반영: processor 이미지 재빌드 + 두 인리치 Job(클러스터/요약) 이미지 갱신
 gcloud builds submit --config infra/cloudbuild.processor.yaml \
@@ -143,13 +143,12 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
   --uri="https://run.googleapis.com/v2/projects/daily-recap-498506/locations/asia-northeast3/jobs/newsstore-summarizer:run" \
   --http-method=POST --oauth-service-account-email=newsstore-job@daily-recap-498506.iam.gserviceaccount.com
 ```
-- **비용**: 시간당 720실행/월 × 분단위 과금 + flash-lite 콜(limit=10/run) ≈ **월 $2~4 추정 → 배포 후 콘솔 실측**. Scheduler 무료 3개 중 현재 2개 사용(여유 1).
 - 튜닝 env: `NEWSSTORE_SUMMARY_BATCH`(런당 스캔/요약 스토리 수, 기본 10).
 - 이후 코드 변경 반영은 §A처럼 재빌드 → **두 Job 모두** `--image` 갱신.
 
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
-- **본문 정책(2026-06-28 갱신 — 무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.
+- **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.
 - **피드 추가 전 curl 실측**(HTTP·item수·desc 유무) → 되는 것만 등록 → A 재배포.
 - **콘솔 수동 대신 REST**로 GCP/Firebase 운영(인증 공유).
 - 환경 두 축(`APP_ENV`=home/office, `NEWSSTORE_BACKEND`=sqlite/firestore)은 `README.md` 표 참조.

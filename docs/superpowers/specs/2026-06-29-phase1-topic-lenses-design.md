@@ -1,6 +1,6 @@
 # Phase 1 — 하이브리드 토픽 렌즈 + 멀티라벨 분류 — 설계
 
-_작성: 2026-06-29 · 상태: 설계(검토중) · 성격: 분석 레이어 Phase 1(토대). 상위 설계: `docs/analysis-design.md` · 작업 순서: `docs/roadmap.md` · 계약: `docs/firestore-contract.md`_
+_성격: 분석 레이어 Phase 1(토대). 상위 설계: `docs/analysis-design.md` · 계약: `docs/firestore-contract.md`_
 
 ## 1. 목표 / 범위
 스토리(사건 클러스터)를 **큐레이션 토픽 렌즈에 멀티라벨로 분류**해, 파편화를 구조적으로 막고 다운스트림(델타·score·UI)이 *무엇이 어느 렌즈에 속하나*를 알게 한다. **Phase 1은 렌즈 토대만** — 분류까지. 노출/score/UI는 후속 Phase.
@@ -14,7 +14,7 @@ _작성: 2026-06-29 · 상태: 설계(검토중) · 성격: 분석 레이어 Pha
 - 섹터 동적 top-5는 **가격 모멘텀이 아니라 *뉴스 활동량*(섹터별 스토리 수 증감)** 으로 선정.
 - 워치종목 "성장임팩트 부각"은 가격이 아니라 **score(Phase 3)의 impact** 기반 → Phase 1은 *분류*만, 부각은 후속.
 - **standing 렌즈의 정직한 한계(UI 계약)**: "상시 노출"은 *가격 티커처럼 항상 살아있다*는 뜻이 아니라, **해당 자산의 최신 뉴스 상태를 항상 자리(슬롯)로 둔다**는 뜻. 그 자산 뉴스가 없는 기간엔 "최근 전개 없음"으로 *정직하게 비운다*(가짜 실시간 금지). UI는 `published_at` 기준(실시간 아님)임을 표기.
-- **pricestore(미래 트랙, 사용자 방향 2026-06-29)**: 별도 가격 저장소로 가격 데이터를 정확히 수집 → standing 렌즈가 *뉴스 시각 + 시장 반응*을 결합. 본 Phase는 뉴스-온리로 가되, 렌즈 구조를 **price 결합이 가능한 형태**(자산별 슬롯)로 둔다(미래 무파괴 확장). 범위 밖.
+- **pricestore(미래 트랙)**: 별도 가격 저장소로 가격 데이터를 정확히 수집 → standing 렌즈가 *뉴스 시각 + 시장 반응*을 결합. 본 Phase는 뉴스-온리로 가되, 렌즈 구조를 **price 결합이 가능한 형태**(자산별 슬롯)로 둔다(미래 무파괴 확장). 범위 밖.
 
 ## 3. 렌즈 모델 — 하이브리드 3-tier × 시간성(type)
 렌즈는 `type`으로 **행동(노출·게이트)이 도출**된다(다운스트림 분기의 SSOT).
@@ -36,6 +36,9 @@ _작성: 2026-06-29 · 상태: 설계(검토중) · 성격: 분석 레이어 Pha
 
 ## 4. `config/topics.yaml` — 베이스 택소노미 (SSOT)
 스키마: 렌즈마다 `id·label{ko,en}·type·hints`(결정론 prior) + 버전. **`taxonomy.yaml`(어휘)을 *참조*만**(중복정의 금지).
+
+<!-- ⚠️ 코드가 정본: 아래 §4 YAML 스키마는 실제 config/topics.yaml(단일 lenses[] 배열, sector 5, watch 타입)과 다름 — topics.yaml이 SSOT. -->
+
 
 ```yaml
 version: 2026-06-29           # 드리프트 추적(변경 시 갱신 + changelog)
@@ -81,8 +84,8 @@ watch:
 - **GICS 섹터 채택**(시장지향·글로벌 표준 — ICB는 생산지향이라 뉴스 의미와 덜 맞음, 스카웃1). KR·US 동일 vocab, *노출 top-5는 시장 무관 합산*(v1 단순화; 시장별 분리는 후속).
 - 베이스 합계: standing 10 + development 4 + risk 1 = **15 macro 렌즈** + sector vocab(11, top-5 노출) + watch 10. 섹터 ≤5·종목 ≤10 규칙 준수.
 
-## 5. 분류 파이프라인 — **LLM 1차 분류 + asset_hint 무료 prior** (결정 2026-06-29)
-측정상 결정론 Stage1만으론 **28% 커버리지**(키워드는 패러프레이즈·맥락을 못 잡음). 비용은 한도 내(**전 스토리 LLM ~$0.3/일, flash-lite**)라 **LLM을 1차 분류기**로 둔다(사용자 결정 — "중요한 힌트 놓침" 방지).
+## 5. 분류 파이프라인 — **LLM 1차 분류 + asset_hint 무료 prior**
+측정상 결정론 Stage1만으론 **28% 커버리지**(키워드는 패러프레이즈·맥락을 못 잡음). 비용은 한도 내(**전 스토리 LLM ~$0.3/일, flash-lite**)라 **LLM을 1차 분류기**로 둔다("중요한 힌트 놓침" 방지).
 ```
 스토리(멤버 집계: asset_hint[항상 존재], language, 제목/요약 텍스트, 태그[있으면])
   ↓ 무료 prior — asset_hint 결정론 매칭 → 후보 렌즈 + region 변별(kr/us)         (LLM 0콜)
@@ -124,5 +127,3 @@ watch:
 - 섹터: [GICS Methodology(MSCI)](https://www.msci.com/our-solutions/indexes/gics) · [Fidelity: 섹터 분류 한계](https://www.fidelity.com/learning-center/trading-investing/markets-sectors/limitations-sector-classification-systems) · [섹터 로테이션/모멘텀](https://trendspider.com/blog/sector-rotation-how-to-track-where-the-money-is-moving/)
 - 멀티라벨 분류: [Cost-Aware Model Selection(2602.06370)](https://arxiv.org/html/2602.06370) · [PoliPrompt(2409.01466)](https://arxiv.org/pdf/2409.01466) · [Controlled Vocabularies 드리프트(Talisman)](https://jessicatalisman.substack.com/p/controlled-vocabularies-part-ii) · [Zero-shot 금융 LLM(2305.16633)](https://arxiv.org/pdf/2305.16633)
 - 상시/이벤트 표현: [Event-Driven Architecture in Finance(Confluent)](https://www.confluent.io/blog/event-driven-architecture-powers-finance-and-banking/) · [Market Wrap(Goldman Weekly)](https://am.gs.com/en-be/advisors/insights/article/market-monitor-weekly)
-
-<!-- spec-review: passed lenses=3 date=2026-06-29 -->
