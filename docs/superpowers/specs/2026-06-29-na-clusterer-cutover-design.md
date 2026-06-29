@@ -1,6 +1,6 @@
 # newsstore 스토리 클러스터러 컷오버 (news-analytics 라이브러리 import) — 설계
 
-_작성: 2026-06-29 · 상태: 설계(승인 2026-06-29) · 성격: 자기완결 — 인리치 파이프라인의 **스토리 배정 결정**만 외부 라이브러리로 교체(인리치 레이어, newsstore 범위)_
+_작성: 2026-06-29 · 상태: **보류(SHELVED) 2026-06-29** — 사용자 전략 전환("통합 우선, 나중 1회 분리"). 이 컷오버는 지금 구현하지 않는다. 분석 레이어를 newsstore 안에서 개발하고 인터페이스 안정 시 한 번에 분리. 본 설계는 재분리 시점 참고 자료로 보존. · 성격: 자기완결 — 인리치 파이프라인의 **스토리 배정 결정**만 외부 라이브러리로 교체(인리치 레이어, newsstore 범위)_
 
 > **이 스펙의 경계 (다른 repo와의 분리)**
 > - **포함**: newsstore가 `news-analytics`(별 repo, GitHub) 라이브러리를 import 하고, `process_once`의 스토리 배정 결정을 newsstore 자체 로직(`InMemoryVectorIndex.nearest`, 단일 임계값·LLM 없음)에서 news-analytics `EventClusterer.assign`(gray-band LLM)으로 **완전 교체(cutover)**. 어댑터·LLM 갭 메꿈·store 읽기 확장·의존성 배선·라이브 Job#2 재배포·`firestore-contract.md` 정정.
