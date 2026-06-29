@@ -15,9 +15,10 @@ const { keepInFeed } = new Function(block + "\nreturn { keepInFeed };")();
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
 
-// spam·digest = 백엔드 kind로 숨김
+// spam·digest·sports = 백엔드 kind로 숨김
 test("spam → 숨김", () => assert.equal(keepInFeed({ kind: "spam" }), false));
 test("digest → 숨김", () => assert.equal(keepInFeed({ kind: "digest" }), false));
+test("sports → 숨김", () => assert.equal(keepInFeed({ kind: "sports" }), false));
 // story·미인리치·미지값 = 노출(fail-soft: 분석 멈춰도 raw 뉴스 보임)
 test("story → 노출", () => assert.equal(keepInFeed({ kind: "story" }), true));
 test("kind 없음(미인리치 fresh) → 노출", () => assert.equal(keepInFeed({ title: "x" }), true));

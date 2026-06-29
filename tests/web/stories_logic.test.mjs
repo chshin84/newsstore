@@ -11,8 +11,8 @@ const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "STORIES-LOGIC 마커가 index.html에 있어야 한다(드리프트 가드)");
 const block = html.slice(i, j);
 const { toMs, groupItemsByDevelopment, pickDisplayItems,
-        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR } =
-  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR };")();
+        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens } =
+  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens };")();
 
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
@@ -137,6 +137,27 @@ test("nodeTimes: event_time 있으면 그것, 없으면 time(보도)로 폴백",
   assert.equal(a.eventIsActual, true);
   const b = nodeTimes({ time: rep, event_time: null });
   assert.equal(b.event, rep.getTime()); assert.equal(b.eventIsActual, false);
+});
+
+// --- groupStoriesByLens (§7 섹션=렌즈) ---
+test("groupStoriesByLens: 비배타 멤버십 + 렌즈 maxRisk 정렬 + 메인=storyRank 최대", () => {
+  const ls = new Date(NOW);
+  const s1 = { id: "a", lenses: ["kr_equity"], impact: 3, risk: 0, last_seen: ls };
+  const s2 = { id: "b", lenses: ["us_rates"], impact: 1, risk: 3, last_seen: ls };
+  const s3 = { id: "c", lenses: ["kr_equity", "crypto"], impact: 1, risk: 1, last_seen: ls };
+  const g = groupStoriesByLens([s1, s2, s3], NOW);
+  assert.equal(g[0].lensId, "us_rates");                       // maxRisk 3이 최상단
+  const kre = g.find(x => x.lensId === "kr_equity");
+  const cry = g.find(x => x.lensId === "crypto");
+  assert.ok(kre.stories.some(s => s.id === "c") && cry.stories.some(s => s.id === "c")); // 비배타
+  assert.equal(kre.main.id, "a");                              // 메인 = storyRank 최대(impact3)
+  assert.equal(kre.maxRisk, 1);                                // max(0,1)
+});
+test("groupStoriesByLens: 렌즈 없는 스토리는 _etc 버킷(드롭 금지)", () => {
+  const g = groupStoriesByLens([{ id: "x", lenses: [], impact: 2, last_seen: new Date(NOW) }], NOW);
+  assert.equal(g.length, 1);
+  assert.equal(g[0].lensId, "_etc");
+  assert.equal(g[0].main.id, "x");
 });
 
 console.log(`\nstories_logic: ${pass} passed, ${fail} failed`);
