@@ -127,6 +127,39 @@ class FirestoreStore:
             "summary_at": now,
         }, merge=True)
 
+    def save_story_lenses(self, story_id, lenses: list) -> None:
+        self.db.collection("stories").document(story_id).set(
+            {"lenses": list(lenses)}, merge=True)
+
+    def get_stories_for_lensing(self, cutoff) -> list[dict]:
+        out = []
+        for snap in self.db.collection("stories").where("status", "==", "open").stream():
+            d = snap.to_dict() or {}
+            if d.get("last_seen") and d["last_seen"] >= cutoff:
+                out.append({"id": snap.id, "title": d.get("title", ""),
+                            "member_ids": d.get("member_ids", []),
+                            "lenses": d.get("lenses", [])})
+        return out
+
+    def get_story_member_signals(self, member_ids: list) -> dict:
+        """멤버 기사 분류 신호를 **배치(get_all)**로 집계(per-member 읽기 금지).
+        반환 {asset_hints, languages, tags(flat), keyword_text}."""
+        col = self.db.collection(_ITEMS)
+        refs = [col.document(i) for i in member_ids]
+        ahints, langs, tags, texts = set(), [], [], []
+        for s in (self.db.get_all(refs) if member_ids else []):
+            d = (s.to_dict() or {})
+            for a in str(d.get("asset_hint") or "").split(","):
+                if a.strip():
+                    ahints.add(a.strip())
+            if d.get("language"):
+                langs.append(d["language"])
+            texts.append(d.get("title", "") + " " + (d.get("body") or "")[:200])
+            tags.extend(t for t in (d.get("tags") or []) if isinstance(t, str))
+        texts.extend(tags)
+        return {"asset_hints": list(ahints), "languages": langs,
+                "tags": tags, "keyword_text": " ".join(texts)}
+
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
         if not snap.exists:

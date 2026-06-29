@@ -64,6 +64,29 @@ def test_filter_new_ids_returns_only_unstored(store):
     assert store.filter_new_ids([]) == []
 
 
+def test_save_and_read_story_lenses(store):
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 6, 29, tzinfo=timezone.utc)
+    store.create_story("s1", title="t", vec=[1.0], member_id="a", entities=[], now=now)
+    store.save_story_lenses("s1", ["kr_rates", "risk"])
+    rows = store.get_stories_for_lensing(cutoff=now - timedelta(hours=1))
+    assert rows and rows[0]["id"] == "s1" and rows[0]["lenses"] == ["kr_rates", "risk"]
+
+
+def test_get_story_member_signals_batches(store):
+    from datetime import datetime, timezone
+    from newsstore.contracts.models import RawItem
+    now = datetime(2026, 6, 12, tzinfo=timezone.utc)
+    store.upsert_items([RawItem(id="m1", feed_id="f", source="S", url="https://e/m1",
+                                title="삼성 메모리", body="b", fetched_at=now,
+                                asset_hint="kr_market,kr_corp", language="ko")])
+    sig = store.get_story_member_signals(["m1"])
+    assert set(sig["asset_hints"]) == {"kr_market", "kr_corp"}
+    assert sig["languages"] == ["ko"] and "삼성 메모리" in sig["keyword_text"]
+    assert store.get_story_member_signals([]) == {"asset_hints": [], "languages": [],
+                                                  "tags": [], "keyword_text": ""}
+
+
 def test_get_open_stories_includes_title_and_centroid_sum(store):
     from datetime import datetime, timezone, timedelta
     now = datetime(2026, 6, 29, tzinfo=timezone.utc)
