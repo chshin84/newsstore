@@ -62,3 +62,14 @@ def test_filter_new_ids_returns_only_unstored(store):
     out = store.filter_new_ids(["aaa", "bbb", "ccc"])
     assert out == ["bbb", "ccc"]          # 저장된 aaa 제외, 순서 보존
     assert store.filter_new_ids([]) == []
+
+
+def test_get_open_stories_includes_title_and_centroid_sum(store):
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 6, 29, tzinfo=timezone.utc)
+    store.create_story("s1", title="Fed move", vec=[1.0, 2.0], member_id="a",
+                       entities=["Fed"], now=now)
+    store.append_to_story("s1", vec=[3.0, 0.0], member_id="b", entities=[], now=now)
+    [row] = store.get_open_stories(cutoff=now - timedelta(hours=1))
+    assert row["title"] == "Fed move" and row["centroid_sum"] == [4.0, 2.0]
+    assert row["centroid"] == [2.0, 1.0] and row["count"] == 2

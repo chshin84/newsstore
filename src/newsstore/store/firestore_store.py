@@ -73,8 +73,11 @@ class FirestoreStore:
         for snap in self.db.collection("stories").where("status", "==", "open").stream():
             d = snap.to_dict() or {}
             if d.get("last_seen") and d["last_seen"] >= cutoff:
+                csum = list(d.get("centroid_sum", []))
                 c = d.get("count", 1) or 1
-                out.append({"id": snap.id, "centroid": [x / c for x in d.get("centroid_sum", [])],
+                out.append({"id": snap.id, "title": d.get("title") or "",
+                            "centroid_sum": csum,                  # 원본 합(클러스터러 어댑터용)
+                            "centroid": [x / c for x in csum],     # 평균(기존 호출자 보존)
                             "count": c})
         return out
 

@@ -36,7 +36,8 @@ class Store(Protocol):
         ...
 
     def get_open_stories(self, cutoff) -> list[dict]:
-        """status=open이고 last_seen>=cutoff인 스토리: [{'id','centroid','count'}]. centroid=sum/count."""
+        """status=open이고 last_seen>=cutoff인 스토리:
+        [{'id','title','centroid_sum'(원본 합),'centroid'(=합/count),'count'}]."""
         ...
     def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
         """새 스토리: centroid_sum=vec, count=1, member_ids=[member_id], status=open."""
