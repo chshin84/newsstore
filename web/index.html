@@ -321,6 +321,39 @@
       }
       return { shown, moreCount: Math.max(0, groupItems.length - shown.length) };
     }
+    // --- Phase 4: 정렬·delta·신선 순수함수 (라이브 도출, LLM 0콜) ---
+    const IMPACT_PRIOR = 1;                 // 미채점 스토리 정렬 prior(0 매몰 방지)
+    const FRESH_TAU_H = 12;                 // 신선도 감쇠 시정수(시간)
+    const REF_WINDOW_MS = 24 * 3600 * 1000; // 전일대비/NEW 창
+    function latestDeltaMs(s) {
+      let best = null;
+      for (const d of (s.developments || [])) {
+        const m = toMs(d && (d.delta_time || d.time));
+        if (m != null && (best == null || m > best)) best = m;
+      }
+      return best != null ? best : toMs(s.last_seen);
+    }
+    function storyRank(s, now) {
+      const impact = (s.impact == null ? IMPACT_PRIOR : Number(s.impact));
+      const ms = latestDeltaMs(s);
+      const ageH = (now != null && ms != null) ? Math.max(0, (now - ms) / 3600000) : 1e9;
+      return impact * (1 / (1 + ageH / FRESH_TAU_H));     // impact × 신선도
+    }
+    function deltaBadge(cur, ref) {
+      if (cur == null || ref == null) return null;        // ref 없으면 화살표 생략(best-effort)
+      const d = Number(cur) - Number(ref);
+      if (!d) return null;
+      return { dir: d > 0 ? "up" : "down", n: Math.abs(d) };
+    }
+    function isNew(firstSeen, now) {
+      const ms = toMs(firstSeen);
+      return ms != null && (now - ms) < REF_WINDOW_MS;
+    }
+    function nodeTimes(dev) {
+      const report = toMs(dev && dev.time);
+      const ev = toMs(dev && dev.event_time);
+      return { event: ev != null ? ev : report, report, eventIsActual: ev != null };
+    }
     // === STORIES-LOGIC-END ===
 
     function storyCardHtml(s) {

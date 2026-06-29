@@ -10,8 +10,9 @@ const END = "// === STORIES-LOGIC-END";
 const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "STORIES-LOGIC 마커가 index.html에 있어야 한다(드리프트 가드)");
 const block = html.slice(i, j);
-const { toMs, groupItemsByDevelopment, pickDisplayItems } =
-  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems };")();
+const { toMs, groupItemsByDevelopment, pickDisplayItems,
+        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR } =
+  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR };")();
 
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
@@ -97,6 +98,45 @@ test("항목이 max 이하면 moreCount=0", () => {
   const { shown, moreCount } = pickDisplayItems([item(1, "A")], 2);
   assert.equal(shown.length, 1);
   assert.equal(moreCount, 0);
+});
+
+const NOW = Date.UTC(2026, 5, 29, 12, 0, 0);
+// --- storyRank ---
+test("impact 높을수록·신선할수록 rank↑, 미채점은 IMPACT_PRIOR(0 아님)", () => {
+  const hi = storyRank({ impact: 3, last_seen: new Date(NOW) }, NOW);
+  const lo = storyRank({ impact: 1, last_seen: new Date(NOW) }, NOW);
+  const un = storyRank({ impact: null, last_seen: new Date(NOW) }, NOW);  // 미채점
+  assert.ok(hi > lo, "impact 3 > 1");
+  assert.ok(un > 0, "미채점도 0 아님(매몰 방지)");
+  assert.ok(Math.abs(un - storyRank({ impact: IMPACT_PRIOR, last_seen: new Date(NOW) }, NOW)) < 1e-9);
+});
+test("같은 impact면 더 신선한 쪽 rank↑", () => {
+  const fresh = storyRank({ impact: 2, last_seen: new Date(NOW) }, NOW);
+  const old = storyRank({ impact: 2, last_seen: new Date(NOW - 48 * 3600000) }, NOW);
+  assert.ok(fresh > old);
+});
+// --- deltaBadge ---
+test("delta: ref 있으면 ▲▼, 없으면 null, 0이면 null", () => {
+  assert.deepEqual(deltaBadge(3, 2), { dir: "up", n: 1 });
+  assert.deepEqual(deltaBadge(1, 2), { dir: "down", n: 1 });
+  assert.equal(deltaBadge(2, 2), null);
+  assert.equal(deltaBadge(3, null), null);     // ref 없음 → 화살표 생략
+  assert.equal(deltaBadge(null, 2), null);
+});
+// --- isNew ---
+test("isNew: first_seen이 REF_WINDOW 이내", () => {
+  assert.equal(isNew(new Date(NOW - 3600000), NOW), true);    // 1h 전 → NEW
+  assert.equal(isNew(new Date(NOW - 48 * 3600000), NOW), false);
+  assert.equal(isNew(null, NOW), false);
+});
+// --- nodeTimes ---
+test("nodeTimes: event_time 있으면 그것, 없으면 time(보도)로 폴백", () => {
+  const ev = new Date(NOW - 7200000), rep = new Date(NOW);
+  const a = nodeTimes({ time: rep, event_time: ev });
+  assert.equal(a.event, ev.getTime()); assert.equal(a.report, rep.getTime());
+  assert.equal(a.eventIsActual, true);
+  const b = nodeTimes({ time: rep, event_time: null });
+  assert.equal(b.event, rep.getTime()); assert.equal(b.eventIsActual, false);
 });
 
 console.log(`\nstories_logic: ${pass} passed, ${fail} failed`);
