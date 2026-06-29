@@ -87,6 +87,30 @@ def test_get_story_member_signals_batches(store):
                                                   "tags": [], "keyword_text": ""}
 
 
+def test_save_story_score_roundtrip_nondestructive_incremental(store):
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 6, 29, tzinfo=timezone.utc)
+    cut = now - timedelta(hours=1)
+    store.create_story("s1", title="t", vec=[1.0], member_id="a", entities=[], now=now)
+    store.save_story_lenses("s1", ["kr_rates"], count=1)
+    store.save_story_summary("s1", title="t", summary="sum", latest="l",
+                             developments=[{"text": "d", "time": now, "source_count": 1}],
+                             summary_count=1, now=now)
+    rows = store.get_stories_for_scoring(cutoff=cut)
+    assert rows and rows[0]["id"] == "s1"
+    assert rows[0]["lenses"] == ["kr_rates"] and rows[0]["summary"] == "sum"
+    assert rows[0]["count"] == 1 and rows[0]["developments"][0]["text"] == "d"
+
+    store.save_story_score("s1", risk=2, impact=1, risk_reason="r", impact_reason="i",
+                           count=1, now=now)
+    d = store.db.collection("stories").document("s1").get().to_dict()
+    assert d["risk"] == 2 and d["impact"] == 1 and d["risk_reason"] == "r"
+    # 비파괴: 점수 저장이 summary/lenses/cluster 필드를 보존
+    assert d["summary"] == "sum" and d["lenses"] == ["kr_rates"] and d["member_ids"] == ["a"]
+    # incremental: scored_count=1 == count → 재조회에서 빠짐
+    assert all(r["id"] != "s1" for r in store.get_stories_for_scoring(cutoff=cut))
+
+
 def test_get_open_stories_includes_title_and_centroid_sum(store):
     from datetime import datetime, timezone, timedelta
     now = datetime(2026, 6, 29, tzinfo=timezone.utc)

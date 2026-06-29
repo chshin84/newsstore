@@ -72,6 +72,16 @@ class Store(Protocol):
         """요약 필드만 merge 저장(+summary_count, summary_at=now). 기존 필드(member_ids 등) 보존."""
         ...
 
+    # Phase 3 dual score 패스 계약. 게이트 후 risk/impact를 매겨 비파괴 저장한다.
+    def get_stories_for_scoring(self, cutoff) -> list[dict]:
+        """status=open·last_seen>=cutoff·count>scored_count(incremental) 스토리:
+        [{'id','title','count','lenses','summary','developments'}]."""
+        ...
+    def save_story_score(self, story_id, *, risk, impact, risk_reason, impact_reason,
+                         count=None, now=None) -> None:
+        """점수 필드만 merge 저장(+scored_count=count, scored_at=now). 기존 필드 보존(비파괴)."""
+        ...
+
 
 class LLMClient(Protocol):
     def generate_json(self, prompt: str, *, timeout: float) -> dict: ...
