@@ -87,7 +87,8 @@ def main(argv=None) -> int:
             elif args.mode == "lenses":
                 from ..enrich.lens_pass import run_lens_pass
                 now = datetime.now(timezone.utc)
-                totals = {"classified": run_lens_pass(store, now=now, cutoff=now - OPEN_WINDOW)}
+                totals = {"classified": run_lens_pass(store, now=now, cutoff=now - OPEN_WINDOW,
+                                                      client=client)}
             else:
                 from ..enrich.tagger import tag_stories
                 totals = tag_stories(store, client, taxonomy, batch=10,

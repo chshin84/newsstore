@@ -26,3 +26,17 @@ def test_lens_pass_empty_story_no_lenses(store):
     run_lens_pass(store, now=NOW, cutoff=NOW - timedelta(hours=1))
     rows = {r["id"]: r for r in store.get_stories_for_lensing(cutoff=NOW - timedelta(hours=1))}
     assert rows["s2"]["lenses"] == []          # 신호 없음 → 미배정
+
+
+class _FakeLLM:
+    def generate_json(self, prompt, *, timeout=30.0):
+        return {"lenses": ["risk", "oil_energy"]}
+
+
+def test_lens_pass_uses_llm_when_client(store):
+    # asset_hint prior(oil_energy)에 더해 LLM이 의미로 risk까지 — 키워드가 놓칠 것 포착
+    store.upsert_items([_item("c", asset_hint="energy", language="en")])
+    store.create_story("s3", title="Hormuz tanker strike", vec=[1.0], member_id="c", entities=[], now=NOW)
+    run_lens_pass(store, now=NOW, cutoff=NOW - timedelta(hours=1), client=_FakeLLM())
+    rows = {r["id"]: r for r in store.get_stories_for_lensing(cutoff=NOW - timedelta(hours=1))}
+    assert set(rows["s3"]["lenses"]) == {"risk", "oil_energy"}

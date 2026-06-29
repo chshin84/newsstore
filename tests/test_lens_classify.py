@@ -37,3 +37,28 @@ def test_max_lenses_cap():
 
 def test_empty_signals_no_assignment():
     assert _c() == []          # fail-safe: 신호 없음 → 미배정(emergent)
+
+
+class _FakeLLM:
+    def __init__(self, lenses, boom=False):
+        self.lenses, self.boom = lenses, boom
+
+    def generate_json(self, prompt, *, timeout=30.0):
+        if self.boom:
+            raise RuntimeError("down")
+        return {"lenses": self.lenses}
+
+
+def test_stage2_validates_and_caps():
+    from newsstore.enrich.lens_classify import classify_stage2
+    # 환각 id·중복·>MAX_LENSES → validator가 정제
+    llm = _FakeLLM(["kr_rates", "INVALID_ID", "crypto", "fx", "risk", "kr_rates"])
+    out = classify_stage2(T, llm, story_text="x", candidates=[])
+    assert "INVALID_ID" not in out
+    assert out.count("kr_rates") <= 1 and len(out) <= 4 and "kr_rates" in out
+
+
+def test_stage2_failsoft_to_candidates():
+    from newsstore.enrich.lens_classify import classify_stage2
+    llm = _FakeLLM([], boom=True)        # LLM 장애 → prior 폴백
+    assert classify_stage2(T, llm, story_text="x", candidates=["kr_rates"]) == ["kr_rates"]

@@ -81,22 +81,20 @@ watch:
 - **GICS 섹터 채택**(시장지향·글로벌 표준 — ICB는 생산지향이라 뉴스 의미와 덜 맞음, 스카웃1). KR·US 동일 vocab, *노출 top-5는 시장 무관 합산*(v1 단순화; 시장별 분리는 후속).
 - 베이스 합계: standing 10 + development 4 + risk 1 = **15 macro 렌즈** + sector vocab(11, top-5 노출) + watch 10. 섹터 ≤5·종목 ≤10 규칙 준수.
 
-## 5. 분류 파이프라인 — 결정론 hint + 조건부 LLM (Stage 1+2)
-스토리 단위 분류(멤버 기사 신호 집계).
+## 5. 분류 파이프라인 — **LLM 1차 분류 + asset_hint 무료 prior** (결정 2026-06-29)
+측정상 결정론 Stage1만으론 **28% 커버리지**(키워드는 패러프레이즈·맥락을 못 잡음). 비용은 한도 내(**전 스토리 LLM ~$0.3/일, flash-lite**)라 **LLM을 1차 분류기**로 둔다(사용자 결정 — "중요한 힌트 놓침" 방지).
 ```
-스토리(멤버 집계: asset_hint A[항상 존재], language, source / LLM 태그 entities·tickers·topics[있으면])
-  ↓ Stage 1 — 결정론 매칭 (LLM 0콜)
-    각 렌즈 hints와 매칭 → 후보 렌즈 + per-lens confidence(매칭 hint 종류 수)
-    region 변별(language/source/asset_hint kr_*·us_*) → kr/us 쌍 중 택1
-  ↓ Stage 2 — 조건부 LLM (Stage1 confidence 낮거나 후보 0개 or MAX_LENSES 초과 정리 필요 시만)
-    프롬프트(렌즈 정의 prefix 캐시 + 스토리 제목/요약 + Stage1 후보) → 멀티라벨 yes/no(상한 MAX_LENSES)
-출력: stories.lenses[] = 확정 렌즈 id 배열
+스토리(멤버 집계: asset_hint[항상 존재], language, 제목/요약 텍스트, 태그[있으면])
+  ↓ 무료 prior — asset_hint 결정론 매칭 → 후보 렌즈 + region 변별(kr/us)         (LLM 0콜)
+  ↓ LLM 1차 분류 — 프롬프트(렌즈 id+정의[prefix 캐시] + 스토리 제목/요약 + asset_hint 후보)
+        → 멀티라벨 lens id 배열(JSON). flash-lite, 스토리 배치로 콜수↓.
+  ↓ 결정론 validator(FAIL-LOUD) — id ∈ topics.yaml만, MAX_LENSES 상한, 중복 제거
+출력: stories.lenses[]
 ```
-- **🔑 신뢰 prior = `asset_hint`(수집 시 항상 존재)**, **LLM 태그(entities/topics)는 보조**. 이유: production 스토리 태그가 자주 빈약함(클러스터 패스가 `tag=False`로 돌아 n_tags=0 관측). 그러므로 **Stage 1은 asset_hint 매핑을 1차로** 두고 태그는 있으면 보강. asset_hint→렌즈 매핑이 Stage 1 커버리지를 결정.
-- **🔬 $0 실증 단계(필수)**: 구현 시 **실데이터 스토리 ~400건(실험 데이터 재사용)에서 Stage 1만으로 매칭되는 비율을 측정**한 뒤 Stage 2 LLM 비율·예산을 확정. "대부분 무료"를 *측정 후* 주장(낙관 금지). 미달이면 asset_hint→렌즈 매핑 보강.
-- **Stage 2 편승**: 요약 패스(`run_enrich --mode summary`)에 끼워 추가 콜 최소.
-- **fail-safe**: asset_hint·태그 모두 빈약 → 보수적(렌즈 미배정 = emergent). 미배정·빈태그 비율 로깅(FAIL-LOUD).
-- **Stage 3 임베딩 tie-break은 Phase 1 범위 밖**(필요성 미실증 → 후속에서 골든셋으로 Stage2-only 대비 효과 검증 후 도입).
+- **무료 prior = asset_hint**(항상 존재)로 후보를 좁혀 LLM 프롬프트 힌트로 주고 토큰↓. **LLM이 의미로 최종 결정** → 키워드가 놓치는 표현·맥락 포착.
+- **결정론 우선 검증(domain-llm-runtime)**: LLM 출력을 **결정론 validator**가 먼저 거른다 — 렌즈 id가 `topics.yaml`에 없으면 드롭(환각 차단), MAX_LENSES 초과 잘림. *형식 적합은 코드로*(리뷰어 콜 없이 비용↓), *의미 품질은 골든셋*(§8)으로 측정. 분류는 저위험이라 per-call 런타임 리뷰어는 안 씀(YAGNI·비용).
+- **fail-soft**: LLM 장애·키 없음 → asset_hint prior 결과로 폴백(신호 보존, 패스 안 죽음).
+- **비기능(advisor)**: `GeminiClient.generate_json`의 retry/None가드/timeout/structured error 재사용. flash-lite + 배치로 $0 기조($3/일 한도 내 ~$0.3/일).
 
 ## 6. Firestore 계약 (additive·비파괴)
 - `stories.lenses[]` (string[]) — 확정 렌즈 id. `items.lenses[]`는 선택(스토리 집계가 1차). UI가 렌즈 필터·정렬에 읽음.

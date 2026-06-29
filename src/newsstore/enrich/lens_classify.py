@@ -3,6 +3,8 @@
 production 태그가 자주 비므로(클러스터 패스 tag=False) asset_hint가 핵심 prior다."""
 from __future__ import annotations
 
+from .topics import valid_ids
+
 MAX_LENSES = 4
 _REGION_PAIRS = [("kr_equity", "us_equity"), ("kr_econ", "us_econ"), ("kr_policy", "us_policy")]
 _KR_HINT = {"kr_bond", "kr_fx", "kr_macro", "kr_market", "kr_corp", "kr_realestate",
@@ -49,3 +51,33 @@ def classify_stage1(t: dict, *, asset_hints, tickers, entities, topics, language
     # MAX_LENSES: score 내림차순 상위 + 결정론 tiebreak(id)
     ranked = sorted((p for p in scored if p[1] in chosen), key=lambda p: (-p[0], p[1]))
     return [lid for _, lid in ranked[:MAX_LENSES]]
+
+
+def _lens_menu(t: dict) -> str:
+    return "\n".join(f"{l['id']}: {l['label'].get('ko', '')} / {l['label'].get('en', '')}"
+                     for l in t["lenses"])
+
+
+def classify_stage2(t: dict, client, *, story_text, candidates, timeout=30.0) -> list[str]:
+    """LLM 1차 멀티라벨 분류 + 결정론 validator. 장애 시 candidates 폴백(fail-soft).
+
+    LLM이 의미로 렌즈를 고르되, 출력은 topics.yaml 어휘로 강제 정제(환각 차단)."""
+    prompt = (
+        "You classify ONE financial-news story into topic lenses (multi-label, 0 or more).\n"
+        "Lenses (id: meaning):\n" + _lens_menu(t) + "\n"
+        f"Rules: choose ONLY ids from the list above; multiple allowed; at most {MAX_LENSES}; "
+        "choose none if nothing fits; prefer specificity (watch/sector over generic).\n"
+        f"Source-hint candidates (may be incomplete): {list(candidates)}\n"
+        f"Story:\n{story_text[:1500]}\n"
+        'Return JSON {"lenses": ["id", ...]} only.')
+    try:
+        resp = client.generate_json(prompt, timeout=timeout) or {}
+    except Exception:                       # LLM 장애 → prior 폴백(fail-soft, 패스 안 죽임)
+        return list(candidates)[:MAX_LENSES]
+    ids = resp.get("lenses", []) if isinstance(resp, dict) else []
+    valid = valid_ids(t)
+    out: list[str] = []
+    for i in ids:                           # 결정론 validator: 어휘 밖·중복 제거(FAIL-LOUD 대신 드롭)
+        if isinstance(i, str) and i in valid and i not in out:
+            out.append(i)
+    return out[:MAX_LENSES]
