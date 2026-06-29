@@ -31,7 +31,8 @@
 ### `stories` (newsstore 인리치가 기록)
 스토리/클러스터(`centroid_sum, count, member_ids, entities, status, first_seen, last_seen, 요약 필드`).
 - **`lenses[]`** (string[], Phase 1) — 토픽 렌즈 id 배열(`config/topics.yaml` SSOT). 렌즈 패스(`run_enrich --mode lenses`)가 write, UI가 렌즈 필터·정렬에 read. 없으면 빈 배열 폴백(비파괴). id→type 해석은 topics.yaml.
-- 향후 `risk·impact`(Phase 3 score), `delta_time`(Phase 2). 변경 시 UI read 계약 함께 갱신.
+- **`developments[].delta_time`** (datetime, Phase 2) — 그 전개가 새 정보로 우리 스토어에 처음 편입된 시각(`published_at`=발행시각과 구분되는 2번째 타임스탬프). 요약 패스(`run_enrich --mode summary`)가 write — milestone 게이트(LLM `is_new`)가 진짜 새 전개면 `time`, 단순 recap이면 기존 프런티어(`max(prior delta_time)`)에 귀속해 **새 델타로 앞서지 않게** 한다. 없으면 소비자가 `developments[].time`으로 폴백(additive·비파괴, 레거시 안전).
+- 향후 `risk·impact`(Phase 3 score). 변경 시 UI read 계약 함께 갱신.
 
 ## 핸드오프 프로토콜 — `processed` 플래그
 1. newsstore가 raw item을 쓸 때 `processed=false`를 박는다(verified: `firestore_store.py` `_to_doc`).
