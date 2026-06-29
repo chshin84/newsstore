@@ -34,6 +34,10 @@
 - **`risk`·`impact`** (int 0~3, Phase 3) — dual score. **`risk_reason`·`impact_reason`** (str, advisory 근거 1줄). 점수 패스(`run_enrich --mode score`)가 write(`save_story_score`, merge·비파괴), UI가 정렬·임계 노출에 read. 없으면 미표시 폴백(비파괴). risk=렌즈/내러티브 정렬, impact=스토리·종목 정렬(설계 `analysis-design.md` §7).
 - **`scored_count`** (int, Phase 3) — 이 멤버수까지 채점함(incremental 가드, `lensed_count`·`summary_count`와 동일 per-pass 컨벤션). **`scored_at`** (datetime) — 채점 시각.
 - **`developments[].delta_time`** (datetime, Phase 2) — 그 전개가 새 정보로 우리 스토어에 처음 편입된 시각(`published_at`=발행시각과 구분되는 2번째 타임스탬프). 요약 패스(`run_enrich --mode summary`)가 write — milestone 게이트(LLM `is_new`)가 진짜 새 전개면 `time`, 단순 recap이면 기존 프런티어(`max(prior delta_time)`)에 귀속해 **새 델타로 앞서지 않게** 한다. 없으면 소비자가 `developments[].time`으로 폴백(additive·비파괴, 레거시 안전).
+- **`developments[].event_time`** (datetime|null, Phase 4) — 그 전개의 **사건 실제 시각**(요약 패스가 본문에서 추출, ISO·sanity 검증, 실패 시 null). UI는 null이면 `time`(보도시각)으로 폴백. `delta_time`과 같은 추가 타임스탬프(비파괴·레거시 안전). **요약 패스 단독 writer**(article 패스는 안 건드림).
+- **`headline`·`lead`·`article[]`** (str·str·string[], Phase 4) — 생성 보고서. **article 패스**(`run_enrich --mode article`)가 write, UI가 헤드라인/리드/bullet로 read. **article 패스는 `developments`를 안 쓴다(자기 필드만 merge — 비파괴 by construction).** 없으면 UI 폴백(`headline`→`title`, `lead`→`summary`, `article`→생략).
+- **`risk_ref`·`impact_ref`** (int 0~3) · **`score_ref_at`** (datetime, Phase 4) — 전일대비 24h 롤링 기준(article 패스 유지). UI가 `risk−risk_ref`로 ▲▼ 도출(ref 없으면 화살표 생략, best-effort). `NEW`는 `first_seen`만으로 판정(ref 무관).
+- **`articled_count`** (int) · **`articled_at`** (datetime, Phase 4) — incremental 가드(`summary_count`·`scored_count`와 동일 per-pass 컨벤션).
 
 ## 핸드오프 프로토콜 — `processed` 플래그
 1. newsstore가 raw item을 쓸 때 `processed=false`를 박는다(verified: `firestore_store.py` `_to_doc`).

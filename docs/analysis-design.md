@@ -88,6 +88,9 @@ _작성: 2026-06-28 · 갱신: 2026-06-29(통합·승격) · 상태: **분석 �
 - **미래 reader**: risk-candidate reader(Phase 5)는 매칭 시 **impact를 재계산**(별도 boost 필드 없이 impact 자체 갱신). 지금 미구현.
 
 ## 8. UI — Now Brief + 좌 이벤트 / 우 기사시간
+
+> **Phase 4 확정 변경(2026-06-29, 사용자):** 글로벌 Now Brief는 **per-story 리드(`lead`)로 대체**(스토리=보고서 철학 — 가로 셀렉터에서 스토리 선택 → 보고서: headline + lead + bullet `article`). 좌/우 2-컬럼 타임라인은 **발생/보도 2-타임스탬프 단일 타임라인 + 보도순/발생순 토글**로 단순화(지연막대 폐기). 전일대비 ▲▼·NEW·번역/원문 토글 추가. 팔레트 Warm Light. 스펙: `docs/superpowers/specs/2026-06-29-phase4-story-report-ui-design.md` · 목업: `specs/assets/phase4-report-mockup.html`. 아래 원안은 설계 근거 히스토리로 보존(비파괴).
+
 - **탭 유지**: `피드 | 스토리`. **피드 탭 = raw track**(순수 발행시간순) 그대로.
 - **상단 Now Brief(브리핑 우선, 신규)**: 스토리 탭 최상단에 **"지금 중요한 것"** — 열린 스토리 중 **impact/risk 상위 N개를 1회 LLM 합성**으로 묶은 브리핑(렌즈 가로지름). *결론 먼저*, 클릭하면 해당 렌즈/타임라인으로 drill-down. 요약 스케줄러에 편승해 주기 합성, 상위 N만이라 비용 작음. 합성 실패 시 브리핑만 생략(나머지 뷰 정상 — Fail-soft).
 - **스토리 뷰**: 렌즈를 **risk순**으로, 각 렌즈 안 스토리를 펼치면:
