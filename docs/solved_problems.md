@@ -13,6 +13,10 @@
 - **Firebase REST**: 헤더 `x-goog-user-project: daily-recap-498506` 없으면 403.
 - **인라인 주석 금지**: `.gitignore`/`.env`/`--env-file`은 줄끝 `# 주석`을 값/패턴에 섞음 → 주석은 별도 줄.
 - **프로덕션을 테스트에 맞춰 약화 금지**: 테스트 더블이 부실하면 *테스트*를 고쳐라(프로덕션 `client.close()`를 guard로 무르게 X).
+- **Cloud Run Job 클론(2026-06-29)**: 새 Job을 `--args`만으로 생성하면 이미지 ENTRYPOINT가 덮여 *"container exited abnormally / exec likely failed"*로 죽는다. 기존 Job을 `gcloud run jobs describe --format=export` → name·mode만 sed 치환 → **`gcloud alpha run jobs replace`**(beta엔 `replace` 없음)로 적용해야 command(`python`)+args(`-m run_enrich --mode X`)+env(`GOOGLE_CLOUD_PROJECT`)까지 정확히 복제됨.
+- **office gcloud 인증 위치(2026-06-29)**: 호스트 gcloud가 아니라 **docker 볼륨 `gcloud-cfg`**에 상주(`deploy-office.ps1`가 거기에 저장). 모든 호출은 `/work/ePrism-SSL-ROOT-CA.crt`를 컨테이너에 cp+`update-ca-certificates` 후 동작 — **`docker run`에 `-v "D:/projects/newsstore":/work` 마운트를 빼먹으면 CA 못 심어 SSL 실패**(빈 결과·가짜 0이 나옴, 데이터 없음으로 오인 금지).
+- **Firebase Hosting 버전=전체 스냅샷(2026-06-29)**: `populateFiles`에 바뀐 파일만 넣으면 나머지(예 `config.js`)가 빠져 사이트가 깨진다. `web/` **전 파일**(index.html+config.js) 모두 포함해 배포. 순서 = create version → populateFiles → 업로드 → finalize → **release**.
+- **Cloud Scheduler→Run Job 호출(2026-06-29)**: `run.googleapis.com/v2/.../jobs/X:run`은 **oauthToken**(scope `cloud-platform`)으로 호출(oidc 아님). `--oauth-service-account-email=newsstore-job@…`.
 - **하드코딩 금지(SSOT)**: 리스트/설정은 원본(feeds.yaml 등)에서 도출, 두 곳 복제 X.
 - **`zip` 무음 절단**: `zip(a,b)`는 짧은 쪽에 맞춰 조용히 자름 → 길이 다른 벡터/리스트 연산이 가짜 결과를 냄(코사인·centroid_sum에서 3곳 재발). 길이 계약은 `len` 검증으로 fail-loud(원칙3). 합/내적은 `cluster.add_vectors`처럼 SSOT 헬퍼로 도출.
 - **피드 도달성은 IP별로 다름 (양방향)**: 사이트가 IP/UA로 차단 → **Docker 프로빙 호스트 IP ≠ 프로덕션 Cloud Run IP**라 결과가 다르다. mk.co.kr·매경은 Docker에서 `403`이나 Cloud Run(서울)에선 `200`(라이브 수집 확인); bls.gov·opec.org는 Cloud Run에서도 `403`(fxstreet 동류). → **프로빙의 `403`/타임아웃은 *비권위*(`404`만 경로 권위), 최종 판정은 배포 스모크 로그.** 수집기는 브라우저 User-Agent 전송(`collect/fetcher.py` `DEFAULT_HEADERS`)으로 UA 기반 차단 일부 회피(IP 기반은 못 푼다). 2026-06-28 소스 확장 시 확립.
