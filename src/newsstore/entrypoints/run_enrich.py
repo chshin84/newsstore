@@ -88,7 +88,9 @@ def main(argv=None) -> int:
                                           now=datetime.now(timezone.utc))
             elif args.mode == "lenses":
                 from ..enrich.lens_pass import run_lens_pass
+                from ..enrich import topics as _topics
                 now = datetime.now(timezone.utc)
+                store.set_meta("lenses", _topics.lens_labels(_topics.load_topics()))  # UI 렌즈 라벨 발행(SSOT)
                 totals = {"classified": run_lens_pass(store, now=now, cutoff=now - OPEN_WINDOW,
                                                       client=client)}
             elif args.mode == "score":

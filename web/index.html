@@ -111,6 +111,9 @@
     .delta { font-size:10px; font-weight:800; margin-left:3px; }
     .delta.up { color:var(--risk); } .delta.down { color:var(--mut); }
     .newb { font-size:9px; font-weight:800; color:#fff; background:var(--accent); padding:1px 5px; border-radius:5px; }
+    .lchips { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0 2px; }
+    .lchip { font-size:10px; padding:1px 7px; border-radius:999px; background:var(--pill); color:var(--accent); font-weight:600; }
+    .lchip.more { color:var(--mut); background:transparent; }
     .sdetail .dlead { font-size:14px; color:var(--fg); background:#f3ede2;
       border-left:3px solid var(--accent); padding:9px 12px; border-radius:0 8px 8px 0; margin:6px 0 12px; }
     .abul { list-style:none; padding:0; margin:0 0 14px; }
@@ -301,6 +304,7 @@
     const tabStories = document.getElementById("tabStories");
     let storiesLoaded = false, openStoryId = null, detailGroups = [];
     let detailMode = "translated", detailSort = "report";   // 번역/원문 · 보도순/발생순 토글 상태
+    let LENS_LABELS = {}, lensLabelsLoaded = false;          // meta/lenses(렌즈 id→ko 라벨), 스토리 탭 1회 로드
     const storyById = new Map();
     const memberCache = new Map();         // story_id -> items[] (클릭당 1회 읽기, 캐시)
 
@@ -381,6 +385,22 @@
     }
     // === STORIES-LOGIC-END ===
 
+    async function ensureLensLabels() {
+      if (lensLabelsLoaded) return;
+      lensLabelsLoaded = true;
+      try {
+        const snap = await getDoc(doc(db, "meta", "lenses"));
+        if (snap.exists()) LENS_LABELS = snap.data() || {};
+      } catch (e) { /* fail-soft: 라벨 없으면 id 폴백 */ }
+    }
+    function lensChipsHtml(s, max) {                          // "기저 스토리"(렌즈) 라벨 칩
+      const ids = s.lenses || [];
+      if (!ids.length) return "";
+      const labels = ids.map(id => LENS_LABELS[id] || id);
+      const shown = max ? labels.slice(0, max) : labels;
+      const more = (max && labels.length > max) ? `<span class="lchip more">+${labels.length - max}</span>` : "";
+      return `<div class="lchips">${shown.map(l => `<span class="lchip">${txt(l)}</span>`).join("")}${more}</div>`;
+    }
     function metersHtml(s) {
       const dot = (on, cls) => `<span class="dot ${cls}${on ? " on" : ""}"></span>`;
       const row = (label, val, ref, cls) => {
@@ -398,7 +418,7 @@
       const last = s.last_seen && s.last_seen.toDate ? s.last_seen.toDate() : null;
       const newb = isNew(s.first_seen, Date.now()) ? `<span class="newb">NEW</span>` : "";
       return `<div class="scard" data-id="${esc(s.id)}" style="--bar:${c.bar}">
-        <div class="st">${head}</div>
+        <div class="st">${head}</div>${lensChipsHtml(s, 2)}
         <div class="sfoot"><span class="scnt">${Number(s.count) || 0}건</span>
           ${metersHtml(s)}${newb}<span class="stm">${relTime(last)}</span></div></div>`;
     }
@@ -453,6 +473,7 @@
       }).join("");
       detailEl.innerHTML = `<div class="sdetail">
         <div class="dt">${head}</div>
+        ${lensChipsHtml(s)}
         ${lead ? `<div class="dlead">${txt(lead)}</div>` : ""}
         ${bulletsHtml(s.article)}
         ${toggle}<div class="dmeta">${meta} ${sortT}</div>
@@ -487,6 +508,7 @@
     async function loadStories() {
       detailEl.innerHTML = ""; openStoryId = null;
       stripEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
+      await ensureLensLabels();
       try {
         const q2 = query(collection(db, "stories"), where("status", "==", "open"),
                          orderBy("last_seen", "desc"), limit(40));

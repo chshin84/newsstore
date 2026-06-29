@@ -24,3 +24,12 @@ def lens_type(t: dict, lens_id: str) -> str:
         if l["id"] == lens_id:
             return l["type"]
     raise KeyError(f"unknown lens id: {lens_id}")
+
+
+def lens_labels(t: dict) -> dict[str, str]:
+    """렌즈 id → 한국어 라벨(UI 표기용, SSOT). label.ko 없으면 id 폴백."""
+    out = {}
+    for l in t["lenses"]:
+        lab = l.get("label") if isinstance(l.get("label"), dict) else {}
+        out[l["id"]] = (lab.get("ko") if lab else None) or l["id"]
+    return out

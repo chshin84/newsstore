@@ -30,3 +30,11 @@ def test_watch_and_sector_count():
     assert len(watch) <= 10
     sectors = [l for l in t["lenses"] if l["type"] == "sector"]
     assert len(sectors) <= 11   # GICS vocab
+
+
+def test_lens_labels():
+    t = topics.load_topics()
+    labels = topics.lens_labels(t)
+    assert labels["us_equity"] == "미국 주식"          # UI 라벨(SSOT=label.ko)
+    assert labels["watch_nvidia"] == "엔비디아"
+    assert set(labels) == topics.valid_ids(t)          # 모든 렌즈 포함(누락 없음)
