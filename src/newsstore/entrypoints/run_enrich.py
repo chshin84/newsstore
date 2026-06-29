@@ -45,7 +45,7 @@ def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore Step-2 enrichment processor")
     ap.add_argument("--taxonomy", default="config/taxonomy.yaml")
-    ap.add_argument("--mode", choices=["cluster", "tag", "summary", "lenses", "score"],
+    ap.add_argument("--mode", choices=["cluster", "tag", "summary", "lenses", "score", "article"],
                     default="cluster",
                     help="cluster=embed+cluster(빠름) / summary=스토리 LLM 요약(Pass 3, 시간당) "
                          "/ lenses=토픽 렌즈 멀티라벨 분류 / score=dual score(risk/impact, Phase 3) "
@@ -95,6 +95,10 @@ def main(argv=None) -> int:
                 from ..enrich.scorer import run_score_pass
                 now = datetime.now(timezone.utc)
                 totals = run_score_pass(store, client, now=now, cutoff=now - OPEN_WINDOW)
+            elif args.mode == "article":
+                from ..enrich.article import run_article_pass
+                now = datetime.now(timezone.utc)
+                totals = run_article_pass(store, client, now=now, cutoff=now - OPEN_WINDOW)
             else:
                 from ..enrich.tagger import tag_stories
                 totals = tag_stories(store, client, taxonomy, batch=10,

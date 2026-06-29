@@ -28,8 +28,8 @@ def _parse_event_time(raw, ref):
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    if ref is not None and abs((dt - ref).days) > EVENT_SANITY_DAYS:
-        return None
+    if isinstance(ref, datetime) and abs((dt - ref).days) > EVENT_SANITY_DAYS:
+        return None                 # ref 비-datetime(이상값)이면 sanity 생략·dt 보존(강건성)
     return dt
 
 

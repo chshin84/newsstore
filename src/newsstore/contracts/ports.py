@@ -83,6 +83,19 @@ class Store(Protocol):
         """점수 필드만 merge 저장(+scored_count=count, scored_at=now). 기존 필드 보존(비파괴)."""
         ...
 
+    # Phase 4 아티클 생성 패스 계약. headline/lead/article + 전일대비 ref를 비파괴 저장(developments 불간섭).
+    def get_stories_for_article(self, cutoff) -> list[dict]:
+        """status=open·last_seen>=cutoff·count>articled_count(incremental) 스토리:
+        [{'id','title','count','lenses','summary','developments','risk','impact',
+          'risk_ref','impact_ref','score_ref_at','first_seen'}]."""
+        ...
+    def save_story_article(self, story_id, *, headline, lead, article,
+                           risk_ref=None, impact_ref=None, score_ref_at=None,
+                           count=None, now=None) -> None:
+        """헤드라인/리드/아티클 + ref만 merge 저장(+articled_count=count, articled_at=now).
+        developments는 안 씀(summary 단독 writer) — 기존 필드 보존(비파괴 by construction)."""
+        ...
+
 
 class LLMClient(Protocol):
     def generate_json(self, prompt: str, *, timeout: float) -> dict: ...

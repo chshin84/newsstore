@@ -178,6 +178,44 @@ class FirestoreStore:
             doc["scored_at"] = now
         self.db.collection("stories").document(story_id).set(doc, merge=True)
 
+    # --- Phase 4 article(보고서 생성) 패스 ---
+    def get_stories_for_article(self, cutoff) -> list[dict]:
+        # incremental: count>articled_count 또는 미생성. get_stories_for_scoring 미러 +
+        # 생성/헤드라인/ref 갱신에 필요한 필드(developments·risk·impact·*_ref·first_seen).
+        out = []
+        for snap in self.db.collection("stories").where("status", "==", "open").stream():
+            d = snap.to_dict() or {}
+            if not (d.get("last_seen") and d["last_seen"] >= cutoff):
+                continue
+            count = d.get("count", len(d.get("member_ids", [])))
+            if count <= d.get("articled_count", -1):
+                continue
+            out.append({"id": snap.id, "title": d.get("title", ""), "count": count,
+                        "lenses": d.get("lenses", []), "summary": d.get("summary", ""),
+                        "developments": d.get("developments", []),
+                        "risk": d.get("risk"), "impact": d.get("impact"),
+                        "risk_ref": d.get("risk_ref"), "impact_ref": d.get("impact_ref"),
+                        "score_ref_at": d.get("score_ref_at"), "first_seen": d.get("first_seen")})
+        return out
+
+    def save_story_article(self, story_id, *, headline, lead, article,
+                           risk_ref=None, impact_ref=None, score_ref_at=None,
+                           count=None, now=None) -> None:
+        # merge=True + 자기 필드만(read 없음, cross-field batch 없음, developments 미포함)
+        # → summary/lenses/score/cluster/developments 보존(비파괴 by construction).
+        doc = {"headline": headline, "lead": lead, "article": list(article)}
+        if risk_ref is not None:
+            doc["risk_ref"] = int(risk_ref)
+        if impact_ref is not None:
+            doc["impact_ref"] = int(impact_ref)
+        if score_ref_at is not None:
+            doc["score_ref_at"] = score_ref_at
+        if count is not None:
+            doc["articled_count"] = int(count)
+        if now is not None:
+            doc["articled_at"] = now
+        self.db.collection("stories").document(story_id).set(doc, merge=True)
+
     def get_story_member_signals(self, member_ids: list) -> dict:
         """멤버 기사 분류 신호를 **배치(get_all)**로 집계(per-member 읽기 금지).
         반환 {asset_hints, languages, tags(flat), keyword_text}."""
