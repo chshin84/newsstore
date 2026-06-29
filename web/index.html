@@ -9,8 +9,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg:#f1f0ec; --card:#ffffff; --line:#e4e2db; --fg:#22262c;
-      --sub:#4d5563; --mut:#8b929d; --accent:#2563eb; --pill:#eef0f3; --pill-fg:#4a5260;
+      --bg:#fdfcf8; --card:#fffefc; --line:#ece6da; --fg:#2f2a23;
+      --sub:#4a4236; --mut:#9c9385; --accent:#c0764a; --pill:#f0ebe0; --pill-fg:#6e6558;
+      --imp:#bf8f3c; --risk:#c0606d; --green:#4f9e80; --off:#ddd6c9;
     }
     * { box-sizing: border-box; }
     body { margin:0; background:var(--bg); color:var(--fg);
@@ -100,6 +101,29 @@
     .amore { align-self:center; background:var(--pill); color:var(--pill-fg); border:none; border-radius:8px; padding:7px 11px; font-size:11px; font-weight:600; cursor:pointer; height:fit-content; }
     .amore:hover { background:#e3e5ea; }
     .sempty { color:var(--mut); text-align:center; padding:34px 16px; line-height:1.7; }
+
+    /* ===== Phase 4: 셀렉터 미터·보고서 ===== */
+    .scard .sfoot { flex-wrap:wrap; gap:6px; }
+    .mtr { display:inline-flex; align-items:center; gap:2px; font-size:10px; color:var(--mut); }
+    .mtr b { font-weight:700; letter-spacing:.2px; margin-right:1px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:var(--off); display:inline-block; margin-left:1px; }
+    .dot.imp.on { background:var(--imp); } .dot.risk.on { background:var(--risk); }
+    .delta { font-size:10px; font-weight:800; margin-left:3px; }
+    .delta.up { color:var(--risk); } .delta.down { color:var(--mut); }
+    .newb { font-size:9px; font-weight:800; color:#fff; background:var(--accent); padding:1px 5px; border-radius:5px; }
+    .sdetail .dlead { font-size:14px; color:var(--fg); background:#f3ede2;
+      border-left:3px solid var(--accent); padding:9px 12px; border-radius:0 8px 8px 0; margin:6px 0 12px; }
+    .abul { list-style:none; padding:0; margin:0 0 14px; }
+    .abul li { position:relative; padding:3px 0 3px 16px; color:var(--sub); }
+    .abul li::before { content:""; position:absolute; left:2px; top:11px; width:5px; height:5px; border-radius:50%; background:var(--accent); }
+    .dtoggle, .htoggle { display:inline-flex; gap:2px; background:var(--pill); border-radius:7px; padding:2px; vertical-align:middle; }
+    .dtoggle { margin-bottom:12px; }
+    .dtoggle button, .htoggle button { border:0; background:transparent; color:var(--mut); font-weight:600;
+      font-size:11px; padding:3px 11px; border-radius:5px; cursor:pointer; font-family:inherit; }
+    .dtoggle button.on { background:var(--accent); color:#fff; } .htoggle button.on { background:var(--green); color:#fff; }
+    .htoggle { margin-left:8px; }
+    .times { display:flex; flex-wrap:wrap; gap:4px 8px; }
+    .tp { font-size:10px; color:var(--mut); } .tp b { color:var(--sub); } .tp.ev b { color:#2f7e63; }
   </style>
 </head>
 <body>
@@ -276,6 +300,7 @@
     const tabFeed = document.getElementById("tabFeed");
     const tabStories = document.getElementById("tabStories");
     let storiesLoaded = false, openStoryId = null, detailGroups = [];
+    let detailMode = "translated", detailSort = "report";   // 번역/원문 · 보도순/발생순 토글 상태
     const storyById = new Map();
     const memberCache = new Map();         // story_id -> items[] (클릭당 1회 읽기, 캐시)
 
@@ -356,16 +381,26 @@
     }
     // === STORIES-LOGIC-END ===
 
+    function metersHtml(s) {
+      const dot = (on, cls) => `<span class="dot ${cls}${on ? " on" : ""}"></span>`;
+      const row = (label, val, ref, cls) => {
+        if (val == null) return "";
+        const dots = [0, 1, 2].map(i => dot(i < Number(val), cls)).join("");
+        const db = deltaBadge(val, ref);
+        const badge = db ? `<span class="delta ${db.dir}">${db.dir === "up" ? "▲" : "▼"}${db.n}</span>` : "";
+        return `<span class="mtr"><b style="color:var(--${cls})">${label}</b>${dots}${badge}</span>`;
+      };
+      return row("impact", s.impact, s.impact_ref, "imp") + row("risk", s.risk, s.risk_ref, "risk");
+    }
     function storyCardHtml(s) {
       const c = srcColors(s.id);
-      const t = txt(s.title) || "(제목 없음)";
-      const summ = s.summary ? `<div class="ssum">${txt(s.summary)}</div>` : "";
-      const latest = s.latest ? `<div class="slatest">🔵 최신: ${txt(s.latest)}</div>` : "";
+      const head = txt(s.headline || s.title) || "(제목 없음)";
       const last = s.last_seen && s.last_seen.toDate ? s.last_seen.toDate() : null;
+      const newb = isNew(s.first_seen, Date.now()) ? `<span class="newb">NEW</span>` : "";
       return `<div class="scard" data-id="${esc(s.id)}" style="--bar:${c.bar}">
-        <div class="st">${t}</div>${summ}${latest}
+        <div class="st">${head}</div>
         <div class="sfoot"><span class="scnt">${Number(s.count) || 0}건</span>
-          <span class="stm">${relTime(last)}</span></div></div>`;
+          ${metersHtml(s)}${newb}<span class="stm">${relTime(last)}</span></div></div>`;
     }
     function articleCardHtml(it) {
       const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
@@ -379,31 +414,49 @@
         <div class="aam"><span class="pill src" style="background:${c.bg};color:${c.fg}">${txt(it.source) || "?"}</span>
           <span>${relTime(pub)}</span></div></article>`;
     }
+    function fmtTime(ms) {
+      return ms == null ? "" : new Date(ms).toLocaleString("ko-KR",
+        { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    }
+    function bulletsHtml(article) {
+      if (!Array.isArray(article) || !article.length) return "";
+      return `<ul class="abul">${article.map(b => `<li>${txt(b)}</li>`).join("")}</ul>`;
+    }
     function renderDetail(s, items) {
-      const groups = groupItemsByDevelopment(s.developments || [], items);
+      let groups = groupItemsByDevelopment(s.developments || [], items);
+      if (detailSort === "event")                       // 발생순: event_time(폴백 time) DESC
+        groups = [...groups].sort((a, b) =>
+          (b.dev ? nodeTimes(b.dev).event : 0) - (a.dev ? nodeTimes(a.dev).event : 0));
       detailGroups = groups;
-      const devCount = groups.filter(g => g.dev).length;
-      const meta = `${Number(s.count) || items.length}개 기사 · ${devCount}개 전개`;
-      const summ = s.summary ? `<div class="dsum">${txt(s.summary)}</div>` : "";
+      const head = txt(s.headline || s.title) || "(제목 없음)";
+      const lead = s.lead || s.summary;
+      const meta = `${Number(s.count) || items.length}개 기사 · ${groups.filter(g => g.dev).length}개 전개`;
+      const toggle = `<div class="dtoggle">
+        <button data-m="translated" class="${detailMode === 'translated' ? 'on' : ''}">번역</button>
+        <button data-m="original" class="${detailMode === 'original' ? 'on' : ''}">원문</button></div>`;
+      const sortT = `<span class="htoggle">
+        <button data-s="report" class="${detailSort === 'report' ? 'on' : ''}">보도순</button>
+        <button data-s="event" class="${detailSort === 'event' ? 'on' : ''}">발생순</button></span>`;
       const rows = groups.map((g, gi) => {
         const isDev = !!g.dev;
-        const devTime = isDev && g.dev.time && g.dev.time.toDate ? g.dev.time.toDate() : null;
+        const nt = isDev ? nodeTimes(g.dev) : null;
         const devText = isDev ? txt(g.dev.text) : "전체 기사";
-        const sc = isDev ? (Number(g.dev.source_count) || g.items.length) : g.items.length;
+        const times = isDev ? `<span class="tp ev">발생 <b>${fmtTime(nt.event)}</b>${nt.eventIsActual ? "" : " (보도기준)"}</span>
+          <span class="tp">보도 <b>${fmtTime(nt.report)}</b></span>` : "";
         const { shown, moreCount } = pickDisplayItems(g.items, 2);
-        const arts = (shown.map(articleCardHtml).join("") ||
-                      `<div class="sempty">기사 없음</div>`) +
+        const arts = (shown.map(articleCardHtml).join("") || `<div class="sempty">기사 없음</div>`) +
           (moreCount > 0 ? `<button class="amore" data-gi="${gi}">+${moreCount}개 더</button>` : "");
-        return `<div class="dgroup">
-          <div class="tcol"><div class="tnode ${gi === 0 ? "last" : ""}"><span class="tdot"></span>
-            <div class="ttime">${isDev ? relTime(devTime) : ""}</div>
-            <div class="tdev">${devText}</div><div class="tcnt">${sc}개 소스</div></div></div>
+        return `<div class="dgroup"><div class="tcol"><div class="tnode ${gi === 0 ? "last" : ""}">
+          <span class="tdot"></span><div class="times">${times}</div>
+          <div class="tdev">${devText}</div></div></div>
           <div class="darts" data-gi="${gi}">${arts}</div></div>`;
       }).join("");
       detailEl.innerHTML = `<div class="sdetail">
-        <div class="dt">${txt(s.title) || "(제목 없음)"}</div>${summ}
-        <div class="dmeta">${meta}</div>
-        ${rows || '<div class="sempty">이 스토리에 표시할 기사가 없습니다.</div>'}</div>`;
+        <div class="dt">${head}</div>
+        ${lead ? `<div class="dlead">${txt(lead)}</div>` : ""}
+        ${bulletsHtml(s.article)}
+        ${toggle}<div class="dmeta">${meta} ${sortT}</div>
+        ${rows || '<div class="sempty">표시할 기사가 없습니다.</div>'}</div>`;
     }
     function closeDetail() {
       openStoryId = null; detailEl.innerHTML = "";
@@ -438,7 +491,9 @@
         const q2 = query(collection(db, "stories"), where("status", "==", "open"),
                          orderBy("last_seen", "desc"), limit(40));
         const all = (await getDocs(q2)).docs.map(d => ({ id: d.id, ...d.data() }));
-        const stories = all.filter(s => (Number(s.count) || 0) >= 2).slice(0, 20);   // 멤버 2+ (클라 필터)
+        const now = Date.now();
+        const stories = all.filter(s => (Number(s.count) || 0) >= 2)
+          .sort((a, b) => storyRank(b, now) - storyRank(a, now)).slice(0, 20);   // 멤버 2+ · delta×impact
         storyById.clear(); stories.forEach(s => storyById.set(s.id, s));
         if (!stories.length) {
           stripEl.innerHTML = `<div class="sempty">아직 묶인 스토리가 없어요.<br>기사가 쌓이면 자동으로 묶여 나타납니다.</div>`;
@@ -458,8 +513,14 @@
       const card = e.target.closest(".scard");
       if (card) openStory(card.dataset.id);
     });
-    detailEl.addEventListener("click", e => {                 // "+N개 더" 전개
-      const btn = e.target.closest(".amore");
+    detailEl.addEventListener("click", e => {
+      const mt = e.target.closest(".dtoggle button");         // 번역/원문 토글
+      if (mt) { detailMode = mt.dataset.m;
+        const s = storyById.get(openStoryId); if (s) renderDetail(s, memberCache.get(openStoryId) || []); return; }
+      const stog = e.target.closest(".htoggle button");       // 보도순/발생순 토글
+      if (stog) { detailSort = stog.dataset.s;
+        const s = storyById.get(openStoryId); if (s) renderDetail(s, memberCache.get(openStoryId) || []); return; }
+      const btn = e.target.closest(".amore");                 // "+N개 더" 전개
       if (!btn) return;
       const g = detailGroups[Number(btn.dataset.gi)];
       const box = detailEl.querySelector(`.darts[data-gi="${btn.dataset.gi}"]`);
