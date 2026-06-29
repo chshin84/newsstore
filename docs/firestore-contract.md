@@ -20,7 +20,7 @@
 ### `items`
 - **raw (newsstore가 collect로 기록)** — `feed_id, source, asset_hint, language, url, title, body, published_at, fetched_at`. 모델 SSOT는 `src/newsstore/contracts/models.py`의 `RawItem`.
 - **seed (newsstore가 upsert 시 기록)** — `processed=false, processed_at=null, tags=[]`. 출처: `src/newsstore/store/firestore_store.py` `_to_doc`. **`processed=false`가 핸드오프 신호다.**
-- **enrich (news-analytics가 merge로 기록)** — `kind, tags[], embedding[], story_id, processed=true, processed_at`. 향후 `risk, impact`(topic-lens 재설계). **raw 필드는 절대 덮어쓰지 않는다(merge only).**
+- **enrich (news-analytics가 merge로 기록)** — `kind, tags[], embedding[], story_id, processed=true, processed_at`. **raw 필드는 절대 덮어쓰지 않는다(merge only).** (risk/impact는 `items`가 아니라 `stories`에 산출 — 아래 §stories.)
 
 ### `feed_state` (newsstore 전용)
 폴링 캐시(`etag, last_modified, last_fetched`). news-analytics는 손대지 않는다.
@@ -31,7 +31,9 @@
 ### `stories` (newsstore 인리치가 기록)
 스토리/클러스터(`centroid_sum, count, member_ids, entities, status, first_seen, last_seen, 요약 필드`).
 - **`lenses[]`** (string[], Phase 1) — 토픽 렌즈 id 배열(`config/topics.yaml` SSOT). 렌즈 패스(`run_enrich --mode lenses`)가 write, UI가 렌즈 필터·정렬에 read. 없으면 빈 배열 폴백(비파괴). id→type 해석은 topics.yaml.
-- 향후 `risk·impact`(Phase 3 score), `delta_time`(Phase 2). 변경 시 UI read 계약 함께 갱신.
+- **`risk`·`impact`** (int 0~3, Phase 3) — dual score. **`risk_reason`·`impact_reason`** (str, advisory 근거 1줄). 점수 패스(`run_enrich --mode score`)가 write(`save_story_score`, merge·비파괴), UI가 정렬·임계 노출에 read. 없으면 미표시 폴백(비파괴). risk=렌즈/내러티브 정렬, impact=스토리·종목 정렬(설계 `analysis-design.md` §7).
+- **`scored_count`** (int, Phase 3) — 이 멤버수까지 채점함(incremental 가드, `lensed_count`·`summary_count`와 동일 per-pass 컨벤션). **`scored_at`** (datetime) — 채점 시각.
+- 향후 `delta_time`(Phase 2). 변경 시 UI read 계약 함께 갱신.
 
 ## 핸드오프 프로토콜 — `processed` 플래그
 1. newsstore가 raw item을 쓸 때 `processed=false`를 박는다(verified: `firestore_store.py` `_to_doc`).
