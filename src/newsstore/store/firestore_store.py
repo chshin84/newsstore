@@ -60,8 +60,11 @@ class FirestoreStore:
     def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
         ref = self.db.collection("stories").document(story_id)
         d = ref.get().to_dict() or {}
+        prior = list(d.get("member_ids", []))
+        if member_id in prior:
+            return  # 멱등: 같은 멤버 재처리(재시도·비원자 save+mark)는 count·centroid 이중 반영 금지.
         csum = add_vectors(list(d.get("centroid_sum", [])), list(vec))
-        members = list(d.get("member_ids", [])) + [member_id]
+        members = prior + [member_id]
         ents = list(dict.fromkeys(list(d.get("entities", [])) + list(entities)))
         # 필드 한정 merge(풀-doc set 아님): 요약 패스가 쓴 summary 필드를 read↔set 레이스로
         # 되돌리지 않게(플랜 A D7). 자기 소유 cluster 필드만 갱신.
@@ -82,14 +85,19 @@ class FirestoreStore:
         return out
 
     def close_stale_stories(self, cutoff) -> int:
-        n = 0
         col = self.db.collection("stories")
+        stale = []
         for snap in col.where("status", "==", "open").stream():
             d = snap.to_dict() or {}
             if d.get("last_seen") and d["last_seen"] < cutoff:
-                col.document(snap.id).set({"status": "closed"}, merge=True)
-                n += 1
-        return n
+                stale.append(snap.id)
+        # N+1 set 대신 merge-batch(≤500 op/batch, mark_processed와 동일 컨벤션).
+        for i in range(0, len(stale), 500):
+            batch = self.db.batch()
+            for sid in stale[i:i + 500]:
+                batch.set(col.document(sid), {"status": "closed"}, merge=True)
+            batch.commit()
+        return len(stale)
 
     # --- Step-3 요약 패스 (플랜 A) ---
     def get_stories_needing_summary(self, limit: int) -> list[dict]:
