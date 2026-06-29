@@ -39,6 +39,12 @@
 - **Pass 2(스토리 태깅) 자동화** — 현재 cluster pass만 10분 자동화. 태깅은 수동(`--mode tag`). 별 Scheduler/주기 결정.
 - **인덱스 배포 확인** — `firestore.indexes.json`의 복합 인덱스가 실 Firestore에 READY인지(에뮬레이터는 인덱스 무시 → 계약 가드 테스트만으로는 실배포 미보장).
 
+## 🟡 Phase 4 후속 (스토리 리포트 리더 — 배포됨 2026-06-29, 캘리브레이션 잔여)
+> 코드·테스트·배포 완료(main 머지·푸시, 4 Job + 스케줄러 3개 lens→score→article 순, Hosting 재배포, 프로덕션 article 11건 생성 확인). 설계 SSOT: spec `docs/superpowers/specs/2026-06-29-phase4-story-report-ui-design.md`. (과도기 `HANDOFF-phase4.md`에서 이관 — 그 파일이 가리킨 PC-로컬 메모리 `phase4-story-report.md`는 회사 PC에만 있고 집 PC엔 부재라, 유실 방지차 여기로 옮김.)
+- **🔴 캘리브레이션 (provisional 동작 중 — 라이브 데이터로 사용자가 튜닝, 자율 변경 금지)**: 0~3 스케일 의미·게이트 임계·`REF_WINDOW`(현 24h)·헤드라인 delta 가중·`EVENT_SANITY_DAYS`(현 14). 라이브 분포를 보고 조정.
+- **라이브 모니터링**: article 생성 품질(헤드라인/리드/bullet), scorer risk/impact 분포, 렌즈 커버리지, 일일 비용($3 상한 내).
+- (참고, TODO 아님) `event_time`는 summary가 새 멤버 붙을 때마다 점진 백필 — 기존 스토리는 보도시각 폴백(자동).
+
 ## 🔵 향후 / 선택
 - **Phase 2 — 스토리 타임라인 UI** — 스크린샷처럼 같은 내러티브를 타임라인으로(속보 N건). Phase 1이 `stories` 채운 뒤.
 - **서비스 단위 src 분할** — `src/newsstore/{collector,enrichment,store}` — Step-2 착수 시 자연스럽게.
