@@ -8,6 +8,7 @@ import logging
 
 from ..contracts.ports import LLMClient
 from .gemini import LLMError
+from .milestone import assign_delta_times, prior_texts
 
 log = logging.getLogger("newsstore.enrich.summarizer")
 
@@ -20,11 +21,13 @@ def _excerpt_len(n_members: int) -> int:
     return 80 if n_members > 40 else 200
 
 
-def build_summary_prompt(members: list[dict], *, omitted: int = 0) -> str:
+def build_summary_prompt(members: list[dict], *, omitted: int = 0,
+                         prior_developments: list[dict] | None = None) -> str:
     """members: published_at asc, 각 {title,body,source,published_at}. 번호를 매겨 프롬프트화.
 
     omitted>0이면 이 목록이 최신 일부이고 그 이전 omitted건이 생략됐음을 LLM에 알린다(D4 — 절단
-    인지 없이 first_idx 오배치 방지)."""
+    인지 없이 first_idx 오배치 방지). prior_developments(기존 델타)가 있으면 milestone 게이트:
+    각 전개에 is_new를 요청. prior 없으면 기존 프롬프트와 동일(하위호환)."""
     elen = _excerpt_len(len(members))
     lines = []
     if omitted > 0:
@@ -35,15 +38,25 @@ def build_summary_prompt(members: list[dict], *, omitted: int = 0) -> str:
         body = (m.get("body") or "").strip()[:elen]
         source = m.get("source") or "?"
         lines.append(f"{i}. [{source}] {title} :: {body}")
+    ptexts = prior_texts(prior_developments) if prior_developments else []
+    milestone_rule = ""
+    known_block = ""
+    if ptexts:                          # prior 있을 때만(없으면 기존 프롬프트와 동일=하위호환)
+        known_block = ("\n이미 알려진 전개(기존 델타):\n"
+                       + "\n".join(f"- {t}" for t in ptexts) + "\n")
+        milestone_rule = ("각 전개에 is_new(이 전개가 위 '이미 알려진 전개'의 단순 재탕/배경이 "
+                          "아니라 진짜 새 전개면 true, 재탕이면 false)도 넣어라. ")
     return (
         "당신은 한국어 금융 뉴스 스토리를 추적하는 에디터다. 아래는 한 스토리(같은 사건 클러스터)에 "
         "속한 기사들을 시간순(오래된→최신)으로 번호를 매긴 목록이다. 전체 흐름을 전개(development) "
         "단위로 묶어 요약하라. 의미상 같은 전개의 다른 표현(출처가 달라도)은 하나의 전개로 합쳐라. "
         "최근 전개에 가중치를 둬라. 사실만 쓰고 출처 밖 내용·추측은 금지한다.\n"
         "각 전개에 first_idx(그 전개를 처음 보도한 기사 번호)와 source_count(그 전개를 다룬 서로 "
-        "다른 출처 수 추정)를 넣어라. 아래 JSON만 출력:\n"
+        "다른 출처 수 추정)를 넣어라. " + milestone_rule + "아래 JSON만 출력:\n"
         '{"title":"스토리 캐노니컬 제목(≤40자)","summary":"2~3문장 요약(최근 가중)",'
-        '"developments":[{"text":"전개 한 줄","first_idx":0,"source_count":1}]}\n\n'
+        '"developments":[{"text":"전개 한 줄","first_idx":0,"source_count":1'
+        + (',"is_new":true' if ptexts else '') + '}]}\n'
+        + known_block + "\n"
         + "\n".join(lines)
     )
 
@@ -77,20 +90,27 @@ def validate_summary(raw: dict, *, n_members: int) -> dict | None:
         sc = d.get("source_count")
         sc = sc if _is_int(sc) and sc >= 1 else 1
         out.append({"text": text.strip(), "first_idx": idx,
-                    "source_count": min(sc, n_members)})
+                    "source_count": min(sc, n_members),
+                    "is_new": d.get("is_new") is True})    # 정확히 True만, 그 외 보수적 recap
+
     return {"title": title.strip()[:MAX_TITLE], "summary": summary.strip(),
             "developments": out}
 
 
 def summarize_story(members_all: list[dict], client: LLMClient, *, now=None,
+                    prior_developments: list[dict] | None = None,
                     max_members: int = SUMMARY_MAX_MEMBERS) -> dict | None:
-    """전체 멤버 중 최신 max_members건을 LLM에 먹여 요약. 반환 dict 또는 None(스킵)."""
+    """전체 멤버 중 최신 max_members건을 LLM에 먹여 요약. 반환 dict 또는 None(스킵).
+
+    prior_developments(기존 델타) 있으면 milestone 게이트로 delta_time 배정(§6)."""
     if not members_all:
         return None
     members_fed = members_all[-max_members:]
     n = len(members_fed)
     omitted = len(members_all) - n
-    raw = client.generate_json(build_summary_prompt(members_fed, omitted=omitted), timeout=30.0)
+    raw = client.generate_json(
+        build_summary_prompt(members_fed, omitted=omitted,
+                             prior_developments=prior_developments), timeout=30.0)
     v = validate_summary(raw, n_members=n)
     if v is None:
         return None
@@ -99,7 +119,9 @@ def summarize_story(members_all: list[dict], client: LLMClient, *, now=None,
         pub = members_fed[d["first_idx"]].get("published_at")
         if pub is None:                                # 시각 grounding 불가 → 드롭
             continue
-        devs.append({"text": d["text"], "time": pub, "source_count": d["source_count"]})
+        devs.append({"text": d["text"], "time": pub,
+                     "source_count": d["source_count"], "is_new": d["is_new"]})
+    devs = assign_delta_times(devs, prior_developments=prior_developments or [])  # delta_time 부여
     devs.sort(key=lambda x: x["time"], reverse=True)   # 안정정렬, time DESC(위=최신)
     latest = devs[0]["text"] if devs else ""
     return {"title": v["title"], "summary": v["summary"], "latest": latest,
@@ -117,7 +139,9 @@ def run_summary_pass(store, client: LLMClient, *, limit: int, now,
             if not members:
                 totals["skipped"] += 1
                 continue
-            res = summarize_story(members, client, now=now, max_members=max_members)
+            res = summarize_story(members, client, now=now,
+                                  prior_developments=st.get("developments"),
+                                  max_members=max_members)
             if res is None:
                 totals["skipped"] += 1
                 continue

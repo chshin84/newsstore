@@ -33,7 +33,7 @@
 - **`lenses[]`** (string[], Phase 1) — 토픽 렌즈 id 배열(`config/topics.yaml` SSOT). 렌즈 패스(`run_enrich --mode lenses`)가 write, UI가 렌즈 필터·정렬에 read. 없으면 빈 배열 폴백(비파괴). id→type 해석은 topics.yaml.
 - **`risk`·`impact`** (int 0~3, Phase 3) — dual score. **`risk_reason`·`impact_reason`** (str, advisory 근거 1줄). 점수 패스(`run_enrich --mode score`)가 write(`save_story_score`, merge·비파괴), UI가 정렬·임계 노출에 read. 없으면 미표시 폴백(비파괴). risk=렌즈/내러티브 정렬, impact=스토리·종목 정렬(설계 `analysis-design.md` §7).
 - **`scored_count`** (int, Phase 3) — 이 멤버수까지 채점함(incremental 가드, `lensed_count`·`summary_count`와 동일 per-pass 컨벤션). **`scored_at`** (datetime) — 채점 시각.
-- 향후 `delta_time`(Phase 2). 변경 시 UI read 계약 함께 갱신.
+- **`developments[].delta_time`** (datetime, Phase 2) — 그 전개가 새 정보로 우리 스토어에 처음 편입된 시각(`published_at`=발행시각과 구분되는 2번째 타임스탬프). 요약 패스(`run_enrich --mode summary`)가 write — milestone 게이트(LLM `is_new`)가 진짜 새 전개면 `time`, 단순 recap이면 기존 프런티어(`max(prior delta_time)`)에 귀속해 **새 델타로 앞서지 않게** 한다. 없으면 소비자가 `developments[].time`으로 폴백(additive·비파괴, 레거시 안전).
 
 ## 핸드오프 프로토콜 — `processed` 플래그
 1. newsstore가 raw item을 쓸 때 `processed=false`를 박는다(verified: `firestore_store.py` `_to_doc`).

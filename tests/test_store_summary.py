@@ -75,3 +75,26 @@ def test_append_to_story_preserves_summary(store):
     d = store.db.collection("stories").document("s").get().to_dict()
     assert d["summary"] == "Sum"                            # not wiped by append
     assert d["count"] == 2 and "b" in d["member_ids"]       # cluster field updated
+
+
+# --- Phase 2: prior developments 반환 + delta_time 저장 ---
+
+def test_needing_summary_returns_prior_developments(store):
+    _mk_story(store, "a", count=5, summary_count=2, last_seen=NOW)
+    devs = [{"text": "p1", "time": NOW, "source_count": 1, "delta_time": NOW}]
+    store.save_story_summary("a", title="T", summary="S", latest="p1",
+                             developments=devs, summary_count=2, now=NOW)
+    got = {s["id"]: s for s in store.get_stories_needing_summary(limit=10)}
+    assert got["a"]["developments"][0]["text"] == "p1"          # prior 동봉
+    assert got["a"]["developments"][0]["delta_time"] == NOW
+
+
+def test_save_story_summary_persists_delta_time(store):
+    _mk_story(store, "s", count=2, last_seen=NOW)
+    store.save_story_summary("s", title="T", summary="S", latest="L",
+                             developments=[{"text": "d", "time": NOW,
+                                            "source_count": 1, "delta_time": NOW}],
+                             summary_count=2, now=NOW)
+    d = store.db.collection("stories").document("s").get().to_dict()
+    assert d["developments"][0]["delta_time"] == NOW
+    assert d["count"] == 2                                       # cluster field 보존

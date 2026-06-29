@@ -62,7 +62,8 @@ class Store(Protocol):
 
     # Step-3 요약 패스 계약 (플랜 A). 새 멤버가 생긴 스토리를 골라 LLM 요약을 채운다.
     def get_stories_needing_summary(self, limit: int) -> list[dict]:
-        """last_seen desc 상위 limit개 중 count>summary_count(새 멤버)인 것만. [{'id','count'}]."""
+        """last_seen desc 상위 limit개 중 count>summary_count(새 멤버)인 것만.
+        [{'id','count','developments'(prior 델타, delta_time 포함 가능)}]."""
         ...
     def get_story_members(self, story_id: str) -> list[dict]:
         """story_id 멤버 기사 published_at asc. [{'title','body','source','published_at'}]."""

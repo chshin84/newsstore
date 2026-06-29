@@ -102,7 +102,8 @@ class FirestoreStore:
         for snap in q.stream():
             d = snap.to_dict() or {}
             if d.get("count", 0) > d.get("summary_count", 0):
-                out.append({"id": snap.id, "count": d.get("count", 0)})
+                out.append({"id": snap.id, "count": d.get("count", 0),
+                            "developments": d.get("developments", [])})  # prior(델타) 동봉
         return out
 
     def get_story_members(self, story_id: str) -> list[dict]:
