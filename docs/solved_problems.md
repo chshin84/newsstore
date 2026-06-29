@@ -16,6 +16,9 @@
 - **하드코딩 금지(SSOT)**: 리스트/설정은 원본(feeds.yaml 등)에서 도출, 두 곳 복제 X.
 - **`zip` 무음 절단**: `zip(a,b)`는 짧은 쪽에 맞춰 조용히 자름 → 길이 다른 벡터/리스트 연산이 가짜 결과를 냄(코사인·centroid_sum에서 3곳 재발). 길이 계약은 `len` 검증으로 fail-loud(원칙3). 합/내적은 `cluster.add_vectors`처럼 SSOT 헬퍼로 도출.
 - **피드 도달성은 IP별로 다름 (양방향)**: 사이트가 IP/UA로 차단 → **Docker 프로빙 호스트 IP ≠ 프로덕션 Cloud Run IP**라 결과가 다르다. mk.co.kr·매경은 Docker에서 `403`이나 Cloud Run(서울)에선 `200`(라이브 수집 확인); bls.gov·opec.org는 Cloud Run에서도 `403`(fxstreet 동류). → **프로빙의 `403`/타임아웃은 *비권위*(`404`만 경로 권위), 최종 판정은 배포 스모크 로그.** 수집기는 브라우저 User-Agent 전송(`collect/fetcher.py` `DEFAULT_HEADERS`)으로 UA 기반 차단 일부 회피(IP 기반은 못 푼다). 2026-06-28 소스 확장 시 확립.
+- **머지 후 이미지 재빌드 필수 (배포 전)**: 코드를 main에 머지해도 `processor:latest` 이미지가 그대로면 **라이브 Job이 옛 코드를 돌린다** → 새 `--mode`(예 `score`)가 `invalid choice`로 죽음. **머지 → `gcloud builds submit` 재빌드 → `jobs update --image` → execute** 순서를 지켜라(2026-06-29 score 배포 실패로 확립).
+- **사내(ePrism MITM) gcloud SSL**: 최신 gcloud(urllib3 v2 strict)가 프록시 인증서 AKI 부재를 거부(`Missing Authority Key Identifier`) → 로컬·Cloud Shell 모두 차단, CA 추가로 안 풀림. **우회: `scripts/deploy-office.ps1`**(옛 gcloud 402 컨테이너 + ePrism CA + `core/custom_ca_certs_file` + Cloud Run Jobs는 `beta` 트랙 + Job용 SA `newsstore-job@`로 secret 접근). 집(MITM 없음)에선 평범하게 됨. 2026-06-29 확립.
+- **PowerShell→bash 루프변수 깨짐**: `bash -c "for J in ...; do gcloud ... \$J; done"`를 PowerShell에서 호출하면 `$J`가 안 풀려 인자가 밀림(`Invalid resource name [ --image=...]`). → 루프 대신 **명시적 커맨드 나열**.
 
 ## 환경 / 툴링
 - **로컬 Python 없음** — 호스트 `python`은 Windows Store 스텁. → **Docker 전용 개발**(개발 원칙 7). 모든 실행·테스트는 Docker.
