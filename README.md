@@ -2,9 +2,9 @@
 
 무료 RSS 피드를 5분마다 수집해 **Firestore**에 중복 제거 저장하고, **공개 웹사이트**로 보여주는 뉴스 데이터 모듈. (`daytrade_assist`의 뉴스 데이터 모듈 — 별개 자기완결 repo)
 
-- **라이브 사이트:** https://daily-recap-498506.web.app
+- **사이트:** https://daily-recap-498506.web.app
 - **GitHub:** https://github.com/chshin84/newsstore (public)
-- Step-1(수집)·저장·뷰어 라이브. **인리치먼트(LLM 태깅·임베딩·클러스터·스토리·점수)는 별개 repo `news-analytics` 소유** — newsstore와는 **Firestore 스키마로만** 만난다(경계·계약 SSOT: `docs/firestore-contract.md`). 과도기로 코드는 아직 newsstore에 잔류(§진행 상황).
+- **인리치먼트(LLM 태깅·임베딩·클러스터·스토리·점수)는 별개 repo `news-analytics` 소유** — newsstore와는 **Firestore 스키마로만** 만난다(경계·계약 SSOT: `docs/firestore-contract.md`).
 
 ## 아키텍처
 
@@ -61,13 +61,7 @@ MSYS_NO_PATHCONV=1 docker compose run --rm test
 `config/feeds.yaml` — 한국(인포맥스·한경·매경), 미국주식(Benzinga), 크립토(CoinDesk·Cointelegraph), FX/금리(InvestingLive·Investing·Fed·ECB), **Bloomberg(markets/technology/economics/business/politics/opinion/crypto/wealth + Flipboard Korea)**, Reuters(Google News 경유), Google News(루머·KR칩), TruthSocial, Axios.
 - 피드 추가/변경은 이미지에 `COPY` 되므로 **재빌드+Job 갱신** 필요.
 
-## 진행 상황
-- ✅ **Step-1 수집기**: 완료·배포·라이브 (Cloud Run Job + Scheduler */5 → Firestore).
-- ✅ **공개 사이트**: 라이브 (소스 필터·중복제거·스팸필터·소스별 색·호버 본문).
-- 🔀 **인리치먼트(태깅/스토리/점수) → `news-analytics` repo 소유.** Cloud Run Job#2(`newsstore-enricher`)·#3(`newsstore-summarizer`)는 **라이브**이나 **과도기로 newsstore 이미지에서 운영 중**(`docs/operations.md §E·§F`). 코드 물리 이전(`src/newsstore/enrich/` 디렉터리·`ports.py` 분할)은 별도 작업. 경계·계약: `docs/firestore-contract.md`.
-
 ## 문서
-- **작업 순서(work order) SSOT: `docs/roadmap.md`** — 수집·저장·UI(완료) + 분석 Phase 0~5
 - **분석 레이어 설계/방법론: `docs/analysis-design.md`** (하이브리드 3-tier 렌즈·델타·score·UI)
 - 최초 셋업(0→배포): `docs/setup.md` · 운영·재배포: `docs/operations.md`
 - Firestore 스키마 계약: `docs/firestore-contract.md` · 설계 스펙 히스토리: `docs/superpowers/specs/`

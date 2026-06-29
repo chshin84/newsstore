@@ -17,20 +17,19 @@
 - **비밀 구분**: `GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프·전략 (중요):** newsstore = 수집·저장·호스팅(UI) **+ 인리치/분석을 통합 개발**(클러스터·태깅·임베딩·스토리·risk/impact 등). **전략(2026-06-29): 통합 우선, 인터페이스 안정·MCP/agent 목표 구체화 시 한 번에 `news-analytics`로 분리**(현재 분리 보류). news-analytics repo엔 gray-band 클러스터링이 선행 개발돼 있었고 그 코드를 newsstore `src/enrich/clustering.py`로 **이식**(import 아님). **작업 순서 SSOT: `docs/roadmap.md`** · 분석 설계: `docs/analysis-design.md` · 스키마 계약: `docs/firestore-contract.md` · 메모리 `integration-strategy`·`hybrid-topic-lens-model`.
+- **스코프 (중요):** newsstore = 수집·저장·호스팅(UI) **+ 인리치/분석을 통합 개발**(클러스터·태깅·임베딩·스토리·risk/impact 등). gray-band 클러스터링 코드는 newsstore `src/enrich/clustering.py`로 **이식**(import 아님). **진행상태: 메모리 `project-status`(코드/배포 기준 SSOT)** · 백로그·이슈: **GitHub Issues** · 분석 설계: `docs/analysis-design.md` · 스키마 계약: `docs/firestore-contract.md` · 메모리 `integration-strategy`·`hybrid-topic-lens-model`.
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
-- 로드맵(Step 1~7): `docs/roadmap.md`
 - 코드 원칙 상세: `docs/coding-principles.md`
-- 문제 로그: `docs/solved_problems.md`(해결) · `docs/unsolved_problems.md`(미해결)
+- 오답노트(해결 교훈, append-only): `docs/solved_problems.md` · 백로그·이슈: **GitHub Issues**
 - 서브에이전트 컨텍스트 주입: `docs/subagent-context.md`
 
 ## 관습 (항상)
-- **문제 발견 시** → `docs/unsolved_problems.md`에 기록(맥락 충분히). **사용자에게도 알릴 것.**
-- **해결 시** → `docs/solved_problems.md`로 옮기고(문제→원인→해결), unsolved에서 제거.
-- 이 로그가 기억의 원본 — 내(Claude) 기억·정확성에 의존하지 않게.
+- **문제·할일 발견 시** → **GitHub Issue**로 등록(손유지 백로그 파일 금지 — 썩는다). **사용자에게도 알릴 것.** 🔴(사용자 결정 필요)는 문서에 묻지 말고 **즉시 surface**.
+- **해결 시** → 재사용 교훈을 `docs/solved_problems.md`(오답노트·append-only)에 기록(문제→원인→해결). 일반화 가능하면 `coding-principles`로 승격(중복 금지).
+- **진행상태는 메모리 `project-status`**(코드/배포 기준 SSOT) — 문서엔 상태를 두지 않는다. 의심되면 코드·gcloud로 재측정.
 - **구현 전 `docs/solved_problems.md` 확인** — 같은 실수 반복 금지.
-- **SDD/ultracode 서브에이전트엔 `coding-principles` + `solved_problems.md`의 '핵심 gotchas'를 주입**(전체 아카이브·`unsolved`는 X — 🔴 자동구현 사고 위험). 배선·금지: `docs/subagent-context.md`. 서브에이전트는 세션 맥락이 없어 주입해야 실수를 안 반복한다.
+- **SDD/ultracode 서브에이전트엔 `coding-principles` + `solved_problems.md`의 '핵심 gotchas'를 주입**(전체 아카이브 X — 관련성>분량). 배선: `docs/subagent-context.md`. 서브에이전트는 세션 맥락이 없어 주입해야 실수를 안 반복한다.
 
 ## 배포 (요약, 상세는 operations.md)
 - 코드/피드 변경 → 이미지 재빌드 → `gcloud run jobs update --image` → execute

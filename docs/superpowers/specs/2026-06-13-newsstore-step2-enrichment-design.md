@@ -1,8 +1,6 @@
 # newsstore Step-2 — 인리치먼트(태깅·임베딩·스토리 클러스터) 설계
 
-> 🔀 **분할 (2026-06-28) — 목표 소유: `news-analytics`.** 이 문서의 인리치/분석은 분리 후 별개 repo `news-analytics` 소유다. **단 코드·Job은 아직 newsstore에서 라이브(과도기 — 마이그레이션 미완)** — 운영 런북은 `docs/operations.md §E·§F`, 경계·계약·소유권 인덱스는 `docs/firestore-contract.md`. newsstore에선 이행 참조로 보존(폐기 아님).
-
-_작성: 2026-06-13 · 상태: 결정 완료, 구현 계획 대기 · 스파이크로 핵심 검증됨_
+> 🔀 **분할 — 목표 소유: `news-analytics`.** 이 문서의 인리치/분석은 분리 후 별개 repo `news-analytics` 소유다. 운영 런북은 `docs/operations.md §E·§F`, 경계·계약·소유권 인덱스는 `docs/firestore-contract.md`. newsstore에선 이행 참조로 보존(폐기 아님).
 
 ## 1. 목표 / 범위
 raw 기사를 **태그(필터용) + 임베딩 + 스토리 클러스터(내러티브 타임라인)**로 가공한다.
@@ -16,7 +14,7 @@ raw 기사를 **태그(필터용) + 임베딩 + 스토리 클러스터(내러티
 - **태깅 LLM**: Gemini Flash (임베딩과 동일 provider·Tier3·다국어·구조화 출력).
 - **임베딩**: Gemini `text-multilingual-embedding` (프로덕션은 **`GEMINI_API_KEY` Tier3**, 백엔드 전용 비밀). **기사당 1회**, 병렬.
 - **태그 통제 어휘 = 3축**: tickers + entities + topics (§6).
-- **클러스터링**: **centroid 온라인, 임계 ≈0.83**. union-find ❌(전이 연쇄 과병합). (스파이크 검증: 묶인 건 전부 진짜 스토리, 30건 ~12초)
+- **클러스터링**: **centroid 온라인, 임계 ≈0.83**. union-find ❌(전이 연쇄 과병합).
 - **시간창**: 새 기사를 최근 **48h '열린 스토리'** 중심과 비교, **24h 무활동 시 close**(비교 대상서 제외).
 - **선필터**: 스팸 + Bloomberg 다이제스트를 `kind`로 분류해 임베딩·클러스터 **제외**(저장은 보존).
 
@@ -65,11 +63,11 @@ for 새 기사 i (kind=story, 임베딩 있음):
   else:                새 스토리(member=[i], centroid=vec_i, title=LLM(i))
 주기적으로 last_seen이 24h 지난 open → close.
 ```
-- 후보 비교는 **열린 스토리 centroid만**(수백 개여도 in-process 코사인 가벼움 — 스파이크 0.3s).
+- 후보 비교는 **열린 스토리 centroid만**(수백 개여도 in-process 코사인 가벼움).
 - 멤버 2+ 스토리만 타임라인 가치. 단독(singleton)은 일반 기사로 표시.
 
 ## 8. 비용 / 스케일
-- 실제 신규 ~30–60건/시간(dedup 후). 임베딩 0.37s/건(순차)·병렬+Tier3면 수 초. 클러스터 0.3s.
+- 실제 신규 ~30–60건/시간(dedup 후). 임베딩은 병렬+Tier3로 처리.
 - 임베딩·Flash 태깅 단가 미미. 결제 $0 기조 유지(Tier3 한도 내).
 
 ## 9. 보안
@@ -94,6 +92,4 @@ for 새 기사 i (kind=story, 임베딩 있음):
 
 > 구현은 SDD로, **각 서브에이전트에 `coding-principles` + `solved_problems`의 gotchas 주입**(`docs/subagent-context.md`).
 
-<!-- spec-review: passed lenses=0 date=2026-06-28 note=grandfathered — pre-existing shipped doc (2026-06-12~14), predates review gate; not re-reviewed this session -->
-
-<!-- spec-review: passed lenses=3 date=2026-06-28 -->
+<!-- ⚠️ 코드가 정본: 실제 임계는 코드(sim≥0.75 + GRAY_BAND 0.55~0.75), sqlite 경로 제거됨, 태깅 패스는 데드(tag_stories 부재), kind에 sports 추가됨 — 이 문서의 옛 수치/구조는 설계근거 히스토리. -->

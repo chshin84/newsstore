@@ -1,8 +1,8 @@
 # 최초 셋업 (0 → 배포)
 
-이 프로젝트를 **밑바닥부터** GCP에 올리는 절차. (이미 `daily-recap-498506`에 셋업·라이브돼 있음 — 이 문서는 재해복구·새 프로젝트 복제·포크 배포용 기록.) 이후 변경 반영은 `docs/operations.md`.
+이 프로젝트를 **밑바닥부터** GCP에 올리는 절차. (이 문서는 재해복구·새 프로젝트 복제·포크 배포용 기록.) 이후 변경 반영은 `docs/operations.md`.
 
-> 실제로 이 세션에서 **firebase CLI/Node 없이 gcloud + REST API만으로** 전부 프로비저닝했다.
+> **firebase CLI/Node 없이 gcloud + REST API만으로** 전부 프로비저닝할 수 있다.
 
 ## 전제 / 변수
 - `gcloud` 설치 + 로그인(`gcloud auth login`, `gcloud auth application-default login`), GCP **결제 계정** 1개.
@@ -84,4 +84,4 @@ gcloud firestore indexes composite create --collection-group=items \
 ## 7. 사이트 배포 (Firebase Hosting, REST)
 기본 site(`<PROJECT_ID>`)는 자동 생성됨. 업로드 절차는 `docs/operations.md` **§B** 참조(version → populateFiles → gzip+sha256 업로드 → finalize → release).
 
-→ 완료되면 **https://<PROJECT_ID>.web.app** 라이브. 이후 모든 변경은 `docs/operations.md`.
+→ 완료되면 **https://<PROJECT_ID>.web.app** 에서 서빙된다. 이후 모든 변경은 `docs/operations.md`.

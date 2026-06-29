@@ -1,11 +1,11 @@
 # newsstore 분석 레이어 설계 — 하이브리드 토픽 렌즈 (파편화 해소 + risk/impact 큐레이션 + 델타 타임라인)
 
-_작성: 2026-06-28 · 갱신: 2026-06-29(통합·승격) · 상태: **분석 레이어 마스터 설계(newsstore 소유)** — 5개 Phase._
+_분석 레이어 마스터 설계 (newsstore 소유)._
 
-> **이 문서의 위치 (2026-06-29):** 통합-우선 전략 하에 분석은 **newsstore 내에서 개발**한다. 본 문서가 **하이브리드 3-tier 렌즈·개체-aware 클러스터·델타·dual score·UI의 설계/방법론 SSOT**다(이전 "news-analytics 분할" 마킹 해제).
-> - **작업 *순서*의 SSOT = `docs/roadmap.md`** (Phase 0~5 상태). 본 문서는 *무엇을·왜·어떻게*의 설계 SSOT.
+> **이 문서의 위치:** 통합-우선 전략 하에 분석은 **newsstore 내에서 개발**한다. 본 문서가 **하이브리드 3-tier 렌즈·개체-aware 클러스터·델타·dual score·UI의 설계/방법론 SSOT**다.
+> - 본 문서는 *무엇을·왜·어떻게*의 설계 SSOT. 진행 상태는 메모리 `project-status`.
 > - 피드/소스 확장은 `2026-06-28-feed-source-expansion-design.md`가 별도 SSOT. 스키마 계약은 `docs/firestore-contract.md`.
-> - **이미 구현됨**: Phase 1의 사건 클러스터(gray-band)는 `src/newsstore/enrich/clustering.py`로 이식 완료. 나머지(렌즈 분류·델타·score·UI)는 미구현 — roadmap 참조.
+> - 사건 클러스터(gray-band)는 `src/newsstore/enrich/clustering.py`로 이식.
 
 ## 1. 배경 / 문제 (왜 바꾸나)
 라이브 사이트(https://daily-recap-498506.web.app/) 스토리 탭 실측 결과, 자동 토픽 생성이 **두 방향으로 동시에 실패**한다:
@@ -85,11 +85,11 @@ _작성: 2026-06-28 · 갱신: 2026-06-29(통합·승격) · 상태: **분석 �
 - **멀티라벨 집계(리뷰 반영)**: risk/impact는 **스토리(사건) 단위로 1쌍** 산출. **렌즈의 risk = 그 렌즈 소속 (열린) 스토리들의 risk 집계**(최신성 가중 max). 한 기사가 여러 렌즈에 들어도 채점은 스토리에 1번, 렌즈는 집계로 도출(중복 채점 없음).
 - **임계 숨김**: `impact < 임계` 델타/스토리는 UI에서 접기(저장 유지 — 비파괴).
 - **risk 정렬**: 렌즈 카드 묶음을 risk 내림차순 배치(요구 "내러티브 위험도 배열").
-- **미래 reader**: risk-candidate reader(Phase 5)는 매칭 시 **impact를 재계산**(별도 boost 필드 없이 impact 자체 갱신). 지금 미구현.
+- **미래 reader**: risk-candidate reader는 매칭 시 **impact를 재계산**(별도 boost 필드 없이 impact 자체 갱신).
 
 ## 8. UI — Now Brief + 좌 이벤트 / 우 기사시간
 
-> **Phase 4 확정 변경(2026-06-29, 사용자):** 글로벌 Now Brief는 **per-story 리드(`lead`)로 대체**(스토리=보고서 철학 — 가로 셀렉터에서 스토리 선택 → 보고서: headline + lead + bullet `article`). 좌/우 2-컬럼 타임라인은 **발생/보도 2-타임스탬프 단일 타임라인 + 보도순/발생순 토글**로 단순화(지연막대 폐기). 전일대비 ▲▼·NEW·번역/원문 토글 추가. 팔레트 Warm Light. 스펙: `docs/superpowers/specs/2026-06-29-phase4-story-report-ui-design.md` · 목업: `specs/assets/phase4-report-mockup.html`. 아래 원안은 설계 근거 히스토리로 보존(비파괴).
+> **설계 변경(UI):** 글로벌 Now Brief는 **per-story 리드(`lead`)로 대체**(스토리=보고서 철학 — 가로 셀렉터에서 스토리 선택 → 보고서: headline + lead + bullet `article`). 좌/우 2-컬럼 타임라인은 **발생/보도 2-타임스탬프 단일 타임라인 + 보도순/발생순 토글**로 단순화(지연막대 폐기). 전일대비 ▲▼·NEW·번역/원문 토글 추가. 팔레트 Warm Light. 스펙: `docs/superpowers/specs/2026-06-29-phase4-story-report-ui-design.md` · 목업: `specs/assets/phase4-report-mockup.html`. 아래 원안은 설계 근거 히스토리로 보존(비파괴).
 
 - **탭 유지**: `피드 | 스토리`. **피드 탭 = raw track**(순수 발행시간순) 그대로.
 - **상단 Now Brief(브리핑 우선, 신규)**: 스토리 탭 최상단에 **"지금 중요한 것"** — 열린 스토리 중 **impact/risk 상위 N개를 1회 LLM 합성**으로 묶은 브리핑(렌즈 가로지름). *결론 먼저*, 클릭하면 해당 렌즈/타임라인으로 drill-down. 요약 스케줄러에 편승해 주기 합성, 상위 N만이라 비용 작음. 합성 실패 시 브리핑만 생략(나머지 뷰 정상 — Fail-soft).
@@ -127,16 +127,6 @@ SSOT는 `config/feeds.yaml`. 피드 변경은 이미지 COPY → **재빌드 + J
 
 **소스 tier 가중(신규)**: `feeds.yaml`에 **`tier`** 필드 추가(SSOT) — `primary`(중앙은행·공시·1차) / `analysis`(리서치·심층기획) / `wire`(헤드라인). `body_mode` 풍부도와 함께 — impact 결정론 prior(§7)·랭킹 타이브레이크·클러스터 신뢰도 가중에 사용. 기존 피드는 기본 `tier=wire`로 백필(비파괴), 리서치·중앙은행은 `primary`/`analysis`로 지정.
 
-## 10. 단계 (각 Phase = 별도 plan)
-- **Phase 0 (병렬)** — 피드 볼륨업(§9). 독립·선행/동시 가능(볼륨이 받쳐야 델타가 보임).
-- **Phase 1** — 하이브리드 토픽 렌즈 + 개체-aware 클러스터(**배정 = 임베딩 후보→gray-band LLM 판정**) + 병합 패스 + **emergent 클러스터 형성**(노출 게이트는 Phase 3)(§4·§5).
-- **Phase 2** — 델타 모델: 2-타임스탬프, wire 개정 비-접기 + recap 비-생성, milestone 판정(§6).
-- **Phase 3** — dual 점수: risk/impact 1콜(단일 impact 필드, **소스 tier prior**), 임계 숨김 + **emergent 노출 게이트**, 스포츠 마킹(§7).
-- **Phase 4** — UI: **Now Brief 합성** + 좌 이벤트/우 기사시간, 인터랙션 연결, risk/impact 정렬(§8).
-- **(미래) Phase 5** — risk-candidate reader(impact 재계산 연결, §7).
-
-각 Phase는 `docs/superpowers/plans/`에 자기 plan을 갖고 TDD로 구현. Phase 1이 토대라 0과 함께 우선.
-
 ## 11. 에러처리 / Fail-loud
 - **LLM None 가드**: 기존 `llm` 래퍼(timeout/retry/None가드) 유지. milestone/점수 JSON은 결정론 validator 먼저(파싱·필수키·범위), 실패 재시도, critical은 스킵+로그(다음 런 재시도) — 해당 스토리만 보류, 전체 패스 안 죽임.
 - **임베딩 dim 가드**: 768dim 가드(기존) 유지. 개체 결합 표현도 차원 계약 테스트.
@@ -160,5 +150,3 @@ SSOT는 `config/feeds.yaml`. 피드 변경은 이미지 COPY → **재빌드 + J
 - 델타/증분 요약: [From Moments to Milestones, ACL 2024](https://aclanthology.org/2024.acl-long.390/)
 - Risk 지수: [GPR Index](https://www.policyuncertainty.com/gpr.html) · [Measuring Geopolitical Risk, AER 2022](https://www.matteoiacoviello.com/gpr_files/GPR_PAPER.pdf) · EPU(Baker-Bloom-Davis)
 - Impact 측정: [A Framework for Measuring How News Topics Drive Stock Movement, arXiv 2510.06864](https://arxiv.org/abs/2510.06864)
-
-<!-- spec-review: passed lenses=3 date=2026-06-28 -->

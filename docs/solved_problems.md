@@ -3,8 +3,6 @@
 작업 중 발견·해결된 문제 기록. 대부분 **사용자 지적/요청**이나 **코드 리뷰**에서 나왔다. 각 항목: 문제 → 원인 → 해결.
 (미해결·대기 항목은 `unsolved_problems.md`.)
 
-> ⏱ **이 로그는 *발생 시점(2026-06-12~14)의 사실*이다 — 현재 규칙이 아님.** 재사용 가능한 교훈은 `coding-principles.md`로 승격됨(여기엔 일회성 기록 위주, 중복 배제=SSOT). 서브에이전트는 이를 *과거 사실*로 읽을 것 — 살아있는 작업 지시가 아니다(예: "fxstreet 제거"는 이미 끝난 일).
-
 ## 핵심 gotchas (재발 방지 — 서브에이전트 주입용 다이제스트)
 *반복되는 cross-cutting 함정*만 추림. SDD/ultracode 서브에이전트엔 **이 섹션 + `coding-principles.md`를 주입**(전체 아카이브 말고). 배선: `docs/subagent-context.md`.
 - **Docker-only**: 테스트 `docker compose run --rm test` (또는 `MSYS_NO_PATHCONV=1 docker run -v "D:/projects/newsstore:/app" newsstore pytest -q`). `$(pwd)` 마운트는 stale 이미지로 조용히 폴백.
@@ -13,15 +11,15 @@
 - **Firebase REST**: 헤더 `x-goog-user-project: daily-recap-498506` 없으면 403.
 - **인라인 주석 금지**: `.gitignore`/`.env`/`--env-file`은 줄끝 `# 주석`을 값/패턴에 섞음 → 주석은 별도 줄.
 - **프로덕션을 테스트에 맞춰 약화 금지**: 테스트 더블이 부실하면 *테스트*를 고쳐라(프로덕션 `client.close()`를 guard로 무르게 X).
-- **Cloud Run Job 클론(2026-06-29)**: 새 Job을 `--args`만으로 생성하면 이미지 ENTRYPOINT가 덮여 *"container exited abnormally / exec likely failed"*로 죽는다. 기존 Job을 `gcloud run jobs describe --format=export` → name·mode만 sed 치환 → **`gcloud alpha run jobs replace`**(beta엔 `replace` 없음)로 적용해야 command(`python`)+args(`-m run_enrich --mode X`)+env(`GOOGLE_CLOUD_PROJECT`)까지 정확히 복제됨.
-- **office gcloud 인증 위치(2026-06-29)**: 호스트 gcloud가 아니라 **docker 볼륨 `gcloud-cfg`**에 상주(`deploy-office.ps1`가 거기에 저장). 모든 호출은 `/work/ePrism-SSL-ROOT-CA.crt`를 컨테이너에 cp+`update-ca-certificates` 후 동작 — **`docker run`에 `-v "D:/projects/newsstore":/work` 마운트를 빼먹으면 CA 못 심어 SSL 실패**(빈 결과·가짜 0이 나옴, 데이터 없음으로 오인 금지).
-- **Firebase Hosting 버전=전체 스냅샷(2026-06-29)**: `populateFiles`에 바뀐 파일만 넣으면 나머지(예 `config.js`)가 빠져 사이트가 깨진다. `web/` **전 파일**(index.html+config.js) 모두 포함해 배포. 순서 = create version → populateFiles → 업로드 → finalize → **release**.
-- **Cloud Scheduler→Run Job 호출(2026-06-29)**: `run.googleapis.com/v2/.../jobs/X:run`은 **oauthToken**(scope `cloud-platform`)으로 호출(oidc 아님). `--oauth-service-account-email=newsstore-job@…`.
+- **Cloud Run Job 클론**: 새 Job을 `--args`만으로 생성하면 이미지 ENTRYPOINT가 덮여 *"container exited abnormally / exec likely failed"*로 죽는다. 기존 Job을 `gcloud run jobs describe --format=export` → name·mode만 sed 치환 → **`gcloud alpha run jobs replace`**(beta엔 `replace` 없음)로 적용해야 command(`python`)+args(`-m run_enrich --mode X`)+env(`GOOGLE_CLOUD_PROJECT`)까지 정확히 복제됨.
+- **office gcloud 인증 위치**: 호스트 gcloud가 아니라 **docker 볼륨 `gcloud-cfg`**에 상주(`deploy-office.ps1`가 거기에 저장). 모든 호출은 `/work/ePrism-SSL-ROOT-CA.crt`를 컨테이너에 cp+`update-ca-certificates` 후 동작 — **`docker run`에 `-v "D:/projects/newsstore":/work` 마운트를 빼먹으면 CA 못 심어 SSL 실패**(빈 결과·가짜 0이 나옴, 데이터 없음으로 오인 금지).
+- **Firebase Hosting 버전=전체 스냅샷**: `populateFiles`에 바뀐 파일만 넣으면 나머지(예 `config.js`)가 빠져 사이트가 깨진다. `web/` **전 파일**(index.html+config.js) 모두 포함해 배포. 순서 = create version → populateFiles → 업로드 → finalize → **release**.
+- **Cloud Scheduler→Run Job 호출**: `run.googleapis.com/v2/.../jobs/X:run`은 **oauthToken**(scope `cloud-platform`)으로 호출(oidc 아님). `--oauth-service-account-email=newsstore-job@…`.
 - **하드코딩 금지(SSOT)**: 리스트/설정은 원본(feeds.yaml 등)에서 도출, 두 곳 복제 X.
 - **`zip` 무음 절단**: `zip(a,b)`는 짧은 쪽에 맞춰 조용히 자름 → 길이 다른 벡터/리스트 연산이 가짜 결과를 냄(코사인·centroid_sum에서 3곳 재발). 길이 계약은 `len` 검증으로 fail-loud(원칙3). 합/내적은 `cluster.add_vectors`처럼 SSOT 헬퍼로 도출.
-- **피드 도달성은 IP별로 다름 (양방향)**: 사이트가 IP/UA로 차단 → **Docker 프로빙 호스트 IP ≠ 프로덕션 Cloud Run IP**라 결과가 다르다. mk.co.kr·매경은 Docker에서 `403`이나 Cloud Run(서울)에선 `200`(라이브 수집 확인); bls.gov·opec.org는 Cloud Run에서도 `403`(fxstreet 동류). → **프로빙의 `403`/타임아웃은 *비권위*(`404`만 경로 권위), 최종 판정은 배포 스모크 로그.** 수집기는 브라우저 User-Agent 전송(`collect/fetcher.py` `DEFAULT_HEADERS`)으로 UA 기반 차단 일부 회피(IP 기반은 못 푼다). 2026-06-28 소스 확장 시 확립.
-- **머지 후 이미지 재빌드 필수 (배포 전)**: 코드를 main에 머지해도 `processor:latest` 이미지가 그대로면 **라이브 Job이 옛 코드를 돌린다** → 새 `--mode`(예 `score`)가 `invalid choice`로 죽음. **머지 → `gcloud builds submit` 재빌드 → `jobs update --image` → execute** 순서를 지켜라(2026-06-29 score 배포 실패로 확립).
-- **사내(ePrism MITM) gcloud SSL**: 최신 gcloud(urllib3 v2 strict)가 프록시 인증서 AKI 부재를 거부(`Missing Authority Key Identifier`) → 로컬·Cloud Shell 모두 차단, CA 추가로 안 풀림. **우회: `scripts/deploy-office.ps1`**(옛 gcloud 402 컨테이너 + ePrism CA + `core/custom_ca_certs_file` + Cloud Run Jobs는 `beta` 트랙 + Job용 SA `newsstore-job@`로 secret 접근). 집(MITM 없음)에선 평범하게 됨. 2026-06-29 확립.
+- **피드 도달성은 IP별로 다름 (양방향)**: 사이트가 IP/UA로 차단 → **Docker 프로빙 호스트 IP ≠ 프로덕션 Cloud Run IP**라 결과가 다르다. mk.co.kr·매경은 Docker에서 `403`이나 Cloud Run(서울)에선 `200`(라이브 수집 확인); bls.gov·opec.org는 Cloud Run에서도 `403`(fxstreet 동류). → **프로빙의 `403`/타임아웃은 *비권위*(`404`만 경로 권위), 최종 판정은 배포 스모크 로그.** 수집기는 브라우저 User-Agent 전송(`collect/fetcher.py` `DEFAULT_HEADERS`)으로 UA 기반 차단 일부 회피(IP 기반은 못 푼다).
+- **머지 후 이미지 재빌드 필수 (배포 전)**: 코드를 main에 머지해도 `processor:latest` 이미지가 그대로면 **라이브 Job이 옛 코드를 돌린다** → 새 `--mode`(예 `score`)가 `invalid choice`로 죽음. **머지 → `gcloud builds submit` 재빌드 → `jobs update --image` → execute** 순서를 지켜라.
+- **사내(ePrism MITM) gcloud SSL**: 최신 gcloud(urllib3 v2 strict)가 프록시 인증서 AKI 부재를 거부(`Missing Authority Key Identifier`) → 로컬·Cloud Shell 모두 차단, CA 추가로 안 풀림. **우회: `scripts/deploy-office.ps1`**(옛 gcloud 402 컨테이너 + ePrism CA + `core/custom_ca_certs_file` + Cloud Run Jobs는 `beta` 트랙 + Job용 SA `newsstore-job@`로 secret 접근). 집(MITM 없음)에선 평범하게 됨.
 - **PowerShell→bash 루프변수 깨짐**: `bash -c "for J in ...; do gcloud ... \$J; done"`를 PowerShell에서 호출하면 `$J`가 안 풀려 인자가 밀림(`Invalid resource name [ --image=...]`). → 루프 대신 **명시적 커맨드 나열**.
 
 ## 환경 / 툴링
@@ -58,12 +56,12 @@
 - **Reuters GN 중복** — 새 `reuters_top`이 기존 `gn_macro_reuters`(둘 다 site:reuters.com)와 겹침 + 헤드라인뿐. → `gn_macro_reuters` 제거, Reuters 단독화.
 - **본문 스크래핑 가능성** — 전 소스 curl 테스트 → Bloomberg 403·CoinDesk/CT/Investing JS렌더·GN 리다이렉트로 fragile. → **스크래핑 안 함, 피드 확충이 정답**(결정).
 
-## Step-2 하드닝 (2026-06-14, ultracode 감사 후 선처리)
-- **cosine/centroid_sum 무음 절단** — `cluster.cosine`이 `zip(a,b)`로 dot은 min(len)만 합산하되 노름은 전체로 계산 → 차원 다르면 가짜 유사도를 조용히 반환(fail-loud 위반). 같은 패턴이 두 스토어 `append_to_story`의 `centroid_sum += vec`에도 존재. → `cosine`에 `len` 검증 ValueError + `add_vectors(a,b)` SSOT 헬퍼 신설(cluster.py), 두 스토어가 도출. 회귀 테스트(차원 불일치 시 ValueError) 추가. (unsolved §14② 해소)
+## Step-2 하드닝
+- **cosine/centroid_sum 무음 절단** — `cluster.cosine`이 `zip(a,b)`로 dot은 min(len)만 합산하되 노름은 전체로 계산 → 차원 다르면 가짜 유사도를 조용히 반환(fail-loud 위반). 같은 패턴이 두 스토어 `append_to_story`의 `centroid_sum += vec`에도 존재. → `cosine`에 `len` 검증 ValueError + `add_vectors(a,b)` SSOT 헬퍼 신설(cluster.py), 두 스토어가 도출. 회귀 테스트(차원 불일치 시 ValueError) 추가.
 - **firestore `mark_processed` to_dict() None 가드 재발** — 같은 파일 6곳은 `or {}` 쓰는데 `mark_processed`(line 128)만 누락 → 실 client 빈 문서(exists=True, to_dict()=None)에서 AttributeError(MockFirestore는 못 잡음, 핵심 gotcha 재발). → `to_dict() or {}`로 일관화. 실 client 조건을 재현하는 최소 fake(exists=True·to_dict→None)로 회귀 테스트.
-- **SPAM_SIGNALS↔web JUNK 크로스언어 SSOT 드리프트** — backend `classify.SPAM_SIGNALS`와 `web/index.html` JUNK 25키워드가 각각 하드코딩(한쪽만 고치면 kind=spam과 뷰 isJunk 드리프트). 근본해소(뷰→`kind` 쿼리)는 Plan 3/4 잔여라, 최소 안전망으로 **드리프트 가드 테스트**(`tests/test_spam_signals_drift.py`: index.html JUNK 파싱 → set 동등성 fail-loud) 추가. probe 주입→FAIL로 가드 실효성 검증. (테스트 72→79)
+- **SPAM_SIGNALS↔web JUNK 크로스언어 SSOT 드리프트** — backend `classify.SPAM_SIGNALS`와 `web/index.html` JUNK 25키워드가 각각 하드코딩(한쪽만 고치면 kind=spam과 뷰 isJunk 드리프트). 근본해소(뷰→`kind` 쿼리)는 Plan 3/4 잔여라, 최소 안전망으로 **드리프트 가드 테스트**(`tests/test_spam_signals_drift.py`: index.html JUNK 파싱 → set 동등성 fail-loud) 추가. probe 주입→FAIL로 가드 실효성 검증.
 
-## Step-2 라이브 통합 (2026-06-14, 실 Gemini 스모크가 잡은 것)
+## Step-2 라이브 통합 (실 Gemini 스모크가 잡은 것)
 > 측정 먼저(원칙7)·검증 후 주장(원칙5)의 사례 — 유닛테스트(fake)는 다 통과했지만 라이브가 4개 버그를 드러냄.
 - **모델명은 라이브 `models.list`로 확정** — spec의 `gemini-2.0-flash`는 API에서 "no longer available"(404), `text-embedding-004`/`text-multilingual-embedding`은 이 **Developer API 키(GEMINI_API_KEY)에 없음**(그건 Vertex/ADC 경로). 실재: gen=`gemini-2.5-flash*`, embed=`gemini-embedding-001`만. → 추측 말고 `client.models.list()`로 확인 후 핀.
 - **gemini-embedding-001은 기본 3072차원** — 768로 받으려면 `EmbedContentConfig(output_dimensionality=768)` 명시. 안 하면 dim 가드(`embedder.EMBED_DIM=768`)가 fail-loud로 터짐(가드가 제 역할).
@@ -72,9 +70,9 @@
 - **태깅 통제어휘는 프롬프트 주입 시 잘 지켜짐** — `build_prompt`가 "entities ONLY from: …"로 어휘를 주입하면 모델이 캐노니컬 토큰(`Fed`,`rates`,`inflation`)을 그대로 반환 → `validate_tags` 결정론 필터 통과. (어휘 미주입 시엔 freeform "Federal Reserve" 반환 → 다 걸러짐. 즉 프롬프트 SSOT 주입이 핵심.)
 
 ## 설계 — 임베딩 클러스터링 (스파이크 검증)
-- **union-find 과병합** — naive 단일임계 쌍연결이 *전이 연쇄*로 무관한 한국어 금융기사 9건을 한 덩어리로. → **centroid 온라인 + 임계 0.83**(중심과 비교 → 사슬 차단). 실데이터 검증: 묶인 건 전부 진짜 스토리, 30/40 단독, 30건 ~12초.
+- **union-find 과병합** — naive 단일임계 쌍연결이 *전이 연쇄*로 무관한 한국어 금융기사 9건을 한 덩어리로. → **centroid 온라인 + 임계 0.83**(중심과 비교 → 사슬 차단).
 
 ## 정리 / 리팩터
 - **SSOT 위반: `index.html` SRC_ORDER 하드코딩** — 사용자 지적. feeds.yaml 소스를 복제 → 드리프트 위험. → 수집기가 `meta/sources`를 feeds.yaml에서 도출·기록 → 사이트가 읽음. **중복 제거**(드리프트 테스트 불필요).
 - **firebaseConfig 인라인** — → `web/config.js` 분리.
-- **uv.lock / data;C / docker-compose / .env.example / .dockerignore** — uv.lock gitignore · `data;C` 빈 잔재 삭제 · 미사용 docker-compose 삭제(→ **이후 e6acedb에서 린 compose로 부활: `docker compose run --rm test/collect`, 마운트 폴백 회피**) · 디스크 소실된 .env.example 복원 · .dockerignore에 tests/·web/·*.md 추가(런타임 이미지 순수화).
+- **uv.lock / data;C / docker-compose / .env.example / .dockerignore** — uv.lock gitignore · `data;C` 빈 잔재 삭제 · 미사용 docker-compose 삭제(→ **이후 린 compose로 부활: `docker compose run --rm test/collect`, 마운트 폴백 회피**) · 디스크 소실된 .env.example 복원 · .dockerignore에 tests/·web/·*.md 추가(런타임 이미지 순수화).
