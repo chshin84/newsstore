@@ -6,6 +6,7 @@ from newsstore.enrich.summarizer import (
     _excerpt_len, SUMMARY_MAX_MEMBERS,
 )
 from newsstore.enrich.gemini import LLMError
+from newsstore.enrich.milestone import MILESTONE_PRIOR_MAX  # noqa: F401
 
 T0 = datetime(2026, 6, 13, 7, 0, tzinfo=timezone.utc)
 
@@ -171,3 +172,60 @@ def test_run_pass_empty_members_skips():
     tot = run_summary_pass(store, FakeLLM({"title": "T", "summary": "S", "developments": []}),
                            limit=10, now=T0)
     assert tot["skipped"] == 1 and tot["summarized"] == 0
+
+
+# --- Phase 2: milestone(is_new) + delta_time ---
+
+def _prior(text, h):
+    return {"text": text, "time": T0 + timedelta(hours=h),
+            "source_count": 1, "delta_time": T0 + timedelta(hours=h)}
+
+
+def test_prompt_includes_prior_and_is_new_when_prior_given():
+    p = build_summary_prompt(_members(3), prior_developments=[_prior("known", 0)])
+    assert "known" in p and "is_new" in p
+
+
+def test_prompt_unchanged_without_prior():
+    assert "is_new" not in build_summary_prompt(_members(3))        # 하위호환
+
+
+def test_validate_passes_is_new_true():
+    raw = {"title": "T", "summary": "S",
+           "developments": [{"text": "d", "first_idx": 0, "source_count": 1, "is_new": True}]}
+    v = validate_summary(raw, n_members=3)
+    assert v["developments"][0]["is_new"] is True
+
+
+def test_validate_non_true_is_new_normalized_false():
+    raw = {"title": "T", "summary": "S",
+           "developments": [{"text": "d", "first_idx": 0, "source_count": 1, "is_new": "x"}]}
+    v = validate_summary(raw, n_members=3)
+    assert v["developments"][0]["is_new"] is False
+
+
+def test_summarize_adds_delta_time_recap_to_frontier():
+    m = _members(6)
+    resp = {"title": "T", "summary": "S",
+            "developments": [{"text": "recap", "first_idx": 5, "source_count": 1, "is_new": False}]}
+    prior = [_prior("p1", 0), _prior("p2", 2)]
+    res = summarize_story(m, FakeLLM(resp), now=T0, prior_developments=prior)
+    assert res["developments"][0]["delta_time"] == T0 + timedelta(hours=2)   # 프런티어
+    assert "is_new" not in res["developments"][0]                            # 저장 안 함
+
+
+def test_summarize_no_prior_delta_time_is_time():
+    m = _members(3)
+    resp = {"title": "T", "summary": "S",
+            "developments": [{"text": "a", "first_idx": 2, "source_count": 1}]}
+    res = summarize_story(m, FakeLLM(resp), now=T0)
+    assert res["developments"][0]["delta_time"] == m[2]["published_at"]
+
+
+def test_run_pass_passes_prior_developments():
+    resp = {"title": "T", "summary": "S",
+            "developments": [{"text": "recap", "first_idx": 0, "source_count": 1, "is_new": False}]}
+    prior = [_prior("p1", 0), _prior("p2", 2)]
+    store = FakeStore([{"id": "s1", "count": 5, "developments": prior}], {"s1": _members(5)})
+    run_summary_pass(store, FakeLLM(resp), limit=10, now=T0)
+    assert store.saved["s1"]["developments"][0]["delta_time"] == T0 + timedelta(hours=2)
