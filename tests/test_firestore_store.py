@@ -111,6 +111,34 @@ def test_save_story_score_roundtrip_nondestructive_incremental(store):
     assert all(r["id"] != "s1" for r in store.get_stories_for_scoring(cutoff=cut))
 
 
+def test_save_story_article_roundtrip_nondestructive_incremental(store):
+    from datetime import datetime, timezone, timedelta
+    now = datetime(2026, 6, 29, tzinfo=timezone.utc)
+    cut = now - timedelta(hours=1)
+    store.create_story("s1", title="t", vec=[1.0], member_id="a", entities=[], now=now)
+    store.save_story_lenses("s1", ["kr_rates"], count=1)
+    store.save_story_summary("s1", title="t", summary="sum", latest="l",
+                             developments=[{"text": "d", "time": now, "source_count": 1}],
+                             summary_count=1, now=now)
+    store.save_story_score("s1", risk=2, impact=1, risk_reason="r", impact_reason="i",
+                           count=1, now=now)
+    rows = store.get_stories_for_article(cutoff=cut)
+    assert rows and rows[0]["id"] == "s1"
+    assert rows[0]["risk"] == 2 and rows[0]["impact"] == 1
+    assert rows[0]["count"] == 1 and rows[0]["developments"][0]["text"] == "d"
+
+    store.save_story_article("s1", headline="H", lead="L", article=["b1", "b2"],
+                             risk_ref=1, impact_ref=0, score_ref_at=now, count=1, now=now)
+    d = store.db.collection("stories").document("s1").get().to_dict()
+    assert d["headline"] == "H" and d["lead"] == "L" and d["article"] == ["b1", "b2"]
+    assert d["risk_ref"] == 1 and d["impact_ref"] == 0
+    # 비파괴: article 저장이 summary/lenses/score/developments/cluster 보존
+    assert d["summary"] == "sum" and d["lenses"] == ["kr_rates"] and d["risk"] == 2
+    assert d["developments"][0]["text"] == "d" and d["member_ids"] == ["a"]
+    # incremental: articled_count=1 == count → 재조회에서 빠짐
+    assert all(r["id"] != "s1" for r in store.get_stories_for_article(cutoff=cut))
+
+
 def test_get_open_stories_includes_title_and_centroid_sum(store):
     from datetime import datetime, timezone, timedelta
     now = datetime(2026, 6, 29, tzinfo=timezone.utc)
