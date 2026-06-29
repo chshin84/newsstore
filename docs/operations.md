@@ -6,7 +6,7 @@
 ## 전제
 - `gcloud`가 사용자 프로필에 인증돼 있어야 함 (`chshin84@gmail.com`, 프로젝트 `daily-recap-498506`).
   - gcloud 풀경로(머신별): 집=`C:\Users\ho381\...`, 사내=`C:\Users\CHSHIN\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`.
-  - **🔴 사내(office, ePrism MITM 프록시)에선 로컬 gcloud·Cloud Shell 모두 SSL 차단** — 최신 gcloud(urllib3 v2 strict)가 프록시 인증서의 AKI 부재를 거부(`certificate verify failed: Missing Authority Key Identifier`). CA 추가로 안 풀림. **우회: `scripts/deploy-office.ps1`**(옛 gcloud 402 컨테이너 + ePrism CA, Cloud Run Jobs는 `beta` 트랙). 검증 2026-06-29. 집(MITM 없음)에선 평범하게 §A/§F 사용. 정공법은 IT가 AKI 준수 인증서 발급 또는 GitHub→Cloud Build 트리거.
+  - **✅ 사내(office) SSL 차단 — 해소(레거시 편법으로 뚫음).** ePrism MITM 프록시가 최신 gcloud(urllib3 v2 strict)의 AKI 검증(`certificate verify failed: Missing Authority Key Identifier`)을 막던 문제를 **옛 gcloud(402) 컨테이너 + ePrism CA** 편법으로 우회(`scripts/deploy-office.ps1`, Cloud Run Jobs는 `beta` 트랙). → **사내·집 양쪽에서 배포 가능**(집은 MITM 없어 평범하게 §A/§F, 사내는 위 스크립트). 정공법(IT의 AKI 준수 인증서 / GitHub→Cloud Build 트리거)은 선택.
 - **Firebase 관리/규칙/호스팅 REST 호출 시 quota project 헤더 필수**: `x-goog-user-project: daily-recap-498506` (없으면 403). 토큰은 `gcloud auth print-access-token`.
 - 프로젝트/리전 변수는 루트 **`.env`**(`GOOGLE_CLOUD_PROJECT`, `GCP_REGION`). PowerShell 로드법은 `docs/setup.md` 참조.
 
