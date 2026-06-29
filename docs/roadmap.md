@@ -19,13 +19,15 @@ newsstore = **수집·저장·호스팅 + 분석을 통합 개발**(전략: 메�
 ## B. 분석 레이어 — 지금 (설계 SSOT: `docs/analysis-design.md` §3~§8)
 하이브리드 3-tier 렌즈 토대 위에 델타·score·UI를 올린다. **순서 의존이 있으니 아래 순서대로.**
 
+> **✅ 상태(2026-06-29): Phase 1~4 전부 코드완료 + 라이브 배포.** 남은 건 캘리브레이션(P3 🔴)·실측 검증뿐(`unsolved_problems.md` Phase 4 후속). 다음 작업 = **응용 레이어(리포트 탭 → 아키타입, 아래 C)**.
+
 | Phase | 내용 | 의존 | 상태 |
 |---|---|---|---|
 | **0 피드 볼륨업** | 소스 확장(델타가 보일 밀도) | — | ✅ 대부분 완료(feed-source-expansion) |
-| **1 하이브리드 렌즈 + 개체-aware 클러스터** | Tier1 큐레이션 거시렌즈(채권·FX·유가·귀금속·원자재·부동산·정책·중앙은행·산업·리스크) + Tier2 워치종목 + Tier3 emergent. `config/topics.yaml`(렌즈 SSOT, type=standing/development/sector/watch/risk) + 멀티라벨 분류 | 0 | ✅ **코드 완료**(149 green): 클러스터 이식 + **렌즈 LLM 1차 분류**(asset_hint prior + LLM + 결정론 validator + fail-soft, `--mode lenses`, flash-lite ~$0.3/일). **남음: 라이브 배포 + 실측 커버리지 검증.** spec/plan: `2026-06-29-phase1-topic-lenses*` |
-| **2 델타** | 2-타임스탬프(published_at·delta_time) + milestone 판정(recap 비생성) | 1 | ⬜ |
-| **3 dual score** | risk(렌즈 정렬) + impact(스토리 정렬) LLM 1콜 + 결정론 가드. **임계 이하 노출만 숨김(비파괴)** | 1(·2) | ✅ **코드 완료**(169 green): type-aware 게이트(standing/watch=상시 / 그 외·emergent·unknown=멤버수≥MIN) + dual score LLM 1콜(`{risk,impact,reason}` 0~3, 결정론 validator·fail-soft) + incremental(`count>scored_count`) + `--mode score`. 입력=요약 패스 산출(델타 통합은 Phase 2 후속, 의존성 완화). **남음: 라이브 배포 + 스케일 캘리브레이션. 🔴 사용자 결정: 0~3 스케일 의미·게이트 임계(MIN=2).** spec/plan: `2026-06-29-phase3-score*` |
-| **4 UI** | Now Brief(상단 합성) + 좌 이벤트/우 기사시간 타임라인, risk/impact 정렬 | 1·2·3 | ⬜ |
+| **1 하이브리드 렌즈 + 개체-aware 클러스터** | Tier1 큐레이션 거시렌즈(채권·FX·유가·귀금속·원자재·부동산·정책·중앙은행·산업·리스크) + Tier2 워치종목 + Tier3 emergent. `config/topics.yaml`(렌즈 SSOT, type=standing/development/sector/watch/risk) + 멀티라벨 분류 | 0 | ✅ **코드완료 + 배포**(149 green): 클러스터 이식 + **렌즈 LLM 1차 분류**(asset_hint prior + LLM + 결정론 validator + fail-soft, `--mode lenses`, flash-lite). 라이브(스케줄러 lens-10min). **남음: 실측 커버리지 검증.** spec: `2026-06-29-phase1-topic-lenses-design` |
+| **2 델타** | 2-타임스탬프(published_at·delta_time) + milestone 판정(recap 비생성) | 1 | ✅ **코드완료 + 배포**: `milestone.py`(delta_time 배정·`is_new`) — 요약 콜에 편승(별도 Job 없음). 커밋 `372bce3`. **남음: 라이브 실측.** |
+| **3 dual score** | risk(렌즈 정렬) + impact(스토리 정렬) LLM 1콜 + 결정론 가드. **임계 이하 노출만 숨김(비파괴)** | 1(·2) | ✅ **코드 완료**(169 green): type-aware 게이트(standing/watch=상시 / 그 외·emergent·unknown=멤버수≥MIN) + dual score LLM 1콜(`{risk,impact,reason}` 0~3, 결정론 validator·fail-soft) + incremental(`count>scored_count`) + `--mode score`. 라이브(스케줄러 score-10min). **남음: 스케일 캘리브레이션(🔴 사용자 결정 — 0~3 스케일 의미·게이트 임계 MIN=2, `unsolved_problems.md` Phase 4 후속).** 설계: `analysis-design.md §7` |
+| **4 UI (스토리 리포트 리더)** | per-story 보고서(headline/lead/bullet `article`) + 2-타임스탬프 단일 타임라인(보도/발생순 토글) + 전일대비 ▲▼·NEW·번역 토글 (원안 Now Brief는 per-story `lead`로 대체) | 1·2·3 | ✅ **코드완료 + 배포**(2026-06-29): `article.py` `--mode article` + `web/index.html` + event_time(요약 단독). 라이브(스케줄러 article-10min, 프로덕션 article 검증). spec: `2026-06-29-phase4-story-report-ui-design`. **남음: 캘리브레이션(unsolved Phase 4 후속).** |
 
 > **score 트리거 실험 교훈(2026-06-29):** emergent-only 구조 신호(소스확증·노벨티·velocity)는 material recall **~35–48% 천장**, 놓치는 ~60%가 단일소스 스쿠프 → **렌즈 멤버십(Phase 1)이 그 신호**다. ⇒ **Phase 1 렌즈 먼저, 그 다음 score.** velocity는 게이트로 부적합(와이어 옴니버스가 최고속도). 메모리 `hybrid-topic-lens-model`.
 
@@ -38,7 +40,7 @@ newsstore = **수집·저장·호스팅 + 분석을 통합 개발**(전략: 메�
 | 이벤트 시나리오 대응 | upcoming 이벤트 N시나리오(예 PPI 5단계) × 아키타입 대응 | ⬜ |
 | 국면 대응 시뮬 | 섹터/시장 국면(초강세~초약세)별 대응 | ⬜ |
 
-> ⚠️ **열린 질문:** 응용(아키타입) 레이어가 여전히 목표인지, 분석 레이어 산출로 충분한지 — Phase 4 도달 시 사용자와 재확인.
+> ✅ **재확인됨(2026-06-29):** 사용자가 응용 레이어 진행을 확정 — **리포트 탭**(섹터별 아킬레스건/기대 프레임으로 72h 뉴스 평가 → 사용자가 과대/과소반응·over/undervalue 판단)을 먼저, **아키타입**은 그 위 후속 층. 설계: 메모리 `report-tab-design` + 작성 예정 spec.
 
 ## ultracode(다중 에이전트 Workflow) 적합 지점
 - **응용 레이어(아키타입·시나리오)**: 서로 독립이라 병렬 팬아웃 최적(아키타입 N=에이전트 N → 집계).

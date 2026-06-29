@@ -45,6 +45,22 @@
 - **라이브 모니터링**: article 생성 품질(헤드라인/리드/bullet), scorer risk/impact 분포, 렌즈 커버리지, 일일 비용($3 상한 내).
 - (참고, TODO 아님) `event_time`는 summary가 새 멤버 붙을 때마다 점진 백필 — 기존 스토리는 보도시각 폴백(자동).
 
+## 🟡 Phase 4 마무리 + 위생 백로그 (2026-06-29 4영역 코드 감사)
+> 리포트 탭 착수 전 선결 정리. 6개 패스 코드는 라이브지만 spec 대비 미완·드리프트가 남음(roadmap/HANDOFF "완료"가 과장이었음 — 실측으로 교정). 아키타입(응용레이어) 제외. 증상 → 처방.
+### 주요 (계획됐는데 안 돌거나 반쪽)
+- **Phase 4 UI 부분구현 (`web/index.html`)** — spec `2026-06-29-phase4-story-report-ui-design` §7·§8 대비: ① **렌즈별 섹션 그룹화·risk순 정렬 없음**(현재 전체 스토리 단순 나열, 라인~517-524) ② **번역/원문 토글 동작 안 함**(버튼·리스너만, `renderDetail`이 `detailMode` 미사용) ③ **impact 임계 숨김 없음**(`count>=2`만 필터). *처방*: 렌즈 groupBy→섹션 헤더→섹션 내 최대 risk 정렬; `detailMode==='original'` 분기로 멤버 원문 전개; `IMPACT_THRESHOLD` 상수+필터(캘리브레이션 대기).
+- **sports kind 미구현 (enrich+UI 가로지름)** — `classify.py:16-24` `classify_kind()`가 story/spam/digest만 반환(analysis-design §4가 요구한 `sports` 누락) → 스포츠 마킹도, UI 숨김도 불가. *처방*: classify에 sports 신호+kind 추가, 그다음 UI 스토리탭 필터 `it.kind!=='sports'`.
+- **운영 런북 누락** — `operations.md`에 lens/score/article Job·Scheduler 절차 없음(enricher·summarizer만). `deploy-office.ps1`도 3개 잡 미포함. *처방*: operations.md에 3패스 Job 생성/갱신/실행/로그 절차 + deploy-office.ps1에 3잡 추가.
+- **잡 실패 무음** — (기존 Phase D 항목과 동일) Scheduler 200만 수락→잡 死에도 초록. *처방*: Cloud Monitoring 알림(job 실패 카운트>0, lens/score/article/enricher 전부).
+### 견고성 부채 (`firestore_store.py` — 지금 돌지만 동시성·규모에서 깨짐; §34와 중복 통합)
+- `append_to_story`: member_ids **정렬 미보장 + 중복 방지 없음 + 비원자 RMW**(count·centroid 증분 손실). *처방*: published_at 정렬 유지 + `if member_id not in members` + `FieldValue.increment()`/transaction.
+- `close_stale_stories`: **N+1 쓰기** → `batch()` 청크.
+- **requirements.lock google-genai 미핀** — (기존 Phase D 항목) 재현성. lock 재생성.
+### 사소·선택·정리
+- `body_mode: calendar` 선언만(무음 summary 폴백, `parser.py`) → 구현/제거/`NotImplementedError` 택1 · `taxonomy` energy/oil 명칭 드리프트 · `load_taxonomy` 미지키 무음(fail-loud화) · 복합인덱스 READY 실확인(`gcloud firestore indexes`) · feeds.yaml `tier` → `meta` 발행 배선.
+### 대조 (에이전트 과대평가 교정)
+- store 감사가 "`get_items_by_kind`/`list_stories` 미구현=blocker"라 했으나 feed-kind-filter(756f106)로 클라이언트가 backend `kind`를 읽어 필터 → SSOT 목표 사실상 달성, 쿼리 백엔드 이전은 순도 문제(사소). ✅ 완료 확인: event_time 추출·per-story lead·fail-soft 렌즈라벨.
+
 ## 🔵 향후 / 선택
 - **Phase 2 — 스토리 타임라인 UI** — 스크린샷처럼 같은 내러티브를 타임라인으로(속보 N건). Phase 1이 `stories` 채운 뒤.
 - **서비스 단위 src 분할** — `src/newsstore/{collector,enrichment,store}` — Step-2 착수 시 자연스럽게.
