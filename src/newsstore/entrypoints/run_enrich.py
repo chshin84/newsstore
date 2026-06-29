@@ -45,9 +45,9 @@ def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore Step-2 enrichment processor")
     ap.add_argument("--taxonomy", default="config/taxonomy.yaml")
-    ap.add_argument("--mode", choices=["cluster", "tag", "summary"], default="cluster",
+    ap.add_argument("--mode", choices=["cluster", "tag", "summary", "lenses"], default="cluster",
                     help="cluster=embed+cluster(빠름) / summary=스토리 LLM 요약(Pass 3, 시간당) "
-                         "/ tag=스토리 단위 태깅(Pass 2, 폐기 예정)")
+                         "/ lenses=토픽 렌즈 멀티라벨 분류(Stage1 결정론) / tag=스토리 태깅(폐기 예정)")
     ap.add_argument("--batch", type=int, default=50)
     args = ap.parse_args(argv)
 
@@ -84,6 +84,11 @@ def main(argv=None) -> int:
                 summary_batch = int(os.environ.get("NEWSSTORE_SUMMARY_BATCH", "10"))
                 totals = run_summary_pass(store, client, limit=summary_batch,
                                           now=datetime.now(timezone.utc))
+            elif args.mode == "lenses":
+                from ..enrich.lens_pass import run_lens_pass
+                now = datetime.now(timezone.utc)
+                totals = {"classified": run_lens_pass(store, now=now, cutoff=now - OPEN_WINDOW,
+                                                      client=client)}
             else:
                 from ..enrich.tagger import tag_stories
                 totals = tag_stories(store, client, taxonomy, batch=10,

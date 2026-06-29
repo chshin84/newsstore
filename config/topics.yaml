@@ -1,0 +1,41 @@
+# 토픽 렌즈 SSOT(하이브리드 3-tier × 시간성). 분류·UI·정렬이 전부 여기서 도출.
+# 모든 렌즈를 lenses[] 한 배열에 type과 함께. hints의 topics/entities는 taxonomy.yaml 어휘만.
+# 설계: docs/analysis-design.md · spec: docs/superpowers/specs/2026-06-29-phase1-topic-lenses-design.md
+version: "2026-06-29"
+sectors_surface_top_n: 5          # 활성 top-N 노출 메타(Phase 4에서 소비)
+lenses:
+  # ── 금융자산 (standing) ──
+  - {id: kr_rates, type: standing, label: {ko: 한국 금리·채권, en: KR Rates}, hints: {asset_hint: [kr_bond, kr_macro], entities: [한국은행], topics: [rates, bonds, central_bank]}}
+  - {id: us_rates, type: standing, label: {ko: 미국 금리·채권, en: US Rates}, hints: {entities: [Fed, Treasury], topics: [rates, bonds, central_bank]}}
+  - {id: fx, type: standing, label: {ko: 환율, en: FX}, hints: {asset_hint: [fx, kr_fx], topics: [fx]}}
+  - {id: oil_energy, type: standing, label: {ko: 유가·에너지, en: Oil/Energy}, hints: {asset_hint: [energy], entities: [OPEC], topics: [energy]}}
+  - {id: precious_metals, type: standing, label: {ko: 귀금속, en: Metals}, hints: {keywords: [금값, gold, silver, 은값], topics: [commodities]}}
+  - {id: commodities, type: standing, label: {ko: 기타 원자재, en: Commodities}, hints: {asset_hint: [commodity], topics: [commodities]}}
+  - {id: kr_realestate, type: standing, label: {ko: 한국 부동산, en: KR Real Estate}, hints: {asset_hint: [kr_realestate], topics: [housing]}}
+  - {id: kr_equity, type: standing, label: {ko: 한국 주식, en: KR Equities}, hints: {asset_hint: [kr_market, kr_corp], topics: [equities]}}
+  - {id: us_equity, type: standing, label: {ko: 미국 주식, en: US Equities}, hints: {asset_hint: [equity], topics: [equities]}}
+  - {id: crypto, type: standing, label: {ko: 크립토, en: Crypto}, hints: {asset_hint: [crypto], topics: [crypto]}}
+  # ── 경제·정책 (development) ──
+  - {id: kr_econ, type: development, label: {ko: 한국 경제, en: KR Economy}, hints: {asset_hint: [kr_macro], topics: [inflation, jobs, recession]}}
+  - {id: us_econ, type: development, label: {ko: 미국 경제, en: US Economy}, hints: {asset_hint: [global_macro], topics: [inflation, jobs, recession]}}
+  - {id: kr_policy, type: development, label: {ko: 한국 정책, en: KR Policy}, hints: {asset_hint: [kr_politics], topics: [regulation, trade]}}
+  - {id: us_policy, type: development, label: {ko: 미국 정책, en: US Policy}, hints: {asset_hint: [policy, trump, global_policy], topics: [regulation, trade]}}
+  # ── 리스크 (risk) ──
+  - {id: risk, type: risk, label: {ko: 지정학·시스템 리스크, en: Risk}, hints: {topics: [geopolitics]}}
+  # ── 섹터 (sector, GICS vocab; 동적 top-5 노출은 후속) ──
+  - {id: sector_tech, type: sector, label: {ko: 테크, en: Tech}, hints: {topics: [tech], keywords: [반도체, AI칩, semiconductor, chip]}}
+  - {id: sector_financials, type: sector, label: {ko: 금융, en: Financials}, hints: {topics: [banking]}}
+  - {id: sector_energy, type: sector, label: {ko: 에너지, en: Energy}, hints: {topics: [energy]}}
+  - {id: sector_healthcare, type: sector, label: {ko: 헬스케어, en: Healthcare}, hints: {keywords: [제약, 바이오, pharma, biotech]}}
+  - {id: sector_industrials, type: sector, label: {ko: 산업재, en: Industrials}, hints: {keywords: [자동차, 조선, 항공, defense]}}
+  # ── 워치종목 (watch) ──
+  - {id: watch_samsung, type: watch, label: {ko: 삼성전자, en: Samsung}, ticker: "005930", keywords: [삼성전자, Samsung Electronics]}
+  - {id: watch_skhynix, type: watch, label: {ko: SK하이닉스, en: SK Hynix}, ticker: "000660", keywords: [SK하이닉스, SK Hynix]}
+  - {id: watch_nvidia, type: watch, label: {ko: 엔비디아, en: NVIDIA}, ticker: NVDA, keywords: [엔비디아, NVIDIA]}
+  - {id: watch_apple, type: watch, label: {ko: 애플, en: Apple}, ticker: AAPL, keywords: [애플, Apple]}
+  - {id: watch_tesla, type: watch, label: {ko: 테슬라, en: Tesla}, ticker: TSLA, keywords: [테슬라, Tesla]}
+  - {id: watch_msft, type: watch, label: {ko: 마이크로소프트, en: Microsoft}, ticker: MSFT, keywords: [마이크로소프트, Microsoft]}
+  - {id: watch_alphabet, type: watch, label: {ko: 알파벳, en: Alphabet}, ticker: GOOGL, keywords: [알파벳, 구글, Alphabet, Google]}
+  - {id: watch_tsmc, type: watch, label: {ko: TSMC, en: TSMC}, ticker: TSM, keywords: [TSMC]}
+  - {id: watch_micron, type: watch, label: {ko: 마이크론, en: Micron}, ticker: MU, keywords: [마이크론, Micron]}
+  - {id: watch_amazon, type: watch, label: {ko: 아마존, en: Amazon}, ticker: AMZN, keywords: [아마존, Amazon]}

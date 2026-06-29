@@ -49,6 +49,17 @@ class Store(Protocol):
         """last_seen<cutoff인 open 스토리를 closed로. 변경 수 반환."""
         ...
 
+    # Phase 1 토픽 렌즈 분류 계약.
+    def save_story_lenses(self, story_id, lenses: list) -> None:
+        """stories.lenses[](렌즈 id 배열) merge 저장(비파괴)."""
+        ...
+    def get_stories_for_lensing(self, cutoff) -> list[dict]:
+        """status=open·last_seen>=cutoff 스토리: [{'id','title','member_ids','lenses'}]."""
+        ...
+    def get_story_member_signals(self, member_ids: list) -> dict:
+        """멤버 기사 분류 신호 배치 집계: {'asset_hints','languages','tags','keyword_text'}."""
+        ...
+
     # Step-3 요약 패스 계약 (플랜 A). 새 멤버가 생긴 스토리를 골라 LLM 요약을 채운다.
     def get_stories_needing_summary(self, limit: int) -> list[dict]:
         """last_seen desc 상위 limit개 중 count>summary_count(새 멤버)인 것만. [{'id','count'}]."""

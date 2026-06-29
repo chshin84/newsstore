@@ -28,8 +28,10 @@
 ### `meta` (newsstore가 기록, 공개 read)
 사이트용 소형 메타 문서(예: `sources`). 소스 목록과 **소스 tier**(아래 §공유 설정)를 여기로 발행한다.
 
-### `stories` (news-analytics가 기록)
-스토리/클러스터(`centroid, member_ids, entities, status, 요약, 점수`). 스키마의 SSOT는 **news-analytics repo**이며 변경 시 이 문서의 UI read 계약을 함께 갱신한다.
+### `stories` (newsstore 인리치가 기록)
+스토리/클러스터(`centroid_sum, count, member_ids, entities, status, first_seen, last_seen, 요약 필드`).
+- **`lenses[]`** (string[], Phase 1) — 토픽 렌즈 id 배열(`config/topics.yaml` SSOT). 렌즈 패스(`run_enrich --mode lenses`)가 write, UI가 렌즈 필터·정렬에 read. 없으면 빈 배열 폴백(비파괴). id→type 해석은 topics.yaml.
+- 향후 `risk·impact`(Phase 3 score), `delta_time`(Phase 2). 변경 시 UI read 계약 함께 갱신.
 
 ## 핸드오프 프로토콜 — `processed` 플래그
 1. newsstore가 raw item을 쓸 때 `processed=false`를 박는다(verified: `firestore_store.py` `_to_doc`).
