@@ -14,6 +14,12 @@ def test_is_due():
     assert is_due({"last_fetched": NOW - timedelta(minutes=61)}, 60, NOW) is True
     assert is_due({"last_fetched": NOW - timedelta(minutes=10)}, 60, NOW) is False
 
+def test_body_mode_rejects_unknown():
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):     # calendar(미구현)·typo는 설정 로드 시 fail-loud
+        FeedConfig(feed_id="f", url="https://e/x", source="S", body_mode="calendar")
+
 def test_collect_once_stores_items_and_skips_not_due(store):
     feed = FeedConfig(feed_id="f1", url="https://e/x.rss", source="S", poll_minutes=60)
     client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=RSS)))

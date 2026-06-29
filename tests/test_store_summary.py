@@ -23,6 +23,12 @@ def test_needing_summary_filters_new_members(store):
     assert "a" not in ids
 
 
+def test_needing_summary_skips_single_member(store):
+    # count<2는 사이트가 표시 안 함 → 요약 LLM 콜 낭비 방지 (단일기사 스토리 스킵)
+    _mk_story(store, "single", count=1, last_seen=NOW)
+    assert "single" not in {s["id"] for s in store.get_stories_needing_summary(limit=10)}
+
+
 def test_needing_summary_respects_limit_recent_first(store):
     for i in range(5):
         _mk_story(store, f"s{i}", count=2, last_seen=NOW + timedelta(hours=i))
