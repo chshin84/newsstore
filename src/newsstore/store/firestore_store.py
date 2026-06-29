@@ -127,18 +127,25 @@ class FirestoreStore:
             "summary_at": now,
         }, merge=True)
 
-    def save_story_lenses(self, story_id, lenses: list) -> None:
-        self.db.collection("stories").document(story_id).set(
-            {"lenses": list(lenses)}, merge=True)
+    def save_story_lenses(self, story_id, lenses: list, count: int | None = None) -> None:
+        doc = {"lenses": list(lenses)}
+        if count is not None:
+            doc["lensed_count"] = count        # incremental: 이 멤버수까지 분류함
+        self.db.collection("stories").document(story_id).set(doc, merge=True)
 
     def get_stories_for_lensing(self, cutoff) -> list[dict]:
+        # incremental: 새 멤버가 생긴(count > lensed_count) 또는 미분류 스토리만. 48h창은 cutoff.
         out = []
         for snap in self.db.collection("stories").where("status", "==", "open").stream():
             d = snap.to_dict() or {}
-            if d.get("last_seen") and d["last_seen"] >= cutoff:
-                out.append({"id": snap.id, "title": d.get("title", ""),
-                            "member_ids": d.get("member_ids", []),
-                            "lenses": d.get("lenses", [])})
+            if not (d.get("last_seen") and d["last_seen"] >= cutoff):
+                continue
+            count = d.get("count", len(d.get("member_ids", [])))
+            if count <= d.get("lensed_count", -1):      # 변화 없음 → 스킵
+                continue
+            out.append({"id": snap.id, "title": d.get("title", ""),
+                        "member_ids": d.get("member_ids", []),
+                        "count": count, "lenses": d.get("lenses", [])})
         return out
 
     def get_story_member_signals(self, member_ids: list) -> dict:

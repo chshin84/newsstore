@@ -29,7 +29,7 @@ def run_lens_pass(store, *, now, cutoff, client=None) -> int:
                 lenses = prior
         else:
             lenses = prior
-        store.save_story_lenses(r["id"], lenses)
+        store.save_story_lenses(r["id"], lenses, count=r.get("count"))
         n += 1
     log.info("lens pass: %d stories classified (llm=%s)", n, client is not None)
     return n
