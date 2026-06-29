@@ -109,7 +109,7 @@ class FirestoreStore:
              .limit(int(limit)))
         for snap in q.stream():
             d = snap.to_dict() or {}
-            if d.get("count", 0) > d.get("summary_count", 0):
+            if d.get("count", 0) >= 2 and d.get("count", 0) > d.get("summary_count", 0):  # 사이트는 count>=2만 표시 → 단일기사 요약 콜 낭비 차단
                 out.append({"id": snap.id, "count": d.get("count", 0),
                             "developments": d.get("developments", [])})  # prior(델타) 동봉
         return out

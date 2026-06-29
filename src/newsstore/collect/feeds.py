@@ -19,7 +19,7 @@ class FeedConfig(BaseModel):
     asset_hint: str = ""
     language: str = "en"
     poll_minutes: int = 60
-    body_mode: str = "summary"   # full | summary | headline | calendar
+    body_mode: Literal["full", "summary", "headline"] = "summary"   # calendar는 미구현이라 제거(typo·미구현 모드 fail-loud)
     tz_offset: float | None = None   # hours; set for feeds emitting naive local time (infomax KST=9)
     tier: Literal["primary", "analysis", "wire"] = "wire"   # 소스 신뢰도(spec §9.2)
 

@@ -592,6 +592,15 @@
 
     initSources();
     routeFromHash();
+
+    // 자동경신: 5분마다 활성 탭 데이터 재로드(헤더 "5분마다 갱신" 약속 이행).
+    // 스토리 상세를 연 상태면 스토리 재로드 스킵(사용자 방해 방지), 백그라운드 탭이면 스킵(불필요한 read 절감).
+    const AUTO_REFRESH_MS = 5 * 60 * 1000;
+    setInterval(() => {
+      if (document.hidden) return;
+      if (!storiesView.hidden) { if (!openStoryId) loadStories(); }
+      else load();
+    }, AUTO_REFRESH_MS);
   </script>
 </body>
 </html>

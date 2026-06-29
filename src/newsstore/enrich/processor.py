@@ -36,7 +36,7 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
     """get_unprocessed 한 배치: classify → (story만) embed(병렬) → centroid 클러스터 →
     save_enrichment + mark_processed → close_stale. 비파괴.
 
-    - tag=False: LLM 태깅 생략(클러스터 전용 패스, 빠름). 태깅은 클러스터 후 스토리 단위로 별도(tag_stories).
+    - tag=False: LLM 태깅 생략(클러스터 전용 패스, 빠름). 스토리 의미 라벨링은 별도 lenses 패스가 담당.
     - index: VectorIndex(최근접 검색). 안 주면 배치당 1회 store에서 InMemory 인덱스를 구성
       (per-item Firestore 재조회 제거). 풀런은 run_enrich가 인덱스를 1회 만들어 배치 간 공유.
     """

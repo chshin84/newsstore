@@ -20,9 +20,11 @@
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) |
 | Cloud Run Job #2 | `newsstore-enricher` — Step-2 클러스터 인리치(image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
 | Cloud Scheduler #2 | `newsstore-enrich-10min` (`*/10 * * * *`) |
-| Cloud Run Job #3 | `newsstore-summarizer` — Step-3 스토리 요약(같은 image `processor:latest`, args `... run_enrich --mode summary`, secret 동일) |
+| Cloud Run Job #3 | `newsstore-summarizer` — 스토리 요약(같은 image `processor:latest`, args `... run_enrich --mode summary`, secret 동일) |
 | Cloud Scheduler #3 | `newsstore-summary-hourly` (`5 * * * *`) |
-| Secret Manager | `gemini-api-key` (Job#2·#3에 `--update-secrets`로 주입; SA에 secretAccessor) |
+| Cloud Run Job #4~#6 | `newsstore-lenser`(args `--mode lenses`) · `newsstore-scorer`(`--mode score`) · `newsstore-article`(`--mode article`) — 모두 같은 `processor:latest`, args만 다름, secret 동일 |
+| Cloud Scheduler #4~#6 | `newsstore-lens-10min`(`*/10`) · `newsstore-score-10min`(`3-59/10`) · `newsstore-article-10min`(`6-59/10`) — 윈도 내 lens→score→article 시차 |
+| Secret Manager | `gemini-api-key` (`processor:latest` 쓰는 enrich Job 5개 모두에 `--update-secrets`로 주입; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
 | Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |
@@ -81,7 +83,18 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 
 > ⚠️ **소유권 안내:** 아래 §E·§F의 인리치/요약 패스는 **`news-analytics` repo 소유**다(경계·계약: `docs/firestore-contract.md`). 코드·이미지·Job이 newsstore에서 운영되므로(처리기 이미지를 newsstore Dockerfile로 빌드) 런북을 여기 유지한다.
 
-## E. Step-2 인리치먼트 Processor 배포 (Cloud Run Job #2)
+## E. 인리치 Processor 배포 (`processor:latest` 이미지 — enrich Job 5개 공용)
+> **코드 변경 재배포(평소):** processor 이미지 1개를 재빌드한 뒤 **그걸 쓰는 Job 5개 모두**를 새 이미지로 갱신한다(이름이 `newsstore-processor`가 아니라 패스별로 나뉘어 있음):
+> ```
+> gcloud builds submit --config infra/cloudbuild.processor.yaml \
+>   --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest .
+> for j in newsstore-enricher newsstore-lenser newsstore-scorer newsstore-article newsstore-summarizer; do
+>   gcloud run jobs update "$j" --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest --region=asia-northeast3
+> done
+> gcloud run jobs execute newsstore-enricher --region=asia-northeast3 --wait   # 스모크
+> ```
+> 5개는 같은 이미지에 `--args ... run_enrich --mode {cluster|lenses|score|article|summary}`만 다르다. 아래는 **최초 생성** 절차(이름 예시 `newsstore-processor`는 역사적 — 실제 잡은 위 5개).
+
 수집기와 **별도 Job**. 같은 Dockerfile을 `INSTALL_ENRICH=true`로 빌드(google-genai 포함)해 **별 이미지**(`processor:latest`)로 올리고, CMD를 `python -m newsstore.entrypoints.run_enrich`로 돌린다. `GEMINI_API_KEY`는 **Secret Manager**로 주입(커밋/이미지/로그 금지 — 백엔드 전용 비밀).
 
 > **선결: `requirements.lock`에 google-genai 추가.** lock이 constraints(-c)라 미포함이면 빌드 실패. `pip-compile`/`uv` 등으로 `enrich` extra 포함해 재생성 후 커밋. (httpx<1.0 등 기존 핀과 충돌 시 해소 필요 — 이게 첫 빌드 게이트.)
