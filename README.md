@@ -67,8 +67,7 @@ MSYS_NO_PATHCONV=1 docker compose run --rm test
 - 🔀 **인리치먼트(태깅/스토리/점수) → `news-analytics` repo 소유.** Cloud Run Job#2(`newsstore-enricher`)·#3(`newsstore-summarizer`)는 **라이브**이나 **과도기로 newsstore 이미지에서 운영 중**(`docs/operations.md §E·§F`). 코드 물리 이전(`src/newsstore/enrich/` 디렉터리·`ports.py` 분할)은 별도 작업. 경계·계약: `docs/firestore-contract.md`.
 
 ## 문서
-- 로드맵(Step 1~7): `docs/roadmap.md`
+- **작업 순서(work order) SSOT: `docs/roadmap.md`** — 수집·저장·UI(완료) + 분석 Phase 0~5
+- **분석 레이어 설계/방법론: `docs/analysis-design.md`** (하이브리드 3-tier 렌즈·델타·score·UI)
 - 최초 셋업(0→배포): `docs/setup.md` · 운영·재배포: `docs/operations.md`
-- 설계: `docs/superpowers/specs/` · 구현계획: `docs/superpowers/plans/`
-- **분할 경계·계약(newsstore ↔ news-analytics): `docs/firestore-contract.md`** (Firestore 스키마 SSOT + 스펙/플랜 소유권 인덱스)
-- 소스 선택 근거(히스토리): `docs/handoff/2026-06-12-session-handoff.md`
+- Firestore 스키마 계약: `docs/firestore-contract.md` · 설계 스펙 히스토리: `docs/superpowers/specs/`

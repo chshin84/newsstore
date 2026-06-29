@@ -1,6 +1,6 @@
 # Firestore 데이터 계약 — newsstore ↔ news-analytics
 
-**결정(2026-06-29): 통합.** 인리치/분석을 **newsstore 내에서 개발**한다(클러스터링은 news-analytics에서 `enrich/clustering.py`로 이식됨). newsstore가 `items`·`stories`의 인리치 필드를 **직접 write**한다. 이 문서는 이제 **`items`/`stories` 스키마 정의 + UI read 계약**이며, **미래 재분리(인터페이스 안정·MCP/agent 목표 구체화 시)의 기준선**으로 보존한다. 전략: 메모리 `integration-strategy` · 능력 로드맵: `docs/analysis-roadmap.md`.
+**결정(2026-06-29): 통합.** 인리치/분석을 **newsstore 내에서 개발**한다(클러스터링은 news-analytics에서 `enrich/clustering.py`로 이식됨). newsstore가 `items`·`stories`의 인리치 필드를 **직접 write**한다. 이 문서는 이제 **`items`/`stories` 스키마 정의 + UI read 계약**이며, **미래 재분리(인터페이스 안정·MCP/agent 목표 구체화 시)의 기준선**으로 보존한다. 전략: 메모리 `integration-strategy` · 작업 순서: `docs/roadmap.md` · 분석 설계: `docs/analysis-design.md`.
 
 > 아래 표·스키마에서 "writer = news-analytics"는 **현재 newsstore(통합)**로 읽는다. 분리 전제(Firestore-as-API·import 없음)는 미래 재분리 시에만 유효한 역사적 맥락이다.
 
@@ -60,28 +60,5 @@
 
 → 위 계약은 **목표 경계**다. 코드 물리 이전(enrich 디렉터리·ports 분할·이미지 빌드 출처 이전)은 별도 작업이며, 완료 전까지 이 문서가 "어디로 가야 하는지"의 기준이다.
 
-## 스펙/플랜 소유권 인덱스 (분할 후)
-기존 `docs/superpowers/` 문서가 단일 repo를 전제로 쓰여 있어, 분할 기준으로 재분류한다. 각 파일 상단 배너가 이 표를 가리킨다.
-
-| 문서 | 소유 | 상태 |
-|---|---|---|
-| specs/2026-06-12-newsstore-design | newsstore | 유효 |
-| specs/2026-06-12-newsstore-gcp-deploy-design | 혼합 | 인리치 스키마(processed/tags)는 본 계약이 SSOT |
-| specs/2026-06-13-newsstore-step2-enrichment-design | **news-analytics** | DEPRECATED(분할) |
-| specs/2026-06-14-newsstore-modular-restructure-design | 혼합 | enrich 부분만 news-analytics |
-| specs/2026-06-15-newsstore-story-timeline-ui-design | 혼합 | 백엔드 요약=analytics / UI=newsstore |
-| specs/2026-06-28-newsstore-topic-lens-redesign-design | **news-analytics** | DEPRECATED(분할) — 단 §9 피드는 별도 스펙 |
-| specs/2026-06-28-feed-source-expansion-design | newsstore | 유효 |
-| plans/2026-06-12-newsstore-collector | newsstore | 유효 |
-| plans/2026-06-12-newsstore-firestore-store | newsstore | 유효 |
-| plans/2026-06-13-step2-enrich-core | **news-analytics** | DEPRECATED(분할) |
-| plans/2026-06-13-step2-store-ext | 혼합 | 인리치 store 메서드는 news-analytics |
-| plans/2026-06-14-step2-llm-tagging | **news-analytics** | DEPRECATED(분할) |
-| plans/2026-06-14-step2-processor-deploy | **news-analytics** | DEPRECATED(분할) |
-| plans/2026-06-14-phase-a-modular-restructure | newsstore | 유효(enrich 번들링은 이전 대상) |
-| plans/2026-06-14-phase-b-vector-index-port | **news-analytics** | DEPRECATED(분할) |
-| plans/2026-06-14-phase-c-emulator-single-store | newsstore | 유효 |
-| plans/2026-06-14-phase-d-deploy-batch | 혼합 | Job#2 배포는 news-analytics |
-| plans/2026-06-15-story-summary-backend-plan | **news-analytics** | DEPRECATED(분할) |
-| plans/2026-06-15-story-timeline-frontend-plan | newsstore | 유효(UI) |
-| plans/2026-06-28-feed-source-expansion | newsstore | 유효 |
+## 문서 안내 (2026-06-29 통합 정리)
+분리시대 소유권 인덱스는 폐기됨(통합으로 모두 newsstore 소유, 실행 plan 16종은 삭제 — git 히스토리 보존). 현 SSOT: **작업 순서 `docs/roadmap.md` · 분석 설계 `docs/analysis-design.md`**. `docs/superpowers/specs/`의 날짜별 설계 스펙은 *설계 근거 히스토리*로 보존된다.

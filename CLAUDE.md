@@ -17,7 +17,7 @@
 - **비밀 구분**: `GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프·전략 (중요):** newsstore = 수집·저장·호스팅(UI) **+ 인리치/분석을 통합 개발**(클러스터·태깅·임베딩·스토리·risk/impact 등). **전략(2026-06-29): 통합 우선, 인터페이스 안정·MCP/agent 목표 구체화 시 한 번에 `news-analytics`로 분리**(현재 분리 보류). news-analytics repo엔 gray-band 클러스터링이 선행 개발돼 있었고 그 코드를 newsstore `src/enrich/clustering.py`로 **이식**(import 아님). 분석 능력 로드맵: **`docs/analysis-roadmap.md`** · Firestore 스키마 계약: `docs/firestore-contract.md` · 메모리 `integration-strategy`.
+- **스코프·전략 (중요):** newsstore = 수집·저장·호스팅(UI) **+ 인리치/분석을 통합 개발**(클러스터·태깅·임베딩·스토리·risk/impact 등). **전략(2026-06-29): 통합 우선, 인터페이스 안정·MCP/agent 목표 구체화 시 한 번에 `news-analytics`로 분리**(현재 분리 보류). news-analytics repo엔 gray-band 클러스터링이 선행 개발돼 있었고 그 코드를 newsstore `src/enrich/clustering.py`로 **이식**(import 아님). **작업 순서 SSOT: `docs/roadmap.md`** · 분석 설계: `docs/analysis-design.md` · 스키마 계약: `docs/firestore-contract.md` · 메모리 `integration-strategy`·`hybrid-topic-lens-model`.
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - 로드맵(Step 1~7): `docs/roadmap.md`

@@ -1,26 +1,49 @@
-# 로드맵 (Step 1~7)
+# 로드맵 — 작업 순서 (work order SSOT)
 
-뉴스 → 태깅 → 아키타입 시장 뷰 → 시나리오/국면 대응으로 이어지는 단계. 결제는 **$0 유지**(무료 RSS + Gemini Flash 무료 한도).
+> **이 문서가 "무엇을 언제 하는가"의 단일 출처(SSOT)다.** 순서를 어기지 말 것(예: score는 Phase 3 — Phase 1 렌즈 토대 위에 얹힌다). 설계/방법론 상세는 `docs/analysis-design.md`, 스키마는 `docs/firestore-contract.md`. 결제는 **$0 유지**(무료 RSS + Gemini Flash 무료 한도).
 
-> ℹ️ **통합 안내 (2026-06-29):** 분할 전략을 되돌려 **인리치/분석을 newsstore 내에서 통합 개발**한다(Step 2 태깅·Step 4~7 분석 포함). gray-band 클러스터링은 news-analytics에서 `enrich/clustering.py`로 이식 완료. 인터페이스 안정·MCP/agent 목표 구체화 시 한 번에 재분리(보류). 능력 로드맵: `docs/analysis-roadmap.md` · 전략: 메모리 `integration-strategy`.
+newsstore = **수집·저장·호스팅 + 분석을 통합 개발**(전략: 메모리 `integration-strategy`, 인터페이스 안정 시 재분리 보류).
 
+```
+[기반 완료] ── [분석 레이어: 지금] ── [응용 레이어: 이후]
+ 수집·저장·UI    렌즈→클러스터→델타→score→UI    아키타입·시나리오·국면
+```
+
+## A. 기반 (✅ 완료·라이브)
+| | 내용 | 상태 |
+|---|---|---|
+| 수집 | 무료 RSS 5분 수집 → Firestore 중복제거 저장 | ✅ 라이브 |
+| 호스팅/UI | 피드\|스토리 탭, 소스 필터, 스토리 타임라인 | ✅ 라이브 |
+| 태깅·임베딩·클러스터 | Gemini 태깅/임베딩 + **gray-band 클러스터(`enrich/clustering.py` 이식 완료)** | ✅ 라이브(Job#2/#3) |
+
+## B. 분석 레이어 — 지금 (설계 SSOT: `docs/analysis-design.md` §3~§8)
+하이브리드 3-tier 렌즈 토대 위에 델타·score·UI를 올린다. **순서 의존이 있으니 아래 순서대로.**
+
+| Phase | 내용 | 의존 | 상태 |
+|---|---|---|---|
+| **0 피드 볼륨업** | 소스 확장(델타가 보일 밀도) | — | ✅ 대부분 완료(feed-source-expansion) |
+| **1 하이브리드 렌즈 + 개체-aware 클러스터** | Tier1 큐레이션 거시렌즈(채권·FX·유가·귀금속·원자재·부동산·정책·중앙은행·산업·리스크) + Tier2 워치종목 + Tier3 emergent(노출 게이트). `config/topics.yaml` + LLM 멀티라벨 분류 | 0 | 🚧 **클러스터 ✅ 이식 / 렌즈 분류 ⬜** ← **다음 작업** |
+| **2 델타** | 2-타임스탬프(published_at·delta_time) + milestone 판정(recap 비생성) | 1 | ⬜ |
+| **3 dual score** | risk(렌즈 정렬) + impact(스토리 정렬) LLM 1콜 + 결정론 가드. **임계 이하 노출만 숨김(비파괴)** | 1·2 | ⬜ |
+| **4 UI** | Now Brief(상단 합성) + 좌 이벤트/우 기사시간 타임라인, risk/impact 정렬 | 1·2·3 | ⬜ |
+
+> **score 트리거 실험 교훈(2026-06-29):** emergent-only 구조 신호(소스확증·노벨티·velocity)는 material recall **~35–48% 천장**, 놓치는 ~60%가 단일소스 스쿠프 → **렌즈 멤버십(Phase 1)이 그 신호**다. ⇒ **Phase 1 렌즈 먼저, 그 다음 score.** velocity는 게이트로 부적합(와이어 옴니버스가 최고속도). 메모리 `hybrid-topic-lens-model`.
+
+## C. 응용 레이어 — 이후 (분석 레이어 위에 얹힘)
+아키타입이 *분석된(렌즈·score된) 뉴스*를 소비해 시장 뷰를 낸다. **분석 레이어가 받쳐야 의미 있음.**
 | Step | 내용 | 상태 |
-|------|------|------|
-| **1. Raw RSS 수집·저장** | 무료 RSS 5분마다 수집 → Firestore 중복제거 저장 (LLM 없음) | ✅ 완료·라이브 |
-| **2. LLM 태깅** | `items WHERE processed=false`를 **Gemini Flash**로 태깅 → `mark_processed`. 아이템별 독립이라 대량 pipeline 가능 | 🚧 **로직 완료, 배포 대기** — Plan 1~4 코드·테스트 ✅(enrich·Store·tagger/embedder·processor). 남은 건 라이브 배포(Cloud Run Job#2 + `GEMINI_API_KEY`, `docs/operations.md §E`)·requirements.lock 재생성. 상세는 `docs/unsolved_problems.md` |
-| **3. 웹 게재** | 태그 드롭다운 + 최근 N개 뉴스 | ✅ 사이트 라이브. **소스 필터는 동작**, 태그 드롭다운은 Step-2가 태그 채우면 자동 활성 |
-| **4. 아키타입 시장 뷰** | 아키타입 정의 — 예 `(장기·롱·현금50%)`, `(단기·숏·현금50%)` + 손실 상황. 각 아키타입이 같은 태그뉴스를 보고 **시장 뷰 1~100** 산출 → **lowest/highest/median** 집계 | ⬜ (원래 이번 주 목표) |
-| **5. 기대/우려 추출** | 뉴스로부터 각 아키타입의 기대·걱정·염려 파악 | ⬜ |
-| **6. 이벤트 시나리오 대응** | upcoming 이벤트에 N개 시나리오(예 PPI 매우높음/높음/중립/낮음/매우낮음) → 각 아키타입 "어떻게 대응?" → 시장 뷰 추측 | ⬜ |
-| **7. 국면 대응 시뮬** | 섹터/시장 국면(초강세/강세/중립/약세/초약세)별 "어떻게 대응?" | ⬜ |
+|---|---|---|
+| 아키타입 시장 뷰 | 아키타입 정의(예 `장기·롱·현금50%`) → 같은 렌즈뉴스로 시장 뷰 1~100 → lowest/highest/median 집계 | ⬜ |
+| 기대/우려 추출 | 뉴스로부터 각 아키타입의 기대·염려 | ⬜ |
+| 이벤트 시나리오 대응 | upcoming 이벤트 N시나리오(예 PPI 5단계) × 아키타입 대응 | ⬜ |
+| 국면 대응 시뮬 | 섹터/시장 국면(초강세~초약세)별 대응 | ⬜ |
+
+> ⚠️ **열린 질문:** 응용(아키타입) 레이어가 여전히 목표인지, 분석 레이어 산출로 충분한지 — Phase 4 도달 시 사용자와 재확인.
 
 ## ultracode(다중 에이전트 Workflow) 적합 지점
-- **Step 4~7**: 아키타입·시나리오가 서로 **독립**이라 병렬 팬아웃에 최적.
-  - 아키타입 N개 = 에이전트 N개 → 각자 뷰 산출 → 집계(lowest/highest/median).
-  - Step 6·7은 **시나리오 × 아키타입 격자** 팬아웃.
-- **Step 2**: 아이템별 독립 → 대량 pipeline로 태깅.
+- **응용 레이어(아키타입·시나리오)**: 서로 독립이라 병렬 팬아웃 최적(아키타입 N=에이전트 N → 집계).
+- **분석 Phase 1 렌즈 분류·골든셋 평가**: 능력별 독립이라 worktree 병렬 가능(단 설계는 통합).
 
 ## 연결
-- 현재 상태·환경: `README.md`
-- 운영·재배포: `docs/operations.md`
-- 설계 근거(소스 선택 등): `docs/handoff/2026-06-12-session-handoff.md` §4~6
+- 분석 설계/방법론: `docs/analysis-design.md` · 스키마 계약: `docs/firestore-contract.md`
+- 현재 상태·환경: `README.md` · 운영·재배포: `docs/operations.md`
