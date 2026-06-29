@@ -1,6 +1,6 @@
 """Dual score 패스(Phase 3) — 스토리에 risk/impact(0~3)를 LLM 1콜로 매겨 비파괴 저장.
 
-설계: docs/analysis-design.md §7 · spec: docs/superpowers/specs/2026-06-29-phase3-score-design.md
+설계: docs/analysis-design.md §7
 - type-aware 게이트: standing/watch(금융자산) 상시 채점 / 그 외·emergent·unknown은 멤버수≥MIN.
 - 결정론 validator 먼저(범위 0~3·필수키 risk/impact). reason은 advisory(결측→빈문자열).
 - incremental(count>scored_count)은 store.get_stories_for_scoring가 필터, fail-soft(스토리 단위).
