@@ -229,3 +229,27 @@ def test_run_pass_passes_prior_developments():
     store = FakeStore([{"id": "s1", "count": 5, "developments": prior}], {"s1": _members(5)})
     run_summary_pass(store, FakeLLM(resp), limit=10, now=T0)
     assert store.saved["s1"]["developments"][0]["delta_time"] == T0 + timedelta(hours=2)
+
+
+# --- Phase 4: event_time 추출 ---
+def test_prompt_requests_event_time():
+    p = build_summary_prompt(_members(3))
+    assert "event_time" in p          # 발생시각을 항상 요청(prior 유무 무관)
+
+
+def test_summarize_parses_event_time_in_range():
+    m = _members(3)                                   # m[i].published_at = T0 + i시간
+    ev = (T0 + timedelta(hours=2)).isoformat().replace("+00:00", "Z")
+    resp = {"title": "T", "summary": "S", "developments": [
+        {"text": "a", "first_idx": 2, "source_count": 1, "event_time": ev}]}
+    res = summarize_story(m, FakeLLM(resp), now=T0)
+    assert res["developments"][0]["event_time"] == T0 + timedelta(hours=2)
+
+
+def test_summarize_event_time_null_or_out_of_range_is_none():
+    m = _members(3)
+    for bad in [None, "not-a-date", "1990-01-01T00:00:00Z"]:    # null·비ISO·sanity 밖
+        resp = {"title": "T", "summary": "S", "developments": [
+            {"text": "a", "first_idx": 0, "source_count": 1, "event_time": bad}]}
+        res = summarize_story(m, FakeLLM(resp), now=T0)
+        assert res["developments"][0]["event_time"] is None

@@ -28,7 +28,8 @@ def assign_delta_times(developments: list[dict], *, prior_developments: list[dic
         is_new = d.get("is_new") is True            # 정확히 True만 새 전개(누락/null/비bool=recap)
         dt = d["time"] if (is_new or frontier is None) else frontier
         out.append({"text": d["text"], "time": d["time"],
-                    "source_count": d["source_count"], "delta_time": dt})
+                    "source_count": d["source_count"], "delta_time": dt,
+                    "event_time": d.get("event_time")})
     return out
 
 

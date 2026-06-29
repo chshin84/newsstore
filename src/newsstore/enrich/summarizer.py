@@ -5,6 +5,7 @@ stories 문서에 merge 저장한다. time·latest는 LLM이 아니라 코드가
 """
 from __future__ import annotations
 import logging
+from datetime import datetime, timezone
 
 from ..contracts.ports import LLMClient
 from .gemini import LLMError
@@ -14,6 +15,22 @@ log = logging.getLogger("newsstore.enrich.summarizer")
 
 SUMMARY_MAX_MEMBERS = 200    # LLM에 먹이는 멤버 상한(토큰/출력품질). summary_count는 전체수(D3).
 MAX_TITLE = 80
+EVENT_SANITY_DAYS = 14          # event_time이 보도시각에서 이만큼 벗어나면 환각으로 보고 드롭
+
+
+def _parse_event_time(raw, ref):
+    """ISO8601 문자열을 ref(보도시각) ±EVENT_SANITY_DAYS 안이면 datetime, 아니면 None."""
+    if not isinstance(raw, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(raw.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    if ref is not None and abs((dt - ref).days) > EVENT_SANITY_DAYS:
+        return None
+    return dt
 
 
 def _excerpt_len(n_members: int) -> int:
@@ -52,9 +69,11 @@ def build_summary_prompt(members: list[dict], *, omitted: int = 0,
         "단위로 묶어 요약하라. 의미상 같은 전개의 다른 표현(출처가 달라도)은 하나의 전개로 합쳐라. "
         "최근 전개에 가중치를 둬라. 사실만 쓰고 출처 밖 내용·추측은 금지한다.\n"
         "각 전개에 first_idx(그 전개를 처음 보도한 기사 번호)와 source_count(그 전개를 다룬 서로 "
-        "다른 출처 수 추정)를 넣어라. " + milestone_rule + "아래 JSON만 출력:\n"
+        "다른 출처 수 추정)를 넣어라. "
+        "각 전개에 event_time(그 전개의 사건이 실제로 일어난 시각, 본문에서 추론한 ISO8601 "
+        "예 2026-06-29T09:30:00Z. 불명확하면 null)도 넣어라. " + milestone_rule + "아래 JSON만 출력:\n"
         '{"title":"스토리 캐노니컬 제목(≤40자)","summary":"2~3문장 요약(최근 가중)",'
-        '"developments":[{"text":"전개 한 줄","first_idx":0,"source_count":1'
+        '"developments":[{"text":"전개 한 줄","first_idx":0,"source_count":1,"event_time":null'
         + (',"is_new":true' if ptexts else '') + '}]}\n'
         + known_block + "\n"
         + "\n".join(lines)
@@ -91,6 +110,7 @@ def validate_summary(raw: dict, *, n_members: int) -> dict | None:
         sc = sc if _is_int(sc) and sc >= 1 else 1
         out.append({"text": text.strip(), "first_idx": idx,
                     "source_count": min(sc, n_members),
+                    "event_time": d.get("event_time"),         # 원문(str|null), 파싱은 summarize_story
                     "is_new": d.get("is_new") is True})    # 정확히 True만, 그 외 보수적 recap
 
     return {"title": title.strip()[:MAX_TITLE], "summary": summary.strip(),
@@ -120,7 +140,8 @@ def summarize_story(members_all: list[dict], client: LLMClient, *, now=None,
         if pub is None:                                # 시각 grounding 불가 → 드롭
             continue
         devs.append({"text": d["text"], "time": pub,
-                     "source_count": d["source_count"], "is_new": d["is_new"]})
+                     "source_count": d["source_count"], "is_new": d["is_new"],
+                     "event_time": _parse_event_time(d.get("event_time"), pub)})
     devs = assign_delta_times(devs, prior_developments=prior_developments or [])  # delta_time 부여
     devs.sort(key=lambda x: x["time"], reverse=True)   # 안정정렬, time DESC(위=최신)
     latest = devs[0]["text"] if devs else ""
