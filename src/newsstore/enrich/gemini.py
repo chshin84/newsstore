@@ -66,6 +66,19 @@ class GeminiClient:
             return code in (408, 429)
         return True
 
+    def complete(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT) -> str:
+        """평문 생성(JSON mime 없이). gray-band LLM(llm.complete)용. None 가드 재사용."""
+        from google.genai import types
+
+        def _call():
+            r = self._client.models.generate_content(
+                model=self._model, contents=prompt,
+                config=types.GenerateContentConfig(
+                    http_options=types.HttpOptions(timeout=int(timeout * 1000))))
+            return getattr(r, "text", None)
+
+        return call_with_retry(_call, is_transient=self._is_transient)
+
     def generate_json(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
         from google.genai import types
 

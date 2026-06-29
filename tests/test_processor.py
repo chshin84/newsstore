@@ -34,6 +34,8 @@ class _FakeClient:
             if key in text:
                 return list(vec)
         return [0.0] * EMBED_DIM
+    def complete(self, prompt, *, timeout=30.0):
+        return "DIFFERENT"        # gray-band 기본: 미합류(직교 벡터 테스트는 호출 안 됨)
 
 
 def test_spam_and_digest_excluded_from_embedding(store):
@@ -81,19 +83,15 @@ def test_empty_queue_is_noop(store):
     assert stats["processed"] == 0
 
 
-def test_cluster_pass_index_no_tagging(store):
-    # tag=False + VectorIndex 주입: 태깅 생략, 포트로 클러스터(Firestore 재조회 없음)
-    from newsstore.enrich.vector_index import InMemoryVectorIndex
+def test_cluster_pass_no_tagging(store):
+    # tag=False: 태깅 생략, 클러스터만(어댑터 기본 경로 — index 주입 제거)
     store.upsert_items([_item("a", "Fed raises rates sharply today"),
                         _item("b", "Fed raises rates again right now")])
-    idx = InMemoryVectorIndex()
-    process_once(store, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW,
-                 tag=False, index=idx)
+    process_once(store, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW, tag=False)
     rows = _rows(store)
     assert rows["a"]["tags"] == []                         # 태깅 생략
     assert rows["a"]["embedding"] is not None
-    assert rows["a"]["story_id"] == rows["b"]["story_id"]  # 인덱스로 합류
-    assert idx.nearest([0.0] * EMBED_DIM, threshold=-2.0) is not None  # 스토리 존재
+    assert rows["a"]["story_id"] == rows["b"]["story_id"]  # 합류
 
 
 def test_noncluster_source_tagged_not_clustered(store):
@@ -110,6 +108,29 @@ def test_noncluster_source_tagged_not_clustered(store):
     assert rows["ts"]["kind"] == "story"
     assert rows["ts"]["embedding"] is None and rows["ts"]["story_id"] is None
     assert rows["a"]["embedding"] is not None
+
+
+def test_same_batch_second_article_joins_first(store):
+    # 같은 배치에서 첫 기사가 연 스토리에 둘째가 합류(배치 내 open_stories 갱신 불변식)
+    store.upsert_items([_item("a", "Fed raises rates sharply today"),
+                        _item("b", "Fed raises rates again right now")])   # 동일 벡터
+    process_once(store, _FakeClient({"Fed raises": _unit(0)}), TAX, now=NOW)
+    sid = {i: r["story_id"] for i, r in _rows(store).items()}
+    assert sid["a"] == sid["b"]            # 한 배치 안에서 합류(중복 스토리 X)
+
+
+def test_gray_band_same_merges(store):
+    # gray-band(lo<cos<hi)에서 LLM=SAME → 합류. 벡터를 cos≈0.64로 구성.
+    class _Gray(_FakeClient):
+        def complete(self, prompt, *, timeout=30.0):
+            return "SAME"
+    def _vec(a, b):
+        v = [0.0] * EMBED_DIM; v[0] = a; v[1] = b; return v
+    store.upsert_items([_item("a", "Alpha event one"), _item("b", "Beta event two")])
+    process_once(store, _Gray({"Alpha": _vec(1.0, 0.0), "Beta": _vec(0.83, 1.0)}),
+                 TAX, now=NOW)
+    sid = {i: r["story_id"] for i, r in _rows(store).items()}
+    assert sid["a"] == sid["b"]            # gray-band SAME → 합류
 
 
 def test_thin_story_item_not_embedded_or_clustered(store):

@@ -2,7 +2,7 @@
 
 뉴스 → 태깅 → 아키타입 시장 뷰 → 시나리오/국면 대응으로 이어지는 단계. 결제는 **$0 유지**(무료 RSS + Gemini Flash 무료 한도).
 
-> ⚠️ **분할 안내 (2026-06-28):** 이 로드맵은 단일 repo를 전제로 쓰였다. 분할 후 소유는 **newsstore = Step 1(수집)·Step 3(웹 게재/UI)**, **news-analytics = Step 2(태깅)·Step 4~7(아키타입/시나리오/국면)**. 두 repo는 Firestore 스키마로만 만난다 — 경계·계약은 `docs/firestore-contract.md`. 아래 표의 각 Step은 이 분할을 따른다.
+> ℹ️ **통합 안내 (2026-06-29):** 분할 전략을 되돌려 **인리치/분석을 newsstore 내에서 통합 개발**한다(Step 2 태깅·Step 4~7 분석 포함). gray-band 클러스터링은 news-analytics에서 `enrich/clustering.py`로 이식 완료. 인터페이스 안정·MCP/agent 목표 구체화 시 한 번에 재분리(보류). 능력 로드맵: `docs/analysis-roadmap.md` · 전략: 메모리 `integration-strategy`.
 
 | Step | 내용 | 상태 |
 |------|------|------|

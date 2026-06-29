@@ -4,9 +4,8 @@ import logging
 import os
 from datetime import datetime, timezone
 
-from ..enrich.cluster import DEFAULT_THRESHOLD
 from ..enrich.embedder import EMBED_CONCURRENCY
-from ..enrich.vector_index import InMemoryVectorIndex
+from ..enrich import cluster_adapter
 from ..enrich.gemini import GeminiClient, LLMError
 from ..enrich.processor import (process_once, NONCLUSTER_SOURCES,
                                OPEN_WINDOW, CLOSE_AFTER)
@@ -19,21 +18,22 @@ log = logging.getLogger("newsstore.entrypoints.run_enrich")
 MAX_BATCHES = int(os.environ.get("NEWSSTORE_MAX_BATCHES", "1000"))
 
 
-def _run_cluster(store, client, taxonomy, *, threshold, noncluster, batch, concurrency) -> dict:
-    """Pass 1 — 클러스터 전용(빠름): embed(병렬) + in-memory centroid 캐시. LLM 태깅 없음.
+def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> dict:
+    """Pass 1 — 클러스터 전용(빠름): embed(병렬) + gray-band 배정. LLM 태깅 없음.
 
-    열린 스토리 centroid를 InMemoryVectorIndex로 1회 로드 → 메모리 최근접 검색(Firestore 제곱 재조회 제거).
+    clusterer/open_stories를 1회 구성해 배치 간 공유(Firestore 제곱 재조회 제거).
     """
     now0 = datetime.now(timezone.utc)
-    index = InMemoryVectorIndex.from_open_stories(store, now0 - OPEN_WINDOW)   # 1회 구성, 배치 간 공유
-    log.info("cluster pass: seeded %d open-story centroids", len(index._e))
+    clusterer = cluster_adapter.build_clusterer(client)
+    open_stories = cluster_adapter.to_stories(store.get_open_stories(now0 - OPEN_WINDOW))
+    log.info("cluster pass: seeded %d open-story candidates", len(open_stories))
     totals = {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
     for _ in range(MAX_BATCHES or 1_000_000):
         now = datetime.now(timezone.utc)
         stats = process_once(store, client, taxonomy, now=now, batch=batch,
-                             threshold=threshold, noncluster_sources=noncluster,
-                             tag=False, index=index, close=False,
-                             embed_concurrency=concurrency)
+                             noncluster_sources=noncluster,
+                             tag=False, clusterer=clusterer, open_stories=open_stories,
+                             close=False, embed_concurrency=concurrency)
         for k in totals:
             totals[k] += stats[k]
         if stats["processed"] == 0:
@@ -69,7 +69,6 @@ def main(argv=None) -> int:
         kw["embed_model"] = os.environ["GEMINI_EMBED_MODEL"]
     client = GeminiClient(api_key, **kw)
 
-    threshold = float(os.environ.get("NEWSSTORE_CLUSTER_THRESHOLD", DEFAULT_THRESHOLD))
     noncluster = (frozenset(s.strip() for s in os.environ["NEWSSTORE_NONCLUSTER_SOURCES"].split(",") if s.strip())
                   if os.environ.get("NEWSSTORE_NONCLUSTER_SOURCES") else NONCLUSTER_SOURCES)
     concurrency = int(os.environ.get("NEWSSTORE_EMBED_CONCURRENCY", EMBED_CONCURRENCY))
@@ -77,7 +76,7 @@ def main(argv=None) -> int:
     with make_store() as store:                  # Firestore(에뮬레이터 or 실)
         try:
             if args.mode == "cluster":
-                totals = _run_cluster(store, client, taxonomy, threshold=threshold,
+                totals = _run_cluster(store, client, taxonomy,
                                       noncluster=noncluster, batch=args.batch,
                                       concurrency=concurrency)
             elif args.mode == "summary":

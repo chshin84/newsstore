@@ -1,9 +1,8 @@
 # Firestore 데이터 계약 — newsstore ↔ news-analytics
 
-newsstore(뉴스 수집·저장·호스팅)와 **news-analytics**(별개 repo — LLM 태깅·임베딩·클러스터·스토리·risk/impact 점수)는 **코드로 결합하지 않는다.** 두 repo가 만나는 유일한 이음새는 **Firestore 스키마**다. 이 문서가 그 경계의 SSOT다.
+**결정(2026-06-29): 통합.** 인리치/분석을 **newsstore 내에서 개발**한다(클러스터링은 news-analytics에서 `enrich/clustering.py`로 이식됨). newsstore가 `items`·`stories`의 인리치 필드를 **직접 write**한다. 이 문서는 이제 **`items`/`stories` 스키마 정의 + UI read 계약**이며, **미래 재분리(인터페이스 안정·MCP/agent 목표 구체화 시)의 기준선**으로 보존한다. 전략: 메모리 `integration-strategy` · 능력 로드맵: `docs/analysis-roadmap.md`.
 
-- **결정(2026-06-28):** news-analytics는 **Firestore에 직접** read/write 한다(Firestore-as-API). newsstore 라이브러리를 import 하지 않는다 → 코드 결합 0, 계약은 스키마뿐.
-- **이 문서의 역할:** 누가 무엇을 쓰고 읽는지, 핸드오프·불변식·인프라 소유를 못 박는다. 두 repo의 세션이 이 문서를 기준선으로 합의한다.
+> 아래 표·스키마에서 "writer = news-analytics"는 **현재 newsstore(통합)**로 읽는다. 분리 전제(Firestore-as-API·import 없음)는 미래 재분리 시에만 유효한 역사적 맥락이다.
 
 ## 소유권 — 누가 쓰고 누가 읽나
 

@@ -4,10 +4,10 @@ import uuid
 from datetime import datetime, timedelta
 
 from .classify import classify_kind
-from .cluster import DEFAULT_THRESHOLD
 from .embedder import embed_items, embed_text, EMBED_CONCURRENCY
-from .vector_index import InMemoryVectorIndex
-from ..contracts.ports import LLMClient, VectorIndex
+from . import cluster_adapter
+from .clustering_types import Story
+from ..contracts.ports import LLMClient
 from .tagger import tag_items
 
 _EMPTY_TAGS = {"tickers": [], "entities": [], "topics": []}
@@ -29,9 +29,8 @@ def _flat_tags(tg: dict) -> list[str]:
 def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
                  batch: int = 10, open_window: timedelta = OPEN_WINDOW,
                  close_after: timedelta = CLOSE_AFTER,
-                 threshold: float = DEFAULT_THRESHOLD,
                  noncluster_sources=NONCLUSTER_SOURCES,
-                 tag: bool = True, index: VectorIndex | None = None,
+                 tag: bool = True, clusterer=None, open_stories: list | None = None,
                  close: bool = True,
                  embed_concurrency: int = EMBED_CONCURRENCY, id_factory=None) -> dict:
     """get_unprocessed 한 배치: classify → (story만) embed(병렬) → centroid 클러스터 →
@@ -45,8 +44,10 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
     items = store.get_unprocessed(limit=batch)
     if not items:
         return {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
-    if index is None:
-        index = InMemoryVectorIndex.from_open_stories(store, now - open_window)
+    if clusterer is None:
+        clusterer = cluster_adapter.build_clusterer(client)
+    if open_stories is None:
+        open_stories = cluster_adapter.to_stories(store.get_open_stories(now - open_window))
 
     kinds = {it.id: classify_kind(it.title, it.body or "") for it in items}
     story_items = [it for it in items if kinds[it.id] == "story"]
@@ -75,8 +76,8 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
                                   embedding=None, story_id=None)
             continue
         entities = _flat_tags(tg)
-        sid, is_new = _assign_and_persist(store, index, it, vec, entities, now,
-                                          threshold, id_factory)
+        sid, is_new = _assign_and_persist(store, clusterer, open_stories, it, vec,
+                                          entities, now, id_factory)
         if is_new:
             created += 1
         else:
@@ -97,16 +98,18 @@ def process_once(store, client: LLMClient, taxonomy: dict, *, now: datetime,
     return stats
 
 
-def _assign_and_persist(store, index, it, vec, entities, now, threshold,
+def _assign_and_persist(store, clusterer, open_stories, it, vec, entities, now,
                         id_factory) -> tuple[str, bool]:
-    """VectorIndex로 최근접 스토리 배정 + store 영속화 + 인덱스 갱신. 반환 (story_id, is_new)."""
-    sid = index.nearest(vec, threshold=threshold)
+    """gray-band 클러스터러로 스토리 배정 + store 영속화 + 배치 내 open_stories 갱신.
+    반환 (story_id, is_new)."""
+    sid = cluster_adapter.assign(clusterer, it, vec, open_stories)
     if sid is None:
         sid = id_factory()
         store.create_story(sid, title=it.title, vec=vec, member_id=it.id,
                            entities=entities, now=now)
-        index.add_story(sid, vec)
+        # 같은 배치의 후속 기사가 이 신규 스토리를 후보로 보게(배치 내 가시성).
+        open_stories.append(Story(id=sid, title=it.title, centroid_sum=tuple(vec)))
         return sid, True
     store.append_to_story(sid, vec=vec, member_id=it.id, entities=entities, now=now)
-    index.add_member(sid, vec)
+    # 합류 스토리의 centroid_sum 배치 내 갱신은 v1 미적용(다음 배치 재읽기로 반영).
     return sid, False
