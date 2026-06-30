@@ -27,7 +27,10 @@ def fetch_body(client: httpx.Client, url: str, selector: str) -> str:
             return ""
         text = " ".join(el.get_text(" ", strip=True).split())
         return text if len(text) >= MIN_BODY_CHARS else ""
-    except Exception:
+    except httpx.HTTPError:                  # 네트워크/타임아웃 등 기대 오류 → ""(무소음)
+        return ""
+    except Exception:                        # 비기대(파싱/코드 버그) → 표면화(로깅) 후 ""(no-raise 계약 유지)
+        log.exception("body_fetch unexpected error: %s", url)
         return ""
 
 

@@ -72,7 +72,8 @@ def test_incremental_skips_then_rescores(store):
 
 class _Boom:
     def generate_json(self, prompt, *, timeout=30.0):
-        raise RuntimeError("down")
+        from newsstore.enrich.gemini import LLMError
+        raise LLMError("down")
 
 
 def test_failsoft_llm_error_skips_only_that_story(store):
@@ -82,3 +83,14 @@ def test_failsoft_llm_error_skips_only_that_story(store):
     _summarize(store, "s4")
     n = run_score_pass(store, _Boom(), now=NOW, cutoff=CUT)   # LLM 장애 → 스킵, 패스 안 죽음
     assert n["skipped"] == 1 and n["scored"] == 0 and "risk" not in _doc(store, "s4")
+
+
+def test_score_story_propagates_non_llm_bug():
+    import pytest
+    from newsstore.enrich.scorer import score_story
+
+    class _Bug:                              # 코드 버그(비-LLMError)는 전파(FAIL-LOUD)
+        def generate_json(self, prompt, *, timeout=30.0):
+            raise ValueError("programming bug")
+    with pytest.raises(ValueError):
+        score_story({"title": "t", "summary": "s"}, members=None, client=_Bug())

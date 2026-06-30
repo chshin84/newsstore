@@ -88,9 +88,11 @@ def test_score_story_empty_input_returns_none():
 
 
 def test_score_story_failsoft_on_llm_error():
+    from newsstore.enrich.gemini import LLMError
+
     class _Boom:
         def generate_json(self, prompt, *, timeout=30.0):
-            raise RuntimeError("down")
+            raise LLMError("down")          # LLM 장애만 fail-soft
     out = score_story({"title": "x", "summary": "s", "developments": []},
                       members=None, client=_Boom())
     assert out is None

@@ -3,13 +3,13 @@ from dataclasses import dataclass
 import httpx
 from .feeds import FeedConfig
 
-DEFAULT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-}
+# 요청용 브라우저 UA(SSOT). 다른 모듈(ssl_config 등)은 복제하지 말고 여기서 import.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+DEFAULT_HEADERS = {"User-Agent": USER_AGENT}
 
 @dataclass
 class FetchResult:

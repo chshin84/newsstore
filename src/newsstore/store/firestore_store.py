@@ -2,6 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from ..contracts.models import RawItem
 from ..contracts.vectors import add_vectors
+from ..contracts.classify import classify_kind   # 순수 triage(키워드 매칭) — contracts 공유
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
@@ -14,6 +15,9 @@ def _to_doc(item: RawItem) -> dict:
         "url": item.url, "title": item.title, "body": item.body,
         "published_at": item.published_at, "fetched_at": item.fetched_at,
         "processed": False, "processed_at": None, "tags": [],
+        # 수집 시점 kind triage: 신선 항목도 즉시 spam/digest/sports로 숨김 가능(', More' 등).
+        # 백엔드가 kind의 단일 통제점 — enrich 패스가 재확인(같은 함수, 멱등).
+        "kind": classify_kind(item.title, item.body),
     }
 
 

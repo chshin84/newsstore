@@ -177,13 +177,13 @@ def _default_base_cluster(vectors: list[Vector]) -> list[int]:
 # ── 임베딩 확보 ──────────────────────────────────────────────────────────────
 
 def _embed_text(doc: _Doc) -> str:
-    """임베딩 입력은 **제목 기준**(사건 정체성은 헤드라인에 응축된다).
+    """임베딩 입력 = 제목 + 본문. 운영 정본 규칙(`embedder.embed_text`)을 그대로 따른다(SSOT).
 
-    측정 근거: 이 코퍼스의 본문은 잦은 절단('Full story available on …')·한 줄 스텁이라
-    임베딩을 사건에서 표류시킨다 — 호르무즈 우회 투자 기사(스텁 본문)가 title+body에서
-    클러스터까지 cos 0.43으로 이탈해 미수렴을 유발(title-only는 1수렴). 본문은 LLM gray-band
-    판정엔 그대로 쓰고(아래 `_llm_same_event`), **임베딩에서만** 제외한다."""
-    return doc.title or doc.body
+    이 함수는 임베딩이 미주입일 때의 폴백 경로다(운영은 processor가 embedder로 사전 임베딩).
+    입력 규칙을 운영과 한 곳(embedder)에서 도출해 두 경로가 어긋나지 않게 한다.
+    (#24 결정: title+body가 정본 — 과거 title-only 측정 주석은 폐기.)"""
+    from .embedder import embed_text   # 지연 임포트(이 모듈의 주입-경계 스타일과 일치)
+    return embed_text(doc)
 
 
 def _embeddings(docs: list[_Doc], embed: Embedder | None) -> list[Vector]:

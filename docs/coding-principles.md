@@ -1,6 +1,6 @@
-# 코딩 접근 원칙 (general)
+# 코딩 접근 원칙 — newsstore 적용·예시
 
-이 프로젝트(및 일반)에서 따르는 코드 원칙. 요약은 `CLAUDE.md`(자동 로드).
+일반 원칙의 정의 SSOT는 전역 디시플린(`~/.claude/disciplined-coder/agent-principles.md`)이다. 이 문서는 그 원칙들의 **newsstore 특화 적용·예시**(feeds.yaml SSOT·Cloud Run IP·Docker 등)를 모은다 — 일반 정의를 재정의하지 않는다. 요약은 `CLAUDE.md`(자동 로드).
 
 ## 1. Single Source of Truth (SSOT)
 같은 정보는 **한 곳에만** 정의한다.
@@ -33,7 +33,7 @@
 ## 8. Docker 전용 개발/테스트
 - **로컬 Python 사용 금지** — 모든 실행·테스트·빌드는 Docker로만.
 - 이유: 호스트에 로컬 Python 없음 + 환경 재현성(프로덕션 이미지와 동일 환경에서 테스트).
-- 테스트: `MSYS_NO_PATHCONV=1 docker run --rm -v "D:/projects/newsstore:/app" newsstore pytest -q`
+- 테스트: `MSYS_NO_PATHCONV=1 docker compose run --rm test`(Firestore 에뮬레이터 자동 기동 후 pytest).
 
 ## 9. 비밀 분리
 - 진짜 비밀(`GEMINI_API_KEY`, 서비스계정 키)은 **백엔드 전용** — `.env`(gitignore+dockerignore) / Cloud Run env / Secret Manager. 클라이언트·커밋 금지.

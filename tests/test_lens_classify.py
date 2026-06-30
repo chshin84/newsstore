@@ -45,7 +45,8 @@ class _FakeLLM:
 
     def generate_json(self, prompt, *, timeout=30.0):
         if self.boom:
-            raise RuntimeError("down")
+            from newsstore.enrich.gemini import LLMError
+            raise LLMError("down")          # LLM 장애만 prior 폴백
         return {"lenses": self.lenses}
 
 
@@ -62,3 +63,14 @@ def test_stage2_failsoft_to_candidates():
     from newsstore.enrich.lens_classify import classify_stage2
     llm = _FakeLLM([], boom=True)        # LLM 장애 → prior 폴백
     assert classify_stage2(T, llm, story_text="x", candidates=["kr_rates"]) == ["kr_rates"]
+
+
+def test_stage2_propagates_non_llm_bug():
+    import pytest
+    from newsstore.enrich.lens_classify import classify_stage2
+
+    class _Bug:                          # 코드 버그(비-LLMError)는 폴백으로 위장 말고 전파(FAIL-LOUD)
+        def generate_json(self, prompt, *, timeout=30.0):
+            raise ValueError("programming bug")
+    with pytest.raises(ValueError):
+        classify_stage2(T, _Bug(), story_text="x", candidates=["kr_rates"])

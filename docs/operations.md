@@ -16,7 +16,7 @@
 | GCP 프로젝트 | `daily-recap-498506` (asia-northeast3) |
 | Firestore | `(default)` Native — 컬렉션 `items`, `feed_state` |
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
-| Cloud Run Job | `newsstore-collector` (env `NEWSSTORE_BACKEND=firestore`, `GOOGLE_CLOUD_PROJECT=daily-recap-498506`, `APP_ENV=home`) |
+| Cloud Run Job | `newsstore-collector` (env `GOOGLE_CLOUD_PROJECT=daily-recap-498506`, `APP_ENV=home`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) |
 | Cloud Run Job #2 | `newsstore-enricher` — Step-2 클러스터 인리치(image `processor:latest`, CMD `python -m newsstore.entrypoints.run_enrich`, secret `gemini-api-key`) |
 | Cloud Scheduler #2 | `newsstore-enrich-10min` (`*/10 * * * *`) |
@@ -113,7 +113,7 @@ gcloud run jobs create newsstore-processor \
   --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest \
   --region=asia-northeast3 \
   --service-account=newsstore-job@daily-recap-498506.iam.gserviceaccount.com \
-  --set-env-vars=NEWSSTORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
   --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
   --command=python --args=-m,newsstore.entrypoints.run_enrich
 # 4) 수동 1회 실행 + 로그 확인
@@ -143,7 +143,7 @@ gcloud run jobs create newsstore-summarizer \
   --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest \
   --region=asia-northeast3 \
   --service-account=newsstore-job@daily-recap-498506.iam.gserviceaccount.com \
-  --set-env-vars=NEWSSTORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=daily-recap-498506,APP_ENV=home \
   --update-secrets=GEMINI_API_KEY=gemini-api-key:latest \
   --command=python --args=-m,newsstore.entrypoints.run_enrich,--mode,summary
 # 2) 수동 1회 실행 + 확인
@@ -161,10 +161,10 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
 
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
-- **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.
+- **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`src/newsstore/collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.
 - **피드 추가 전 curl 실측**(HTTP·item수·desc 유무) → 되는 것만 등록 → A 재배포.
 - **콘솔 수동 대신 REST**로 GCP/Firebase 운영(인증 공유).
-- 환경 두 축(`APP_ENV`=home/office, `NEWSSTORE_BACKEND`=sqlite/firestore)은 `README.md` 표 참조.
+- 환경(`APP_ENV`=home/office, 저장소=Firestore 단일)은 `README.md` 표 참조.
 
 ## 알아둘 함정
 - 수집기는 **Cloud Run 데이터센터 IP**라 일부 사이트가 차단함(fxstreet 제거됨, Bloomberg 기사본문 403). → 기사 본문 fetch는 **도달 실증된 화이트리스트만**(한경 OK; Investing/Bloomberg/FT 기사페이지 403). 화이트리스트 fetch가 IP를 막히게 하면 RSS 수집까지 영향이므로 **바운드(상한·타임아웃·스로틀)+배포 스모크**로 관리(본문 정책 §접근 방식).

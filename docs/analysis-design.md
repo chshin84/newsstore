@@ -4,7 +4,7 @@ _분석 레이어 마스터 설계 (newsstore 소유)._
 
 > **이 문서의 위치:** 통합-우선 전략 하에 분석은 **newsstore 내에서 개발**한다. 본 문서가 **하이브리드 3-tier 렌즈·개체-aware 클러스터·델타·dual score·UI의 설계/방법론 SSOT**다.
 > - 본 문서는 *무엇을·왜·어떻게*의 설계 SSOT. 진행 상태는 메모리 `project-status`.
-> - 피드/소스 확장은 `2026-06-28-feed-source-expansion-design.md`가 별도 SSOT. 스키마 계약은 `docs/firestore-contract.md`.
+> - 피드/소스 확장은 `docs/superpowers/specs/2026-06-28-feed-source-expansion-design.md`가 별도 SSOT. 스키마 계약은 `docs/firestore-contract.md`.
 > - 사건 클러스터(gray-band)는 `src/newsstore/enrich/clustering.py`로 이식.
 
 ## 1. 배경 / 문제 (왜 바꾸나)
@@ -48,7 +48,7 @@ _분석 레이어 마스터 설계 (newsstore 소유)._
 | **3. emergent 토픽 (임팩트 *노출* 게이트)** | 1·2에 안 맞는 기사도 개체-aware 클러스터를 **항상 형성**(저장·비파괴). **impact 임계 넘은 클러스터만** 토픽 카드로 *노출* — 생성이 아니라 *노출*을 게이팅 | 자동 발생 | 동적 |
 
 - **멀티라벨**: 한 기사가 여러 렌즈 동시 소속(예: SK하이닉스 → 한국 경제 + 산업구조 + 워치종목). 단일 클러스터의 "이거냐 저거냐" 문제 소멸.
-- **분류 인프라 재사용**: 기존 `enrich/classify.py`(kind) + `enrich/tagger.py`(LLM 태그)를 확장. 렌즈 라벨링은 LLM 멀티라벨 분류로.
+- **분류 인프라 재사용**: 기존 `contracts/classify.py`(kind, collect/store/enrich 공유) + `enrich/tagger.py`(LLM 태그)를 확장. 렌즈 라벨링은 LLM 멀티라벨 분류로.
 - **emergent = 노출 게이트(핵심 수정·리뷰 반영)**: 순수 emergent(모든 기사가 씨앗)가 파편화 원인이었음. 그렇다고 클러스터 *생성*을 impact로 막으면 인과가 거꾸로(impact는 멤버가 모인 뒤 산출). 그래서 **클러스터는 항상 싸게 형성**(Phase 1, 비파괴)하되 **impact 임계를 넘은 클러스터만 토픽 카드로 *노출***(Phase 3). 스포츠·필러는 노출 안 됨(피드 잔류) → 443-파편 차단. 신규 엔티티도 안 막힘(클러스터는 형성, *노출*만 impact로 획득) → 순환의존 해소.
 - **SSOT (topics.yaml vs taxonomy.yaml)**: **렌즈 리스트 = 신규 `config/topics.yaml` 한 곳**(UI 필터·LLM 분류·정렬이 전부 도출). 기존 `config/taxonomy.yaml`은 **kind·티커/엔티티 어휘(vocab)** 역할 유지 — 렌즈는 taxonomy vocab을 *참조*(중복 정의 금지). 경계: topics.yaml=무엇을 묶는 렌즈, taxonomy.yaml=무엇을 인식하는 어휘.
 - **스포츠**: `classify_kind`에 **`sports` kind 단일 추가**(렌즈 hidden 플래그 안 씀 — 메커니즘 1개), 기본 숨김(비파괴 마킹).
@@ -89,7 +89,7 @@ _분석 레이어 마스터 설계 (newsstore 소유)._
 
 ## 8. UI — Now Brief + 좌 이벤트 / 우 기사시간
 
-> **설계 변경(UI):** 글로벌 Now Brief는 **per-story 리드(`lead`)로 대체**(스토리=보고서 철학 — 가로 셀렉터에서 스토리 선택 → 보고서: headline + lead + bullet `article`). 좌/우 2-컬럼 타임라인은 **발생/보도 2-타임스탬프 단일 타임라인 + 보도순/발생순 토글**로 단순화(지연막대 폐기). 전일대비 ▲▼·NEW·번역/원문 토글 추가. 팔레트 Warm Light. 스펙: `docs/superpowers/specs/2026-06-29-phase4-story-report-ui-design.md` · 목업: `specs/assets/phase4-report-mockup.html`. 아래 원안은 설계 근거 히스토리로 보존(비파괴).
+> **설계 변경(UI):** 글로벌 Now Brief는 **per-story 리드(`lead`)로 대체**(스토리=보고서 철학 — 가로 셀렉터에서 스토리 선택 → 보고서: headline + lead + bullet `article`). 좌/우 2-컬럼 타임라인은 **발생/보도 2-타임스탬프 단일 타임라인 + 보도순/발생순 토글**로 단순화(지연막대 폐기). 전일대비 ▲▼·NEW·번역/원문 토글 추가. 팔레트 Warm Light. 스펙: `docs/superpowers/specs/2026-06-29-phase4-story-report-ui-design.md` · 목업: `docs/superpowers/specs/assets/phase4-report-mockup.html`. 아래 원안은 설계 근거 히스토리로 보존(비파괴).
 
 - **탭 유지**: `피드 | 스토리`. **피드 탭 = raw track**(순수 발행시간순) 그대로.
 - **상단 Now Brief(브리핑 우선, 신규)**: 스토리 탭 최상단에 **"지금 중요한 것"** — 열린 스토리 중 **impact/risk 상위 N개를 1회 LLM 합성**으로 묶은 브리핑(렌즈 가로지름). *결론 먼저*, 클릭하면 해당 렌즈/타임라인으로 drill-down. 요약 스케줄러에 편승해 주기 합성, 상위 N만이라 비용 작음. 합성 실패 시 브리핑만 생략(나머지 뷰 정상 — Fail-soft).

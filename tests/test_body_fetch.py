@@ -43,6 +43,17 @@ def test_exception_returns_empty():
     assert fetch_body(_client(handler), "https://e/x", ".article-body") == ""
 
 
+def test_unexpected_error_logged_but_returns_empty(monkeypatch, caplog):
+    # 비기대(파싱/코드) 예외는 ""로 위장하지 말고 표면화(로깅) — no-raise 계약은 유지
+    def boom(*a, **k):
+        raise ValueError("parse bug")
+    monkeypatch.setattr(body_fetch, "BeautifulSoup", boom)
+    c = _client(lambda req: httpx.Response(200, text=ARTICLE_HTML))
+    with caplog.at_level("ERROR"):
+        assert fetch_body(c, "https://e/x", ".article-body") == ""
+    assert any("unexpected" in r.message for r in caplog.records)
+
+
 # --- enrich_bodies tests ---
 
 from datetime import datetime, timezone

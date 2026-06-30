@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+# kind triage(순수 키워드 매칭, 무거운 의존 없음) — collect/store/enrich 공유 계약이라 contracts에 둔다
+# (contracts/vectors.add_vectors 와 같은 공유 순수함수 선례). 어휘 SSOT는 이 파일.
+
 # 집단소송 로펌 PR + "$X 투자했다면" 클릭베이트 (web/index.html의 JUNK에서 이식·통합)
 SPAM_SIGNALS = [
     "lead plaintiff", "class action", "deadline alert", "shareholder rights law firm",

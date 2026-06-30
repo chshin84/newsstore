@@ -92,11 +92,24 @@ def test_article_story_empty_input_none():
 
 
 def test_article_story_failsoft_llm_error():
+    from newsstore.enrich.gemini import LLMError
+
     class _Boom:
         def generate_json(self, prompt, *, timeout=30.0):
-            raise RuntimeError("down")
+            raise LLMError("down")          # LLM 장애만 fail-soft
     assert article_story({"title": "x", "summary": "s", "developments": []},
                          members=None, client=_Boom(), now=NOW) is None
+
+
+def test_article_story_propagates_non_llm_bug():
+    import pytest
+
+    class _Bug:                             # 코드 버그(비-LLMError)는 삼키지 말고 전파(FAIL-LOUD)
+        def generate_json(self, prompt, *, timeout=30.0):
+            raise ValueError("programming bug")
+    with pytest.raises(ValueError):
+        article_story({"title": "x", "summary": "s", "developments": []},
+                      members=None, client=_Bug(), now=NOW)
 
 
 def test_article_story_drops_invalid_output():

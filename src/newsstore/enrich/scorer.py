@@ -95,7 +95,8 @@ def score_story(story: dict, members: list | None, client, *, timeout: float = 3
     try:
         raw = client.generate_json(build_score_prompt(story.get("title", ""), body),
                                    timeout=timeout)
-    except Exception:                   # LLM 장애 → fail-soft(스토리 단위 스킵)
+    except LLMError as e:               # LLM 장애만 fail-soft(로깅) — 코드 버그는 전파(FAIL-LOUD)
+        log.warning("score skip story %s (LLM): %s", story.get("id"), e)
         return None
     return validate_score(raw)
 

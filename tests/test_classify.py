@@ -1,4 +1,4 @@
-from newsstore.enrich.classify import classify_kind
+from newsstore.contracts.classify import classify_kind
 
 
 def test_digest_more_suffix():

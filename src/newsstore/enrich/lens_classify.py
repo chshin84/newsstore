@@ -2,8 +2,12 @@
 
 production 태그가 자주 비므로(클러스터 패스 tag=False) asset_hint가 핵심 prior다."""
 from __future__ import annotations
+import logging
 
+from .gemini import LLMError
 from .topics import valid_ids
+
+log = logging.getLogger("newsstore.enrich.lens_classify")
 
 MAX_LENSES = 4
 _REGION_PAIRS = [("kr_equity", "us_equity"), ("kr_econ", "us_econ"), ("kr_policy", "us_policy")]
@@ -72,7 +76,8 @@ def classify_stage2(t: dict, client, *, story_text, candidates, timeout=30.0) ->
         'Return JSON {"lenses": ["id", ...]} only.')
     try:
         resp = client.generate_json(prompt, timeout=timeout) or {}
-    except Exception:                       # LLM 장애 → prior 폴백(fail-soft, 패스 안 죽임)
+    except LLMError as e:                   # LLM 장애만 prior 폴백(로깅) — 코드 버그는 전파(FAIL-LOUD)
+        log.warning("lens stage2 fallback to prior (LLM): %s", e)
         return list(candidates)[:MAX_LENSES]
     ids = resp.get("lenses", []) if isinstance(resp, dict) else []
     valid = valid_ids(t)

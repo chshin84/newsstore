@@ -17,7 +17,7 @@
 - **비밀 구분**: `GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프 (중요):** newsstore = 수집·저장·호스팅(UI) **+ 인리치/분석을 통합 개발**(클러스터·태깅·임베딩·스토리·risk/impact 등). gray-band 클러스터링 코드는 newsstore `src/enrich/clustering.py`로 **이식**(import 아님). **진행상태: 메모리 `project-status`(코드/배포 기준 SSOT)** · 백로그·이슈: **GitHub Issues** · 분석 설계: `docs/analysis-design.md` · 스키마 계약: `docs/firestore-contract.md` · 메모리 `integration-strategy`·`hybrid-topic-lens-model`.
+- **스코프 (중요):** newsstore = 수집·저장·호스팅(UI) **+ 인리치/분석을 통합 개발**(클러스터·태깅·임베딩·스토리·risk/impact 등). gray-band 클러스터링 코드는 newsstore `src/newsstore/enrich/clustering.py`로 **이식**(import 아님). **진행상태: 메모리 `project-status`(코드/배포 기준 SSOT)** · 백로그·이슈: **GitHub Issues** · 분석 설계: `docs/analysis-design.md` · 스키마 계약: `docs/firestore-contract.md` · 메모리 `integration-strategy`·`hybrid-topic-lens-model`.
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - 코드 원칙 상세: `docs/coding-principles.md`
@@ -34,4 +34,4 @@
 ## 배포 (요약, 상세는 operations.md)
 - 코드/피드 변경 → 이미지 재빌드 → `gcloud run jobs update --image` → execute
 - 사이트(`web/index.html`) 변경 → Hosting REST 재배포
-- gcloud는 PATH 미등록 → 풀경로 `C:\Users\ho381\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`, Firebase REST엔 `x-goog-user-project` 헤더 필수.
+- gcloud가 PATH에 없으면 설치 풀경로로 호출(머신별로 다름 — `where gcloud`/설치 경로로 확인, 머신로컬 값은 메모리에). Firebase REST엔 `x-goog-user-project` 헤더 필수.

@@ -91,7 +91,8 @@ def article_story(story: dict, members: list | None, client, *, now,
         raw = client.generate_json(
             build_article_prompt(story.get("title", ""), story.get("impact"), body),
             timeout=timeout)
-    except Exception:                       # LLM 장애 → fail-soft
+    except LLMError as e:                   # LLM 장애만 fail-soft(로깅) — 코드 버그는 전파(FAIL-LOUD)
+        log.warning("article skip story %s (LLM): %s", story.get("id"), e)
         return None
     v = validate_article(raw)
     if v is None:

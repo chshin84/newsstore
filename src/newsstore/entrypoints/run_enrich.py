@@ -14,8 +14,10 @@ from ..store.factory import make_store
 
 log = logging.getLogger("newsstore.entrypoints.run_enrich")
 
-# 한 실행이 소비할 최대 배치 수 (비용 상한 — advisor-nonfunctional). 0 = 무제한(권장 X).
+# 한 실행이 소비할 최대 배치 수 (비용 상한 — advisor-nonfunctional).
+# 0 = 사실상 무제한(권장 X) — 아래 UNBOUNDED_BATCH_CAP를 내부 안전 천장으로 사용.
 MAX_BATCHES = int(os.environ.get("NEWSSTORE_MAX_BATCHES", "1000"))
+UNBOUNDED_BATCH_CAP = 1_000_000   # MAX_BATCHES=0(무제한) 시 폭주 방지 안전 상한
 
 
 def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> dict:
@@ -28,7 +30,7 @@ def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> 
     open_stories = cluster_adapter.to_stories(store.get_open_stories(now0 - OPEN_WINDOW))
     log.info("cluster pass: seeded %d open-story candidates", len(open_stories))
     totals = {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
-    for _ in range(MAX_BATCHES or 1_000_000):
+    for _ in range(MAX_BATCHES or UNBOUNDED_BATCH_CAP):
         now = datetime.now(timezone.utc)
         stats = process_once(store, client, taxonomy, now=now, batch=batch,
                              noncluster_sources=noncluster,

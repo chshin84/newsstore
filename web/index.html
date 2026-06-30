@@ -194,10 +194,10 @@
     function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 호버 시 전체
 
     // === FEED-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
-    // 스팸·다이제스트·스포츠는 백엔드 kind(classify로 씀)로 숨긴다 — 어휘 SSOT는 classify.SPAM_SIGNALS/SPORTS_SIGNALS.
-    // kind 없음(미인리치 fresh)·story·미지값 → 노출(fail-soft: 분석 멈춰도 raw 뉴스 보임).
-    const HIDDEN_KINDS = new Set(["spam", "digest", "sports"]);
-    function keepInFeed(it) { return !HIDDEN_KINDS.has(it && it.kind); }
+    // 노출 통제는 백엔드 kind 단일 권위(classify가 수집 시점에 박음 — story/spam/digest/sports).
+    // 프론트는 목록을 복제하지 않고 'story'만 노출(비-story는 전부 숨김 — 향후 kind도 자동 숨김).
+    // kind 없음(레거시·미분류)만 fail-soft 노출(분석 멈춰도 raw 뉴스 보임). SSOT=백엔드 classify.
+    function keepInFeed(it) { const k = it && it.kind; return !k || k === "story"; }
     // === FEED-LOGIC-END ===
     function relTime(d) {
       if (!d) return "시간 미상";

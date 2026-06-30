@@ -1,20 +1,105 @@
 from __future__ import annotations
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, TypedDict
 from .models import RawItem
+
+
+# ── Store 반환 shape 계약(EXPLICIT) — 산문 docstring 대신 타입으로 박는다 ──────────
+# (from __future__ annotations로 런타임 평가 안 함 — 순수 문서/타입체크용.)
+
+class FeedState(TypedDict, total=False):
+    """get_feed_state 반환: 비었거나 폴링 캐시 필드."""
+    etag: str
+    last_modified: str
+    last_fetched: datetime
+
+
+class Development(TypedDict, total=False):
+    """스토리 전개 1건(요약 패스 산출). 키는 추가적(레거시 안전)이라 total=False."""
+    text: str
+    time: datetime
+    source_count: int
+    delta_time: datetime
+    event_time: datetime | None
+
+
+class OpenStory(TypedDict):
+    """get_open_stories 반환: 클러스터 후보(centroid_sum=원본 합, centroid=합/count)."""
+    id: str
+    title: str
+    centroid_sum: list[float]
+    centroid: list[float]
+    count: int
+
+
+class LensingStory(TypedDict):
+    """get_stories_for_lensing 반환."""
+    id: str
+    title: str
+    member_ids: list[str]
+    lenses: list[str]
+
+
+class MemberSignals(TypedDict):
+    """get_story_member_signals 반환: 멤버 기사 분류 신호 배치 집계."""
+    asset_hints: list[str]
+    languages: list[str]
+    tags: list[str]
+    keyword_text: str
+
+
+class SummaryCandidate(TypedDict):
+    """get_stories_needing_summary 반환."""
+    id: str
+    count: int
+    developments: list[Development]
+
+
+class StoryMember(TypedDict):
+    """get_story_members 반환: 멤버 기사 발췌."""
+    title: str
+    body: str
+    source: str
+    published_at: datetime | None
+
+
+class ScoringStory(TypedDict, total=False):
+    """get_stories_for_scoring 반환(요약/렌즈 결측 가능 → total=False)."""
+    id: str
+    title: str
+    count: int
+    lenses: list[str]
+    summary: str
+    developments: list[Development]
+
+
+class ArticleStory(TypedDict, total=False):
+    """get_stories_for_article 반환(점수/ref 결측 가능 → total=False)."""
+    id: str
+    title: str
+    count: int
+    lenses: list[str]
+    summary: str
+    developments: list[Development]
+    risk: int
+    impact: int
+    risk_ref: int
+    impact_ref: int
+    score_ref_at: datetime
+    first_seen: datetime
 
 
 class Store(Protocol):
     def upsert_items(self, items: list[RawItem]) -> int:
         """Insert items, skipping ids already present. Returns count of NEW items."""
         ...
-    def get_feed_state(self, feed_id: str) -> dict:
+    def get_feed_state(self, feed_id: str) -> FeedState:
         """Return {} or {'etag','last_modified','last_fetched'(datetime)}."""
         ...
     def set_feed_state(self, feed_id: str, **fields) -> None: ...
     def count(self) -> int: ...
 
-    # Step-2 hand-off contract. Any backend (SQLite now, Firestore later) must
+    # Step-2 hand-off contract. The store backend (Firestore) must
     # let the Processor pull un-tagged raw items and mark them done.
     def get_unprocessed(self, limit: int | None = None) -> list[RawItem]:
         """Oldest-first raw items not yet processed by Step-2."""
@@ -31,42 +116,43 @@ class Store(Protocol):
         """Write a small public-read metadata doc for the site (e.g. 'sources')."""
         ...
 
-    def save_enrichment(self, item_id, *, kind, tags, embedding, story_id) -> None:
+    def save_enrichment(self, item_id: str, *, kind: str, tags: list[str],
+                        embedding: list[float] | None, story_id: str | None) -> None:
         """기사에 Step-2 인리치 필드 기록(kind/tags/embedding/story_id). 기존 필드 보존."""
         ...
 
-    def get_open_stories(self, cutoff) -> list[dict]:
-        """status=open이고 last_seen>=cutoff인 스토리:
-        [{'id','title','centroid_sum'(원본 합),'centroid'(=합/count),'count'}]."""
+    def get_open_stories(self, cutoff: datetime) -> list[OpenStory]:
+        """status=open이고 last_seen>=cutoff인 스토리."""
         ...
-    def create_story(self, story_id, *, title, vec, member_id, entities, now) -> None:
+    def create_story(self, story_id: str, *, title: str, vec: list[float], member_id: str,
+                     entities: list[str], now: datetime) -> None:
         """새 스토리: centroid_sum=vec, count=1, member_ids=[member_id], status=open."""
         ...
-    def append_to_story(self, story_id, *, vec, member_id, entities, now) -> None:
+    def append_to_story(self, story_id: str, *, vec: list[float], member_id: str,
+                        entities: list[str], now: datetime) -> None:
         """centroid_sum+=vec, count+=1, member_ids+=member_id, entities합집합, last_seen=now."""
         ...
-    def close_stale_stories(self, cutoff) -> int:
+    def close_stale_stories(self, cutoff: datetime) -> int:
         """last_seen<cutoff인 open 스토리를 closed로. 변경 수 반환."""
         ...
 
     # Phase 1 토픽 렌즈 분류 계약.
-    def save_story_lenses(self, story_id, lenses: list) -> None:
+    def save_story_lenses(self, story_id: str, lenses: list[str]) -> None:
         """stories.lenses[](렌즈 id 배열) merge 저장(비파괴)."""
         ...
-    def get_stories_for_lensing(self, cutoff) -> list[dict]:
-        """status=open·last_seen>=cutoff 스토리: [{'id','title','member_ids','lenses'}]."""
+    def get_stories_for_lensing(self, cutoff: datetime) -> list[LensingStory]:
+        """status=open·last_seen>=cutoff 스토리."""
         ...
-    def get_story_member_signals(self, member_ids: list) -> dict:
-        """멤버 기사 분류 신호 배치 집계: {'asset_hints','languages','tags','keyword_text'}."""
+    def get_story_member_signals(self, member_ids: list[str]) -> MemberSignals:
+        """멤버 기사 분류 신호 배치 집계."""
         ...
 
     # Step-3 요약 패스 계약 (플랜 A). 새 멤버가 생긴 스토리를 골라 LLM 요약을 채운다.
-    def get_stories_needing_summary(self, limit: int) -> list[dict]:
-        """last_seen desc 상위 limit개 중 count>summary_count(새 멤버)인 것만.
-        [{'id','count','developments'(prior 델타, delta_time 포함 가능)}]."""
+    def get_stories_needing_summary(self, limit: int) -> list[SummaryCandidate]:
+        """last_seen desc 상위 limit개 중 count>summary_count(새 멤버)인 것만."""
         ...
-    def get_story_members(self, story_id: str) -> list[dict]:
-        """story_id 멤버 기사 published_at asc. [{'title','body','source','published_at'}]."""
+    def get_story_members(self, story_id: str) -> list[StoryMember]:
+        """story_id 멤버 기사 published_at asc."""
         ...
     def save_story_summary(self, story_id, *, title, summary, latest, developments,
                            summary_count, now) -> None:
@@ -74,9 +160,8 @@ class Store(Protocol):
         ...
 
     # Phase 3 dual score 패스 계약. 게이트 후 risk/impact를 매겨 비파괴 저장한다.
-    def get_stories_for_scoring(self, cutoff) -> list[dict]:
-        """status=open·last_seen>=cutoff·count>scored_count(incremental) 스토리:
-        [{'id','title','count','lenses','summary','developments'}]."""
+    def get_stories_for_scoring(self, cutoff: datetime) -> list[ScoringStory]:
+        """status=open·last_seen>=cutoff·count>scored_count(incremental) 스토리."""
         ...
     def save_story_score(self, story_id, *, risk, impact, risk_reason, impact_reason,
                          count=None, now=None) -> None:
@@ -84,10 +169,8 @@ class Store(Protocol):
         ...
 
     # Phase 4 아티클 생성 패스 계약. headline/lead/article + 전일대비 ref를 비파괴 저장(developments 불간섭).
-    def get_stories_for_article(self, cutoff) -> list[dict]:
-        """status=open·last_seen>=cutoff·count>articled_count(incremental) 스토리:
-        [{'id','title','count','lenses','summary','developments','risk','impact',
-          'risk_ref','impact_ref','score_ref_at','first_seen'}]."""
+    def get_stories_for_article(self, cutoff: datetime) -> list[ArticleStory]:
+        """status=open·last_seen>=cutoff·count>articled_count(incremental) 스토리."""
         ...
     def save_story_article(self, story_id, *, headline, lead, article,
                            risk_ref=None, impact_ref=None, score_ref_at=None,

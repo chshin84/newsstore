@@ -40,7 +40,7 @@ gcloud projects add-iam-policy-binding <PROJECT_ID> --member="serviceAccount:$SA
 gcloud run jobs create newsstore-collector \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
   --service-account=$SA \
-  --set-env-vars=NEWSSTORE_BACKEND=firestore,GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --max-retries=1 --task-timeout=600
 gcloud run jobs execute newsstore-collector --region=<REGION> --wait   # 스모크: Firestore에 items 쌓이는지
 ```

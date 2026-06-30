@@ -39,7 +39,7 @@ Firebase Hosting (web/index.html, 정적)
 ## 로컬 실행 (Docker only — 호스트에 로컬 Python 없음)
 
 ```bash
-cp .env.example .env          # 값 확인/수정 (APP_ENV, NEWSSTORE_BACKEND, …)
+cp .env.example .env          # 값 확인/수정 (APP_ENV, GOOGLE_CLOUD_PROJECT, …)
 docker build -f infra/Dockerfile -t newsstore .
 
 # 1회 수집 (.env 설정 사용, named volume로 영속)

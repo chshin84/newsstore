@@ -53,7 +53,9 @@ def test_nondestructive_keeps_developments_when_summary_added_later(store):
 
 class _Boom:
     def generate_json(self, prompt, *, timeout=30.0):
-        raise RuntimeError("down")
+        from newsstore.enrich.gemini import LLMError
+        raise LLMError("down")              # LLM 장애만 fail-soft
+
 
 
 def test_failsoft(store):

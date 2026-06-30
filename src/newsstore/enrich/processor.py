@@ -3,7 +3,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
-from .classify import classify_kind
+from ..contracts.classify import classify_kind
 from .embedder import embed_items, embed_text, EMBED_CONCURRENCY
 from . import cluster_adapter
 from .clustering_types import Story
