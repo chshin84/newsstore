@@ -24,7 +24,7 @@
 폴링 캐시(`etag, last_modified, last_fetched`).
 
 ### `meta` (collect가 기록, 공개 read)
-사이트용 소형 메타 문서(예: `sources`). 소스 목록과 **소스 tier**(아래 §공유 설정)를 여기로 발행한다(tier 전파 작업은 GitHub Issue #17).
+사이트용 소형 메타 문서(예: `sources`). 소스 목록과 **소스 tier**를 여기로 발행한다(아래 §공유 설정).
 
 ### `stories` (인리치가 기록)
 스토리/클러스터(`centroid_sum, count, member_ids, entities, status, first_seen, last_seen, 요약 필드`).
