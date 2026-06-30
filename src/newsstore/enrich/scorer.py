@@ -7,14 +7,23 @@
 """
 from __future__ import annotations
 import logging
+import os
 
 from . import topics
 from .gemini import LLMError
 
 log = logging.getLogger("newsstore.enrich.scorer")
 
+
+def env_int(name: str, default: int) -> int:
+    """캘리브레이션 정수 임계를 env로 오버라이드(기본=현 값). #7 — 재빌드 없이 튜닝.
+    잘못된 값은 ValueError로 즉시 터뜨린다(FAIL-LOUD)."""
+    return int(os.environ.get(name, default))
+
+
 SCORE_MIN, SCORE_MAX = 0, 3              # risk/impact 범위(불변식 — 매직넘버 금지)
-MATERIALITY_MIN_MEMBERS = 2             # 비금융자산/emergent 소스확증 게이트 임계
+# 게이트 임계(#7). env로 튜닝 — 값은 라이브 점수/게이트 분포 보고 결정.
+MATERIALITY_MIN_MEMBERS = env_int("NEWSSTORE_SCORE_MIN_MEMBERS", 2)   # 비금융자산/emergent 소스확증 게이트
 ALWAYS_SCORE_TYPES = {"standing", "watch"}   # 금융자산 렌즈 = 게이트 면제(상시 채점)
 MAX_REASON = 200                        # advisory reason 길이 상한
 MEMBER_FALLBACK_N = 30                  # 요약 없을 때 입력으로 쓸 멤버 제목 수

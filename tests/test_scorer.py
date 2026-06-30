@@ -102,3 +102,16 @@ def test_score_story_drops_invalid_llm_output():
     llm = _FakeLLM({"risk": 99, "impact": 1})              # 범위 밖 → validator None
     assert score_story({"title": "x", "summary": "s", "developments": []},
                        members=None, client=llm) is None
+
+
+def test_env_int_default_and_override(monkeypatch):
+    # #7: 점수 게이트 임계 env 오버라이드 — 미설정=기본, 설정=그 값, 잘못된 값=FAIL-LOUD
+    import pytest
+    from newsstore.enrich.scorer import env_int
+    monkeypatch.delenv("NEWSSTORE_SCORE_MIN_MEMBERS", raising=False)
+    assert env_int("NEWSSTORE_SCORE_MIN_MEMBERS", 2) == 2
+    monkeypatch.setenv("NEWSSTORE_SCORE_MIN_MEMBERS", "3")
+    assert env_int("NEWSSTORE_SCORE_MIN_MEMBERS", 2) == 3
+    monkeypatch.setenv("NEWSSTORE_SCORE_MIN_MEMBERS", "x")
+    with pytest.raises(ValueError):
+        env_int("NEWSSTORE_SCORE_MIN_MEMBERS", 2)
