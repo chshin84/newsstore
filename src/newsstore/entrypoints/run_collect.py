@@ -2,7 +2,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from ..collect.feeds import load_feeds, distinct_sources
+from ..collect.feeds import load_feeds, distinct_sources, source_tiers
 from ..collect.ssl_config import make_client
 from ..store.factory import make_store
 from ..collect.collector import collect_once
@@ -29,8 +29,9 @@ def main(argv=None) -> int:
     feeds = load_feeds(args.feeds)
     client = make_client()
     with make_store() as store:                  # Firestore(에뮬레이터 or 실)
-        # SSOT: 사이트 소스 드롭다운 목록을 feeds.yaml에서 도출해 기록 (하드코딩 X)
-        store.set_meta("sources", {"sources": distinct_sources(feeds)})
+        # SSOT: 사이트 소스 목록·tier를 feeds.yaml에서 도출해 기록 (하드코딩 X). tier 전파 #17.
+        store.set_meta("sources", {"sources": distinct_sources(feeds),
+                                   "tiers": source_tiers(feeds)})
         try:
             summary = collect_once(client, store, feeds, force=args.force)
         finally:

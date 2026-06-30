@@ -41,3 +41,12 @@ def distinct_sources(feeds: list[FeedConfig]) -> list[str]:
         if f.source not in seen:
             seen.append(f.source)
     return seen
+
+
+def source_tiers(feeds: list[FeedConfig]) -> dict[str, str]:
+    """source → tier 매핑(#17). feeds.yaml에서 그 source의 **첫 피드 tier**를 쓴다(결정론).
+    meta 문서로 발행해 UI가 소스 등급을 읽게 한다(feeds.yaml 복제 금지 — 여기서 도출, SSOT)."""
+    tiers: dict[str, str] = {}
+    for f in feeds:
+        tiers.setdefault(f.source, f.tier)   # 첫 피드 우선(순서 보존)
+    return tiers
