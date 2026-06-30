@@ -157,6 +157,8 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
   --http-method=POST --oauth-service-account-email=newsstore-job@daily-recap-498506.iam.gserviceaccount.com
 ```
 - 튜닝 env: `NEWSSTORE_SUMMARY_BATCH`(런당 스캔/요약 스토리 수, 기본 10).
+- 스토리 시간창 튜닝(#9, 재빌드 없이 env): `NEWSSTORE_OPEN_WINDOW_HOURS`(열린 스토리 비교 창, 기본 48) · `NEWSSTORE_CLOSE_AFTER_HOURS`(무활동 close, 기본 24). 잘못된 값은 기동 시 즉시 에러(FAIL-LOUD).
+  - **측정(값 결정 전)**: `stories`의 `first_seen`/`last_seen` 분포로 실제 스토리 수명을 본 뒤 창을 정한다(짧게=오병합↓·빠른 종결 / 길게=장기 전개 이어붙임·노이즈↑).
 - 이후 코드 변경 반영은 §A처럼 재빌드 → **두 Job 모두** `--image` 갱신.
 
 ## 접근 방식 / 결정 (newsstore)
