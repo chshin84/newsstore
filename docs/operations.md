@@ -161,6 +161,8 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
   - **측정(값 결정 전)**: `stories`의 `first_seen`/`last_seen` 분포로 실제 스토리 수명을 본 뒤 창을 정한다(짧게=오병합↓·빠른 종결 / 길게=장기 전개 이어붙임·노이즈↑).
 - gray-band 클러스터 임계 튜닝(#6, env): `NEWSSTORE_GRAY_BAND_LO`(기본 0.55) · `NEWSSTORE_GRAY_BAND_HI`(기본 0.75). sim≥hi 자동 합류 / sim<lo 자동 신규 / 그 사이만 LLM 판정. `0≤lo≤hi≤1` 위반은 기동 시 에러(FAIL-LOUD).
   - **측정(값 결정 전)**: 멤버 임베딩 쌍의 코사인 유사도 분포(같은 사건 vs 다른 사건)를 떠서 band를 정한다. 빌려온 값(이란+코스피)이라 newsstore 코퍼스 재캘리브레이션 필요.
+- dual score 게이트 튜닝(#7, env): `NEWSSTORE_SCORE_MIN_MEMBERS`(비금융자산/emergent를 채점하는 최소 멤버수, 기본 2). standing/watch 렌즈는 게이트 면제(상시 채점).
+  - **측정(값 결정 전)**: `stories`의 `risk`/`impact` 분포·게이트 통과율을 떠서 임계를 정한다. 루브릭(0~3 의미)·REF_WINDOW·EVENT_SANITY_DAYS는 코드 상수(라이브 분포 보고 후속 조정).
 - 이후 코드 변경 반영은 §A처럼 재빌드 → **두 Job 모두** `--image` 갱신.
 
 ## 접근 방식 / 결정 (newsstore)
