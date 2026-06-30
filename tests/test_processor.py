@@ -142,3 +142,16 @@ def test_thin_story_item_not_embedded_or_clustered(store):
     assert rows["t"]["kind"] == "story"
     assert rows["t"]["embedding"] is None and rows["t"]["story_id"] is None
     assert rows["t"]["processed"] is True
+
+
+def test_env_hours_default_and_override(monkeypatch):
+    # #9: 스토리 시간창 env 오버라이드 — 미설정=기본, 설정=그 값, 잘못된 값=FAIL-LOUD
+    from newsstore.enrich.processor import env_hours
+    monkeypatch.delenv("NEWSSTORE_OPEN_WINDOW_HOURS", raising=False)
+    assert env_hours("NEWSSTORE_OPEN_WINDOW_HOURS", 48) == timedelta(hours=48)
+    monkeypatch.setenv("NEWSSTORE_OPEN_WINDOW_HOURS", "12")
+    assert env_hours("NEWSSTORE_OPEN_WINDOW_HOURS", 48) == timedelta(hours=12)
+    monkeypatch.setenv("NEWSSTORE_OPEN_WINDOW_HOURS", "not-a-number")
+    import pytest
+    with pytest.raises(ValueError):
+        env_hours("NEWSSTORE_OPEN_WINDOW_HOURS", 48)

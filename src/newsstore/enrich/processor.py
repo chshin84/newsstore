@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta
 
@@ -14,8 +15,16 @@ _EMPTY_TAGS = {"tickers": [], "entities": [], "topics": []}
 
 log = logging.getLogger("newsstore.enrich.processor")
 
-OPEN_WINDOW = timedelta(hours=48)     # 비교 대상 '열린 스토리' 시간창 (spec §7)
-CLOSE_AFTER = timedelta(hours=24)     # 무활동 시 close
+
+def env_hours(name: str, default_hours: float) -> timedelta:
+    """캘리브레이션 시간창을 env(시간 단위)로 오버라이드. 미설정이면 default.
+    잘못된 값은 ValueError로 즉시 터뜨린다(FAIL-LOUD — 조용한 폴백 금지). (#9)"""
+    return timedelta(hours=float(os.environ.get(name, default_hours)))
+
+
+# 스토리 open/close 시간창 (#9). env로 무중단 튜닝 — 값 결정은 라이브 스토리 수명 분포 보고.
+OPEN_WINDOW = env_hours("NEWSSTORE_OPEN_WINDOW_HOURS", 48)   # 비교 대상 '열린 스토리' 시간창 (spec §7)
+CLOSE_AFTER = env_hours("NEWSSTORE_CLOSE_AFTER_HOURS", 24)   # 무활동 시 close
 MIN_EMBED_CHARS = 40                  # 이보다 얇으면 임베딩/클러스터 제외(노이즈 클러스터 방지; 실데이터 측정)
 # 내러티브 소스가 아닌 곳(보일러플레이트 제목/본문이라 스타일로 오병합) — 태그만, 클러스터 제외.
 NONCLUSTER_SOURCES = frozenset({"TruthSocial"})
