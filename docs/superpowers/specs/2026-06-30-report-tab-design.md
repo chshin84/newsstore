@@ -65,11 +65,13 @@
 - **v1**: config/theses.yaml + 단일콜 report(`--mode report`) + reports store/계약 + UI 탭 + 1×/일(Asia/Seoul). 입력 하드캡·실패 미커밋.
 - **후속**: 다단계 chained(교차자산 인과, 결정론 게이팅 동반) · 4×/일+US DST 스케줄러 · thesis 자동 갱신 · delta_since_last · watch-list · 아키타입 레이어 · pricestore 결합.
 
-## 🔴 결정 필요 (escalated — 사용자, 자율 구현 금지)
-1. **모델 id**: 사용자 "Flash 3.5"는 **실존 식별자 아님**(Gemini Flash=1.5/2.0/2.5; 코드 실모델 `gemini-3.1-flash-lite-preview`). 어느 실 모델을 쓸지 확정 → 단가 확인.
-2. **비용 예산·입력캡**: `REPORT_MAX_STORIES`(K)·런당 토큰/콜 예산·빈도(v1 1×/일 제안). ①의 단가 대입해 $3 상한 충족을 빌드 전 수치로 검증.
-3. **리뷰 실패 거동**: v1 기본=미노출(FAIL-LOUD) 제안 — 확정.
-4. **thesis 갱신**: 수동 시드(v1) vs 후속 LLM 자동 갱신 주기.
-5. **스코프 확인**: 위 린 v1 면적 동의 여부.
+## 결정 (사용자 확정 2026-07-01)
+1. **모델**: `gemini-3.5-flash`(env `GEMINI_MODEL`로 주입). 
+2. **비용**: 상한 없음(사용자 대시보드 모니터링). 입력 하드캡 `REPORT_MAX_STORIES`는 토큰 폭탄 방지용으로만 유지(품질·지연 목적). 빈도 v1=1×/일(Asia/Seoul), 필요 시 상향.
+3. **리뷰 실패 거동**: **경고 라벨 노출**(미노출 아님). 생성/리뷰 실패해도 리포트를 저장하되 `review.passed=false`로 기록, UI가 "검증 실패" 배지로 노출. (FAIL-LOUD 제안을 사용자가 가시성 우선으로 오버라이드 — 비파괴라 안전.)
+4. **thesis(프레임) 생성**: **AI 자동**. 별도 thesis 컬렉션·수동 config 없이, **리포트 생성 1콜이 프레임(아킬레스건/기대)까지 함께 산출**(§4 개정). "미발생"은 그 콜이 낸 프레임 극 중 72h 트리거 없는 것으로 도출.
+5. **스코프**: 핵심만(린 v1) — 토픽별 단일 콜 리포트 + reports store/계약 + UI 탭 + 1×/일.
 
-<!-- spec-review: escalated -->
+→ §3/§4/§5는 위 결정대로 개정됨(아래 본문 반영). config/theses.yaml(수동)은 폐기.
+
+<!-- spec-review: decided 2026-07-01 -->
