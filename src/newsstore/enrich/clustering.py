@@ -16,13 +16,25 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from dataclasses import is_dataclass
 from typing import Callable, Iterable, Sequence
 
+
+def env_gray_band(default_lo: float = 0.55, default_hi: float = 0.75) -> tuple[float, float]:
+    """gray-band 경계를 env로 오버라이드(기본=현 값). #6 — 재빌드 없이 튜닝.
+    0<=lo<=hi<=1 위반은 ValueError로 즉시 터뜨린다(FAIL-LOUD)."""
+    lo = float(os.environ.get("NEWSSTORE_GRAY_BAND_LO", default_lo))
+    hi = float(os.environ.get("NEWSSTORE_GRAY_BAND_HI", default_hi))
+    if not (0.0 <= lo <= hi <= 1.0):
+        raise ValueError(f"invalid GRAY_BAND lo={lo} hi={hi} (need 0<=lo<=hi<=1)")
+    return (lo, hi)
+
+
 # Vendored from news-analytics @249aa3d (2026-06-29). config.py 상수 인라인.
 # gray-band 경계 [lo, hi]: sim>=hi 결정론 합류 / sim<lo 결정론 신규 / 그 사이만 LLM 판정.
-# (이란+코스피 골든셋 + gemini-embedding-001/768로 측정된 값 — newsstore 코퍼스 재캘리브레이션은 후속.)
-GRAY_BAND: tuple[float, float] = (0.55, 0.75)
+# (이란+코스피 골든셋 + gemini-embedding-001/768 측정값 — newsstore 코퍼스 재캘리브레이션은 #6/env.)
+GRAY_BAND: tuple[float, float] = env_gray_band()
 LLM_CALL_CAP_RATIO: float = 0.2          # 배치 런당 LLM 콜 상한(docs 대비 비율)
 TOP_K: int = 8                            # 후보 top-k(머지 판정 대상)
 DBSTREAM_PARAMS: dict = {"clustering_threshold": 1.0, "fading_factor": 0.01,

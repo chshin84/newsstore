@@ -159,6 +159,8 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
 - 튜닝 env: `NEWSSTORE_SUMMARY_BATCH`(런당 스캔/요약 스토리 수, 기본 10).
 - 스토리 시간창 튜닝(#9, 재빌드 없이 env): `NEWSSTORE_OPEN_WINDOW_HOURS`(열린 스토리 비교 창, 기본 48) · `NEWSSTORE_CLOSE_AFTER_HOURS`(무활동 close, 기본 24). 잘못된 값은 기동 시 즉시 에러(FAIL-LOUD).
   - **측정(값 결정 전)**: `stories`의 `first_seen`/`last_seen` 분포로 실제 스토리 수명을 본 뒤 창을 정한다(짧게=오병합↓·빠른 종결 / 길게=장기 전개 이어붙임·노이즈↑).
+- gray-band 클러스터 임계 튜닝(#6, env): `NEWSSTORE_GRAY_BAND_LO`(기본 0.55) · `NEWSSTORE_GRAY_BAND_HI`(기본 0.75). sim≥hi 자동 합류 / sim<lo 자동 신규 / 그 사이만 LLM 판정. `0≤lo≤hi≤1` 위반은 기동 시 에러(FAIL-LOUD).
+  - **측정(값 결정 전)**: 멤버 임베딩 쌍의 코사인 유사도 분포(같은 사건 vs 다른 사건)를 떠서 band를 정한다. 빌려온 값(이란+코스피)이라 newsstore 코퍼스 재캘리브레이션 필요.
 - 이후 코드 변경 반영은 §A처럼 재빌드 → **두 Job 모두** `--image` 갱신.
 
 ## 접근 방식 / 결정 (newsstore)
