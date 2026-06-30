@@ -173,6 +173,40 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
   ```
 - 이후 코드 변경 반영은 §A처럼 재빌드 → **두 Job 모두** `--image` 갱신.
 
+## G. 잡 실패 알림 (Cloud Monitoring) — #13
+**왜:** Cloud Scheduler는 잡을 `:run`으로 **시작**시키고 HTTP 200(=시작 수락)만 받는다. 잡이 시작 직후 죽어도 스케줄러는 초록(성공)으로 보여 **조용한 실패**가 된다(Fail-Loud 위반). → Cloud Run Job **실패 실행 수>0**이면 알림.
+
+지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 6개 잡(collector·enricher·lenser·scorer·article·summarizer) 공통 적용(job_name 필터 없이 전체).
+
+```bash
+# 1) 알림 채널(이메일) — 1회. 채널 ID를 받아둔다.
+gcloud beta monitoring channels create --display-name="newsstore-alert" \
+  --type=email --channel-labels=email_address=chshin84@gmail.com \
+  --format="value(name)"            # → projects/daily-recap-498506/notificationChannels/XXXX
+
+# 2) 알림 정책 — 실패 실행 수>0 (정렬창 1h). <CHANNEL>에 위 값 대입.
+cat > /tmp/job-fail-policy.json <<'JSON'
+{
+  "displayName": "newsstore Cloud Run Job failures",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "job failed executions > 0",
+    "conditionThreshold": {
+      "filter": "resource.type=\"cloud_run_job\" AND metric.type=\"run.googleapis.com/job/completed_execution_count\" AND metric.label.\"result\"=\"failed\"",
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 0,
+      "duration": "0s",
+      "aggregations": [{"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_SUM"}]
+    }
+  }],
+  "notificationChannels": ["<CHANNEL>"]
+}
+JSON
+gcloud alpha monitoring policies create --policy-from-file=/tmp/job-fail-policy.json
+```
+- 확인: `gcloud alpha monitoring policies list --format="value(displayName,enabled)"`. 콘솔 Monitoring → Alerting에도 보임.
+- 보강(선택): 잡이 **아예 안 돈** 경우(스케줄러 자체 실패)는 위 지표로 안 잡힌다 — execution 부재 자체를 보려면 `--mode` 잡별 last-success heartbeat(미래 #13 후속) 또는 스케줄러 실패 로그 알림을 추가.
+
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
 - **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`src/newsstore/collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.
