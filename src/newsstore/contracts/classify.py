@@ -22,13 +22,16 @@ SPORTS_SIGNALS = [
 
 
 def classify_kind(title: str, body: str = "") -> str:
-    """story | spam | digest | sports. 비파괴 분류 — 저장은 보존, 임베딩/클러스터·노출 제외 여부만 결정."""
+    """story | spam | digest | sports. 비파괴 분류 — 저장은 보존, 임베딩/클러스터·노출 제외 여부만 결정.
+
+    분류는 **제목 기준**(#19): 본문에 우연히 든 신호(예: 멀쩡한 기사 본문의 'class action')로
+    오분류(false-positive)하지 않게 한다. body는 호환을 위해 받되 키워드 매칭엔 쓰지 않는다."""
     t = (title or "").strip().lower()
-    s = f"{t} {(body or '').lower()}"
-    if t.endswith(", more") or any(k in s for k in DIGEST_SIGNALS):
+    hay = f" {t} "                     # 양옆 패딩 — ' nba ' 등 경계 신호가 제목 끝에서도 매칭
+    if t.endswith(", more") or any(k in hay for k in DIGEST_SIGNALS):
         return "digest"
-    if any(k in s for k in SPAM_SIGNALS):
+    if any(k in hay for k in SPAM_SIGNALS):
         return "spam"
-    if any(k in s for k in SPORTS_SIGNALS):
+    if any(k in hay for k in SPORTS_SIGNALS):
         return "sports"
     return "story"

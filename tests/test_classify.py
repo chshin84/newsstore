@@ -34,3 +34,21 @@ def test_sports_epl():
 def test_finance_not_flagged_sports():
     # 금융 기사는 sports로 오분류되면 안 됨 (느슨한 시그널 추가 시 회귀 가드)
     assert classify_kind("Global bond yields climb as central banks signal caution") == "story"
+
+
+def test_body_only_spam_signal_not_flagged():
+    # #19: 본문에만 있는 스팸 신호로 멀쩡한 기사를 spam 처리하지 않는다(제목 기준)
+    assert classify_kind("Fed holds rates steady amid inflation",
+                         "a class action lawsuit was also mentioned") == "story"
+
+
+def test_body_only_sports_signal_not_flagged():
+    # #19: 본문에만 있는 스포츠 신호도 오분류하지 않는다
+    assert classify_kind("Markets rally on strong tech earnings",
+                         "separately, the world cup final aired last night") == "story"
+
+
+def test_title_signal_still_classified():
+    # 제목에 신호가 있으면 여전히 분류(회귀 가드)
+    assert classify_kind("Bragar Eagel Reminds Investors of deadline") == "spam"
+    assert classify_kind("Tottenham win the Premier League") == "sports"
