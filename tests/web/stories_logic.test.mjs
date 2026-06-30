@@ -11,8 +11,8 @@ const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "STORIES-LOGIC 마커가 index.html에 있어야 한다(드리프트 가드)");
 const block = html.slice(i, j);
 const { toMs, groupItemsByDevelopment, pickDisplayItems,
-        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens } =
-  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens };")();
+        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains } =
+  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains };")();
 
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
@@ -158,6 +158,26 @@ test("groupStoriesByLens: 렌즈 없는 스토리는 _etc 버킷(드롭 금지)"
   assert.equal(g.length, 1);
   assert.equal(g[0].lensId, "_etc");
   assert.equal(g[0].main.id, "x");
+});
+// --- dedupeMains (같은 스토리가 여러 렌즈 대표로 중복 노출되는 것 방지) ---
+test("dedupeMains: 다중 렌즈 스토리가 대표 카드로 중복되지 않음", () => {
+  const ls = new Date(NOW);
+  // a는 세 렌즈 모두에서 1위(impact·risk 최고), b는 L1에만 속함
+  const a = { id: "a", lenses: ["L1", "L2", "L3"], impact: 3, risk: 3, last_seen: ls };
+  const b = { id: "b", lenses: ["L1"], impact: 1, risk: 1, last_seen: ls };
+  const ded = dedupeMains(groupStoriesByLens([a, b], NOW));
+  const mains = ded.map(g => g.main.id);
+  assert.equal(new Set(mains).size, mains.length, "대표 스토리에 중복 없음");
+  assert.equal(mains.filter(id => id === "a").length, 1, "a는 한 번만 대표");
+});
+test("dedupeMains: 대표가 겹치면 그 렌즈는 다음 스토리로, 없으면 카드 생략", () => {
+  const ls = new Date(NOW);
+  const a = { id: "a", lenses: ["L1", "L2"], impact: 3, risk: 3, last_seen: ls };  // L1·L2 1위
+  const c = { id: "c", lenses: ["L2"], impact: 2, risk: 1, last_seen: ls };        // L2의 2위
+  const ded = dedupeMains(groupStoriesByLens([a, c], NOW));
+  const byLens = Object.fromEntries(ded.map(g => [g.lensId, g.main.id]));
+  assert.equal(byLens["L1"], "a");        // L1 대표=a
+  assert.equal(byLens["L2"], "c");        // L2는 a가 이미 쓰여 다음 스토리 c로
 });
 
 console.log(`\nstories_logic: ${pass} passed, ${fail} failed`);

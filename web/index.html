@@ -404,6 +404,20 @@
       out.sort((a, b) => (b.maxRisk - a.maxRisk) || (storyRank(b.main, now) - storyRank(a.main, now)));
       return out;
     }
+    // 한 스토리가 여러 렌즈의 대표로 뽑혀 같은 카드가 반복되는 것을 막는다.
+    // 렌즈는 우선순위(이미 정렬됨) 순으로 처리하고, 각 스토리는 가장 앞선 렌즈에서만 대표가 된다.
+    // 그 렌즈의 다음 미사용 스토리를 대표로 올리고, 남은 스토리가 없으면 그 렌즈 카드는 생략한다.
+    function dedupeMains(groups) {
+      const used = new Set();
+      const out = [];
+      for (const g of (groups || [])) {
+        const main = (g.stories || []).find(s => !used.has(s.id));
+        if (!main) continue;
+        used.add(main.id);
+        out.push({ ...g, main });
+      }
+      return out;
+    }
     // === STORIES-LOGIC-END ===
 
     async function ensureLensLabels() {
@@ -537,7 +551,7 @@
         const all = (await getDocs(q2)).docs.map(d => ({ id: d.id, ...d.data() }));
         const now = Date.now();
         const visible = all.filter(s => (Number(s.count) || 0) >= 2);            // 멤버 2+
-        const groups = groupStoriesByLens(visible, now);                         // 섹션=렌즈, 렌즈 maxRisk순(§7)
+        const groups = dedupeMains(groupStoriesByLens(visible, now));            // 섹션=렌즈(maxRisk순), 같은 스토리 중복 카드 제거
         storyById.clear(); visible.forEach(s => storyById.set(s.id, s));
         if (!groups.length) {
           stripEl.innerHTML = `<div class="sempty">아직 묶인 스토리가 없어요.<br>기사가 쌓이면 자동으로 묶여 나타납니다.</div>`;
