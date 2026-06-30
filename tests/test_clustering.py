@@ -59,7 +59,7 @@ def test_env_gray_band_default_override_and_failloud(monkeypatch):
     from newsstore.enrich.clustering import env_gray_band
     monkeypatch.delenv("NEWSSTORE_GRAY_BAND_LO", raising=False)
     monkeypatch.delenv("NEWSSTORE_GRAY_BAND_HI", raising=False)
-    assert env_gray_band() == (0.55, 0.75)
+    assert env_gray_band() == (0.62, 0.80)   # #6 측정 반영 기본값
     monkeypatch.setenv("NEWSSTORE_GRAY_BAND_LO", "0.50")
     monkeypatch.setenv("NEWSSTORE_GRAY_BAND_HI", "0.80")
     assert env_gray_band() == (0.50, 0.80)

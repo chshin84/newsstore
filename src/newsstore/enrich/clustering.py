@@ -21,9 +21,13 @@ from dataclasses import is_dataclass
 from typing import Callable, Iterable, Sequence
 
 
-def env_gray_band(default_lo: float = 0.55, default_hi: float = 0.75) -> tuple[float, float]:
-    """gray-band 경계를 env로 오버라이드(기본=현 값). #6 — 재빌드 없이 튜닝.
-    0<=lo<=hi<=1 위반은 ValueError로 즉시 터뜨린다(FAIL-LOUD)."""
+def env_gray_band(default_lo: float = 0.62, default_hi: float = 0.80) -> tuple[float, float]:
+    """gray-band 경계를 env로 오버라이드(기본=newsstore 코퍼스 측정값). #6 — 재빌드 없이 튜닝.
+    0<=lo<=hi<=1 위반은 ValueError로 즉시 터뜨린다(FAIL-LOUD).
+
+    기본값을 0.62/0.80으로 둔다(이전 0.55/0.75는 이란+코스피 차용값). 운영 측정에서
+    스토리 최근접쌍 코사인이 중앙 0.657·p95 0.767이라 0.55 위는 사실상 전부 LLM 판정에
+    걸려 호출이 과도했다. 경계를 위로 올려 결정론 구간을 넓히고 LLM 호출을 줄인다."""
     lo = float(os.environ.get("NEWSSTORE_GRAY_BAND_LO", default_lo))
     hi = float(os.environ.get("NEWSSTORE_GRAY_BAND_HI", default_hi))
     if not (0.0 <= lo <= hi <= 1.0):
