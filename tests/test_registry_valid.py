@@ -29,3 +29,17 @@ def test_body_selectors_keys_are_known_feed_sources():
     sources = set(distinct_sources(load_feeds("config/feeds.yaml")))
     unknown = set(BODY_SELECTORS) - sources
     assert not unknown, f"BODY_SELECTORS keys not in feeds.yaml sources: {unknown}"
+
+
+def test_source_tiers_derived_from_feeds():
+    # #17: source→tier 매핑이 feeds.yaml에서 도출(첫 피드 우선), 모든 source 커버
+    from newsstore.collect.feeds import source_tiers, distinct_sources
+    feeds = load_feeds("config/feeds.yaml")
+    tiers = source_tiers(feeds)
+    assert set(tiers) == set(distinct_sources(feeds))            # 모든 source 커버
+    assert all(v in {"primary", "analysis", "wire"} for v in tiers.values())
+    # 첫 피드 우선(결정론): 같은 source의 첫 등장 tier와 일치
+    first = {}
+    for f in feeds:
+        first.setdefault(f.source, f.tier)
+    assert tiers == first

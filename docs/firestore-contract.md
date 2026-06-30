@@ -55,4 +55,4 @@
 
 ## 공유 설정
 - **`config/taxonomy.yaml`** — LLM 태거의 어휘/티커 검증용이다. **web UI는 taxonomy를 읽지 않고** `items.tags`에서 드롭다운을 도출한다(`refreshTagOptions`).
-- **`config/feeds.yaml`의 `tier` 필드** — `feeds.yaml`은 수집기 SSOT다. source·tier는 `meta` 문서로 발행(`set_meta` 재사용)하고 UI가 거기서 읽는다. 파일을 복제하지 않는다(SSOT). tier 발행 전파 작업은 GitHub Issue #17(현재 배선 여부는 코드에서 도출).
+- **`config/feeds.yaml`의 `tier` 필드** — `feeds.yaml`은 수집기 SSOT다. 수집 패스가 `meta/sources`에 `{"sources":[...], "tiers":{source: tier}}`로 발행한다(`run_collect` → `source_tiers`, 첫 피드 우선). UI는 거기서 소스 등급을 읽는다. 파일을 복제하지 않는다(SSOT).
