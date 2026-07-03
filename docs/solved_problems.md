@@ -76,3 +76,13 @@
 - **SSOT 위반: `index.html` SRC_ORDER 하드코딩** — 사용자 지적. feeds.yaml 소스를 복제 → 드리프트 위험. → 수집기가 `meta/sources`를 feeds.yaml에서 도출·기록 → 사이트가 읽음. **중복 제거**(드리프트 테스트 불필요).
 - **firebaseConfig 인라인** — → `web/config.js` 분리.
 - **uv.lock / data;C / docker-compose / .env.example / .dockerignore** — uv.lock gitignore · `data;C` 빈 잔재 삭제 · 미사용 docker-compose 삭제(→ **이후 린 compose로 부활: `docker compose run --rm test/collect`, 마운트 폴백 회피**) · 디스크 소실된 .env.example 복원 · .dockerignore에 tests/·web/·*.md 추가(런타임 이미지 순수화).
+
+## 2026-07-03 ultracode 전수 감사 (버그 헌트 27건 + 스펙 반영 검토)
+- **WAF/차단 페이지는 bozo만으론 못 잡는다** — 정상형(well-formed) XML인 차단 페이지는 feedparser bozo=0. → 다음엔 **`entries==0 and (bozo or not fp.version)`**(피드 포맷 미인식)으로 판정. 실패 시 그 응답의 ETag를 저장하면 차단 페이지에 304를 받아 무수집이 고착되니 **상태 미갱신**이 핵심.
+- **`.get(key, [])` 기본값은 null 값을 못 막는다** — LLM JSON은 키를 `null`로 줄 수 있어(`{"lenses": null}`) 기본값이 안 먹고 순회에서 TypeError. → 다음엔 **`resp.get(k) or []` 또는 `isinstance` 가드**. "실 SDK는 None을 준다" gotcha의 JSON-값 변형.
+- **설정(yaml) 개정 커밋이 코드의 손복제 상수를 안 고친다** — topics.yaml asset_hint 보정 커밋이 lens_classify의 _KR/_US_HINT를 누락(같은 날 커밋인데도). → 다음엔 어휘 집합을 **설정에서 도출**하고, 손복제가 불가피하면 **어휘 무결성 테스트**로 드리프트를 터뜨린다.
+- **`timedelta.days`는 음수에서 내림(floor)** — `abs((dt-ref).days) > N`은 과거 N일+1초=-N-1일로 드롭, 미래 N일+23시간=N일로 통과(비대칭). → **`abs(dt-ref) > timedelta(days=N)`** 로 비교.
+- **Firestore 문서 수는 집계 쿼리로** — `col.count().get()`(1000건당 1 read)이 stream() 전수 훑기(문서당 1 read+통째 전송)를 대체. **에뮬레이터도 지원 확인**(2026-07). 로그 한 줄용 count가 스케줄 잡에 있으면 비용이 단조 증가한다.
+- **'last_seen 상위 N 스캔창'은 starvation을 낳는다** — 버스트로 창 밖에 밀린 대상은 순위 동결로 영구 미처리. → 대상 선정은 **전수 스캔+incremental 카운터**(이 레포의 lensing/scoring/article 패턴)로 하고, limit은 **콜 상한**으로만(오래 굶은 것부터 소진).
+- **requirements.lock을 pip `-c`(constraints)로 쓰면 전이 의존성이 비고정** — constraints는 설치되는 것만 핀하고 목록에 없는 전이는 자유 해석. → 재현성이 목적이면 **전체 `pip freeze`로 재생성**(도커 안: `pip install -e '.[extras]' && pip freeze --exclude-editable`).
+- **compose 서비스가 `image:`만 참조하고 아무도 빌드하지 않으면 절차 문서가 거짓이 된다** — `build:` 블록을 함께 배선해 머리말 절차만으로 실행 가능하게.
