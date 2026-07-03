@@ -49,7 +49,10 @@ class FirestoreStore:
         return new
 
     def count(self) -> int:
-        return sum(1 for _ in self.db.collection(_ITEMS).stream())
+        # 집계 쿼리(1000건당 1 read) — 전 문서 stream()은 문서수 비례 read 과금에
+        # embedding까지 통째 전송한다(run_collect가 매 실행 호출 → 비용 단조 증가).
+        result = self.db.collection(_ITEMS).count().get()
+        return int(result[0][0].value)
 
     def set_meta(self, key: str, value: dict) -> None:
         self.db.collection("meta").document(key).set(value)
@@ -105,18 +108,21 @@ class FirestoreStore:
 
     # --- Step-3 요약 패스 (플랜 A) ---
     def get_stories_needing_summary(self, limit: int) -> list[dict]:
-        # last_seen desc 상위 limit개 스캔 → 코드측에서 count>summary_count만(부등호+정렬
-        # 한 쿼리 불가). 새 멤버가 붙으면 last_seen이 갱신돼 상위로 떠오르므로 스캔창=대상창.
-        out = []
-        q = (self.db.collection("stories")
-             .order_by("last_seen", direction="DESCENDING")
-             .limit(int(limit)))
-        for snap in q.stream():
+        # 전수 스캔(open) + incremental(count>summary_count) — lensing/scoring/article과
+        # 동일 패턴. 이전의 'last_seen 상위 limit 스캔창'은 버스트 시 대상이 창 밖으로
+        # 밀린 뒤 순위가 동결돼 영구히 굶었다(starvation). limit은 런당 LLM 콜 상한으로만
+        # 쓰고, 오래 굶은 것부터(last_seen asc) 소진해 유한 런 내 처리를 보장한다.
+        cands = []
+        for snap in self.db.collection("stories").where("status", "==", "open").stream():
             d = snap.to_dict() or {}
-            if d.get("count", 0) >= 2 and d.get("count", 0) > d.get("summary_count", 0):  # 사이트는 count>=2만 표시 → 단일기사 요약 콜 낭비 차단
-                out.append({"id": snap.id, "count": d.get("count", 0),
-                            "developments": d.get("developments", [])})  # prior(델타) 동봉
-        return out
+            if not d.get("last_seen"):
+                continue
+            c = d.get("count", 0)
+            if c >= 2 and c > d.get("summary_count", 0):  # 사이트는 count>=2만 표시 → 단일기사 요약 콜 낭비 차단
+                cands.append((d["last_seen"], {"id": snap.id, "count": c,
+                              "developments": d.get("developments", [])}))  # prior(델타) 동봉
+        cands.sort(key=lambda t: t[0])
+        return [x for _, x in cands[:int(limit)]]
 
     def get_story_members(self, story_id: str) -> list[dict]:
         # items(story_id, published_at) 복합 인덱스 사용(READY). published_at 없는 멤버는

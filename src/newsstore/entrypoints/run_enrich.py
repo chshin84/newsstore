@@ -23,15 +23,18 @@ UNBOUNDED_BATCH_CAP = 1_000_000   # MAX_BATCHES=0(무제한) 시 폭주 방지 �
 def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> dict:
     """Pass 1 — 클러스터 전용(빠름): embed(병렬) + gray-band 배정. LLM 태깅 없음.
 
-    clusterer/open_stories를 1회 구성해 배치 간 공유(Firestore 제곱 재조회 제거).
+    clusterer는 1회 구성해 공유하되, open_stories는 **배치마다 재읽기** — 앞 배치의
+    합류로 커진 centroid_sum을 다음 배치 배정이 봐야 한다(processor의 '다음 배치
+    재읽기' 계약 이행 — 실행 전체 공유는 다배치 백필에서 stale centroid 파편화를 냈다).
+    배치 내부 공유는 유지되므로 아이템 단위 제곱 재조회는 없다.
     """
-    now0 = datetime.now(timezone.utc)
     clusterer = cluster_adapter.build_clusterer(client)
-    open_stories = cluster_adapter.to_stories(store.get_open_stories(now0 - OPEN_WINDOW))
-    log.info("cluster pass: seeded %d open-story candidates", len(open_stories))
     totals = {"processed": 0, "stories_created": 0, "stories_joined": 0, "closed": 0}
-    for _ in range(MAX_BATCHES or UNBOUNDED_BATCH_CAP):
+    for i in range(MAX_BATCHES or UNBOUNDED_BATCH_CAP):
         now = datetime.now(timezone.utc)
+        open_stories = cluster_adapter.to_stories(store.get_open_stories(now - OPEN_WINDOW))
+        if i == 0:
+            log.info("cluster pass: seeded %d open-story candidates", len(open_stories))
         stats = process_once(store, client, taxonomy, now=now, batch=batch,
                              noncluster_sources=noncluster,
                              tag=False, clusterer=clusterer, open_stories=open_stories,

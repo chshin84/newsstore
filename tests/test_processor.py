@@ -38,6 +38,29 @@ class _FakeClient:
         return "DIFFERENT"        # gray-band 기본: 미합류(직교 벡터 테스트는 호출 안 됨)
 
 
+def test_run_cluster_rereads_open_stories_each_batch(store, monkeypatch):
+    # 회귀 가드: open_stories를 실행 시작 시 1회만 읽으면 앞 배치 합류로 커진
+    # centroid_sum을 뒤 배치가 못 봐(다배치 백필) 중복 스토리가 생긴다.
+    # processor 주석의 '다음 배치 재읽기' 계약이 실제 배선에서 지켜지는지 고정한다.
+    from newsstore.entrypoints import run_enrich as re_mod
+    from newsstore.entrypoints.run_enrich import _run_cluster
+
+    calls = {"n": 0}
+    orig = store.get_open_stories
+
+    def counting(cutoff):
+        calls["n"] += 1
+        return orig(cutoff)
+
+    monkeypatch.setattr(store, "get_open_stories", counting)
+    monkeypatch.setattr(re_mod, "MAX_BATCHES", 10)
+    store.upsert_items([_item("a", "Fed raises rates"), _item("b", "Oil surges today")])
+    _run_cluster(store, _FakeClient({"Fed raises": _unit(0), "Oil surges": _unit(1)}),
+                 TAX, noncluster=frozenset(), batch=1, concurrency=1)
+    # 배치당 1회 재읽기(2 아이템 배치 + 종료 판정 배치) — 1회 고정 공유였다면 n==1
+    assert calls["n"] >= 2
+
+
 def test_spam_and_digest_excluded_from_embedding(store):
     store.upsert_items([
         _item("a", "Fed raises rates"),

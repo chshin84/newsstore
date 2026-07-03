@@ -29,12 +29,33 @@ def test_needing_summary_skips_single_member(store):
     assert "single" not in {s["id"] for s in store.get_stories_needing_summary(limit=10)}
 
 
-def test_needing_summary_respects_limit_recent_first(store):
+def test_needing_summary_respects_limit_oldest_first(store):
+    # limit은 런당 LLM 콜 상한. 오래 굶은 것부터(last_seen asc) 소진해야 버스트에서도
+    # 모든 대상이 유한 런 안에 처리된다(공정성) — 최신 우선은 꼬리 굶주림을 만든다.
     for i in range(5):
         _mk_story(store, f"s{i}", count=2, last_seen=NOW + timedelta(hours=i))
     got = store.get_stories_needing_summary(limit=2)
     assert len(got) == 2
-    assert {s["id"] for s in got} == {"s4", "s3"}  # most recent last_seen
+    assert {s["id"] for s in got} == {"s0", "s1"}
+
+
+def test_needing_summary_burst_does_not_starve(store):
+    # 회귀 가드(starvation): last_seen 상위 N 고정 스캔창은 뉴스 버스트로 창 밖에 밀린
+    # 대상이 last_seen 순위 동결로 영구히 스캔되지 않았다. 전수 스캔이면 반드시 잡힌다.
+    _mk_story(store, "starved", count=3, summary_count=1, last_seen=NOW)
+    for i in range(12):                              # 요약 불필요한 최신 활동 12건이 창을 채움
+        _mk_story(store, f"hot{i}", count=3, summary_count=3,
+                  last_seen=NOW + timedelta(hours=i + 1))
+    got = {s["id"] for s in store.get_stories_needing_summary(limit=10)}
+    assert "starved" in got
+
+
+def test_needing_summary_skips_closed(store):
+    doc = {"title": "t", "centroid_sum": [1.0], "count": 3, "summary_count": 1,
+           "member_ids": ["a", "b", "c"], "entities": [], "first_seen": NOW,
+           "last_seen": NOW, "status": "closed"}
+    store.db.collection("stories").document("closed1").set(doc)
+    assert "closed1" not in {s["id"] for s in store.get_stories_needing_summary(limit=10)}
 
 
 def test_get_story_members_filtered_and_sorted(store):
