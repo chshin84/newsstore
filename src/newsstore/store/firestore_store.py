@@ -251,6 +251,30 @@ class FirestoreStore:
         doc["updated_at"] = now
         ref.set(doc)                     # 통째 set: 전량 재심 산출물(merge 아님)
 
+    # --- 리포트 탭 v1: reports(섹션·_backdrop·rising — per-run 전량 재생성) ---
+    def save_report(self, doc_id: str, report: dict) -> None:
+        self.db.collection("reports").document(doc_id).set(dict(report))
+
+    def get_report(self, doc_id: str) -> dict:
+        snap = self.db.collection("reports").document(doc_id).get()
+        return (snap.to_dict() or {}) if snap.exists else {}
+
+    def get_stories_for_report(self, lens_id: str, cutoff) -> list[dict]:
+        # 전수 스캔(open)+클라 필터 — lensing/scoring/article과 동일 패턴(신규 인덱스 불요).
+        out = []
+        for snap in self.db.collection("stories").where("status", "==", "open").stream():
+            d = snap.to_dict() or {}
+            if not (d.get("last_seen") and d["last_seen"] >= cutoff):
+                continue
+            if lens_id not in (d.get("lenses") or []):
+                continue
+            out.append({"id": snap.id, "title": d.get("title", ""),
+                        "summary": d.get("summary", ""), "lenses": d.get("lenses") or [],
+                        "risk": d.get("risk"), "impact": d.get("impact"),
+                        "count": d.get("count", 0),
+                        "developments": d.get("developments") or []})
+        return out
+
     def get_story_member_signals(self, member_ids: list) -> dict:
         """멤버 기사 분류 신호를 **배치(get_all)**로 집계(per-member 읽기 금지).
         반환 {asset_hints, languages, tags(flat), keyword_text}."""
