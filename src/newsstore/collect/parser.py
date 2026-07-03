@@ -9,6 +9,9 @@ from ..contracts.models import RawItem
 
 log = logging.getLogger(__name__)
 
+class FeedParseError(Exception):
+    """응답이 피드가 아님(WAF 차단·챌린지·오류 페이지가 HTTP 200으로 온 경우)."""
+
 def _clean(html: str) -> str:
     text = BeautifulSoup(html or "", "lxml").get_text(" ", strip=True)
     return " ".join(text.split())
@@ -40,6 +43,13 @@ def _published(entry, tz_offset: float | None = None) -> datetime | None:
 
 def parse_feed(raw: bytes, feed: FeedConfig, fetched_at: datetime) -> list[RawItem]:
     fp = feedparser.parse(raw)
+    # HTTP 200이어도 차단·오류 페이지면 feedparser는 예외 없이 entries=0을 준다.
+    # 이를 '0건 성공'으로 삼키면 피드가 조용히 영구 무수집이 된다(fail-loud).
+    # 인식된 피드 포맷(version)의 빈 피드만 합법 — 정상형 XML 차단 페이지는
+    # bozo=0이라 version 부재도 함께 본다.
+    if not fp.entries and (fp.bozo or not fp.version):
+        raise FeedParseError(
+            f"not a parseable feed (bozo={bool(fp.bozo)}, version={fp.version!r})")
     items: list[RawItem] = []
     skipped = 0
     for e in fp.entries:

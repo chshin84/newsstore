@@ -5,7 +5,7 @@ import httpx
 from .feeds import FeedConfig
 from ..contracts.ports import Store
 from .fetcher import fetch_feed
-from .parser import parse_feed
+from .parser import parse_feed, FeedParseError
 from .body_fetch import enrich_bodies
 
 log = logging.getLogger(__name__)
@@ -36,7 +36,14 @@ def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
                             feed.feed_id, res.status)
                 summary[feed.feed_id] = -1     # transient failure; retried next pass
                 continue
-            items = parse_feed(res.content, feed, fetched_at=now)
+            try:
+                items = parse_feed(res.content, feed, fetched_at=now)
+            except FeedParseError as exc:
+                # 차단/오류 페이지: 이 응답의 ETag·last_fetched를 저장하면 차단
+                # 페이지에 304를 받아 무수집이 고착된다 — 상태 미갱신, 실패 집계.
+                log.warning("feed %s: %s (state not updated)", feed.feed_id, exc)
+                summary[feed.feed_id] = -1
+                continue
             items = enrich_bodies(client, store, items)
             new = store.upsert_items(items)
             store.set_feed_state(feed.feed_id, etag=res.etag,

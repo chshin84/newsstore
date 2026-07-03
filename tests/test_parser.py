@@ -73,6 +73,31 @@ def test_tz_offset_corrects_naive_local_pubdate():
     items = parse_feed(raw, feed, fetched_at=NOW)
     assert items[0].published_at == datetime(2026, 6, 12, 10, 56, 57, tzinfo=timezone.utc)
 
+def test_non_feed_content_raises_parse_error():
+    # WAF 차단·Cloudflare 챌린지·HTML 오류 페이지는 HTTP 200으로 오지만 피드가
+    # 아니다 — '0건 수집 성공'으로 삼키지 말고 fail-loud(#collect 조용한 무수집 방지).
+    import pytest
+    from newsstore.collect.parser import FeedParseError
+    waf = (b'<!DOCTYPE html><html><head><title>Just a moment...</title></head>'
+           b'<body>Checking your browser</body></html>')
+    with pytest.raises(FeedParseError):
+        parse_feed(waf, FEED, fetched_at=NOW)
+
+def test_wellformed_html_page_still_raises_parse_error():
+    # 정상형(well-formed) XML인 차단 페이지는 bozo=0이라 bozo만으론 못 잡는다 —
+    # 피드 포맷 미인식(version 없음)도 실패로 분류해야 한다.
+    import pytest
+    from newsstore.collect.parser import FeedParseError
+    html = b'<html><body>Access denied</body></html>'
+    with pytest.raises(FeedParseError):
+        parse_feed(html, FEED, fetched_at=NOW)
+
+def test_valid_empty_feed_is_legitimate_zero():
+    # 인식된 피드 포맷의 항목 0건은 합법(신규 없음) — 실패가 아니다.
+    raw = (b'<?xml version="1.0"?><rss version="2.0"><channel>'
+           b'<title>Empty</title></channel></rss>')
+    assert parse_feed(raw, FEED, fetched_at=NOW) == []
+
 def test_published_at_is_utc_regardless_of_host_tz(monkeypatch):
     # pubDate is "06:41:00 GMT" — must parse to 06:41 UTC even when the host
     # TZ is not UTC. Guards against time.mktime() (local-time) regressions.

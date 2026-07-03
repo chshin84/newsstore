@@ -53,6 +53,19 @@ def test_collect_once_isolates_feed_failure(fsclient):
     assert store.count() == 1
 
 
+def test_collect_once_blocked_page_is_failure_not_zero(store):
+    # HTTP 200 + 차단 페이지 응답은 -1(실패)로 집계되고, 그 응답의 ETag·last_fetched를
+    # 피드 상태에 저장하지 않아야 한다(차단 페이지에 304 받아 무수집 고착 방지).
+    feed = FeedConfig(feed_id="f1", url="https://e/x.rss", source="S", poll_minutes=0)
+    html = b"<html><body>Access denied</body></html>"
+    client = httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, content=html, headers={"ETag": 'W/"waf"'})))
+    s = collect_once(client, store, [feed], now=NOW, force=True)
+    assert s == {"f1": -1}
+    state = store.get_feed_state("f1")
+    assert not state.get("etag") and not state.get("last_fetched")
+
+
 def test_collect_once_fills_hankyung_body(monkeypatch, store):
     from newsstore.collect import body_fetch
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)

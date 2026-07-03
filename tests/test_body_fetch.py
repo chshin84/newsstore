@@ -12,6 +12,20 @@ ARTICLE_HTML = (
 def _client(handler):
     return httpx.Client(transport=httpx.MockTransport(handler))
 
+def test_fetch_body_passes_article_timeout():
+    # 스펙 §2.3·§6 회귀 가드: per-article 타임아웃 인자가 빠지면 클라이언트 기본(90s)을
+    # 상속해 한 기사 hang이 Job 타임아웃까지 번진다 — 인자 전달 자체를 고정한다.
+    from newsstore.collect.body_fetch import ARTICLE_TIMEOUT_S
+    seen = {}
+
+    class _Client:
+        def get(self, url, **kw):
+            seen.update(kw)
+            raise httpx.ConnectError("stop")            # 전달 검증만 — 이후 경로 불필요
+    assert fetch_body(_Client(), "https://e/a", ".b") == ""   # no-raise 계약 유지
+    assert seen.get("timeout") == ARTICLE_TIMEOUT_S
+
+
 def test_extracts_article_body_only():
     c = _client(lambda req: httpx.Response(200, text=ARTICLE_HTML))
     body = fetch_body(c, "https://e/x", ".article-body")
