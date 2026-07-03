@@ -31,3 +31,76 @@ def test_frame_diff_new_and_changed_only():
            "watchpoints": []}
     d = frame_diff(OLD, new)
     assert {p["id"] for p in d} == {"r1", "r9"}          # 유지 극(p1)은 diff 아님 → 리뷰 0대상
+
+
+from datetime import datetime, timezone
+from newsstore.enrich.frames import (build_frame_prompt, build_frame_review_prompt,
+                                     run_frame_pass)
+
+NOW = datetime(2026, 7, 4, 7, 0, tzinfo=timezone.utc)
+STORIES = [{"id": "s1", "title": "엔비디아 실적 서프라이즈", "summary": "HBM 수요 급증"}]
+
+
+class _LLM:
+    def __init__(self, frame_resp, review_resp=None):
+        self.frame_resp, self.review_resp = frame_resp, review_resp
+        self.calls = []
+    def generate_json(self, prompt, *, timeout=30.0):
+        self.calls.append(prompt)
+        if isinstance(self.frame_resp, Exception):
+            raise self.frame_resp
+        return self.review_resp if "심사" in prompt else self.frame_resp
+        # 리뷰 프롬프트는 '심사' 단어 포함(구현 계약) — fake 분기용
+
+
+class _Store:
+    def __init__(self, frames=None):
+        self.frames = dict(frames or {})
+        self.saved = {}
+    def get_frame(self, lens_id):
+        return self.frames.get(lens_id, {})
+    def save_frame(self, lens_id, frame, *, now):
+        self.saved[lens_id] = frame
+    def get_stories_for_report(self, lens_id, cutoff):
+        return list(STORIES)
+
+
+def test_frame_prompt_carries_yesterday_and_caps_input():
+    old = {"risks": [{"id": "r1", "text": "관세 리스크"}], "premiums": [], "watchpoints": []}
+    p = build_frame_prompt("kr_equity", old, [{"id": f"s{i}", "title": f"t{i}", "summary": "x"}
+                                              for i in range(100)])
+    assert "관세 리스크" in p and '"r1"' in p            # 이월: 어제 극이 프롬프트에(재심 대상)
+    assert "t99" not in p                               # FRAME_MAX_INPUT_STORIES 캡
+
+
+def test_run_frame_pass_saves_reviewed_frame():
+    llm = _LLM(frame_resp={"risks": [{"id": "r1", "text": "새 극"}], "premiums": [],
+                           "watchpoints": []},
+               review_resp={"passed": True, "notes": ""})
+    store = _Store()
+    n = run_frame_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert n == 1 and "kr_equity" in store.saved
+
+
+def test_run_frame_pass_keeps_yesterday_on_review_reject_and_llm_error():
+    from newsstore.enrich.gemini import LLMError
+    old = {"risks": [{"id": "r1", "text": "기존"}], "premiums": [], "watchpoints": []}
+    rejected = _LLM(frame_resp={"risks": [{"id": "r9", "text": "무근거"}], "premiums": [],
+                                "watchpoints": []},
+                    review_resp={"passed": False, "notes": "근거 없음"})
+    store = _Store({"fx": old})
+    run_frame_pass(store, rejected, lens_ids=["fx"], now=NOW)
+    assert "fx" not in store.saved                      # 기각 → 어제 판 유지(저장 안 함)
+    boom = _LLM(frame_resp=LLMError("down"))
+    store2 = _Store({"fx": old})
+    run_frame_pass(store2, boom, lens_ids=["fx"], now=NOW)
+    assert "fx" not in store2.saved                     # 콜 실패 → 폴백(전파 금지, fail-soft)
+
+
+def test_run_frame_pass_no_diff_skips_review():
+    same = {"risks": [{"id": "r1", "text": "동일"}], "premiums": [], "watchpoints": []}
+    llm = _LLM(frame_resp=same, review_resp={"passed": False})   # 리뷰가 불려도 False지만
+    store = _Store({"fx": same})
+    run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)
+    assert "fx" in store.saved                          # diff 없음 → 리뷰 0콜 → 저장(updated_at 갱신)
+    assert sum("심사" in c for c in llm.calls) == 0
