@@ -65,6 +65,15 @@ class _Store:
         return list(STORIES)
 
 
+def test_frame_prompt_survives_real_frame_with_datetime():
+    # C1 회귀: 실 프레임(get_frame)은 updated_at(datetime)을 포함 — dict 통째 json.dumps면
+    # TypeError. 3축(AXES)만 추려 직렬화해야 한다.
+    old = {**OLD, "updated_at": datetime(2026, 7, 4, 7, 0, tzinfo=timezone.utc)}
+    p = build_frame_prompt("kr_equity", old, STORIES)
+    assert isinstance(p, str)
+    assert "빅테크 capex 감속" in p and "HBM 수요" in p   # 3축 극이 프롬프트에 실림
+
+
 def test_frame_prompt_carries_yesterday_and_caps_input():
     old = {"risks": [{"id": "r1", "text": "관세 리스크"}], "premiums": [], "watchpoints": []}
     p = build_frame_prompt("kr_equity", old, [{"id": f"s{i}", "title": f"t{i}", "summary": "x"}

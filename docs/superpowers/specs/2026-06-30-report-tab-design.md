@@ -77,8 +77,8 @@
 - **버전 정합**: 섹션 리포트 저장 시 참조한 프레임 판(`frame_updated_at`)을 기록 — UI 섹션 머리의 현행 프레임과 본문이 참조한 판이 다르면(프레임은 갱신됐는데 리포트가 구판이면) 표기.
 
 ## 6. 데이터 모델 (additive·비파괴 — firestore-contract 등재 필요)
-- **`frames/{lens_id}`**(신규 컬렉션, 결정⑧): `{risks[], premiums[], watchpoints[], updated_at, model}` — 프레임 패스 단독 writer, 리포트 패스·UI reader. 갱신 시 이전 판을 **`frames_history/{lens_id}/{date}`**에 스냅샷(additive — 프레임 델타의 토대, **v1부터 축적**).
-- **`reports/{lens_id}`**(신규 컬렉션): `{topic, headline, lead, sections[{name, items[{text, story_ids[]}]}], frame_updated_at, generated_at, model, review{passed,notes}}` — 프레임은 frames 컬렉션으로, 백드롭은 **`reports/_backdrop`**(런당 1회, 단일 문서 서두의 출처 — 섹션 문서에 중복 저장 안 함)으로 분리(결정⑧). `frame_updated_at` = 이 섹션이 참조한 프레임 판(§5 버전 정합). **public read**(UI 직접). report 패스 writer. 급부상은 `reports/rising`(같은 스키마 — "급부상 스토리" 단일 섹션 + 선정 기준 명시 슬롯).
+- **`frames/{lens_id}`**(신규 컬렉션, 결정⑧): `{risks[], premiums[], watchpoints[], updated_at}` — 프레임 패스 단독 writer, 리포트 패스·UI reader. 갱신 시 이전 판을 **`frames_history/{lens_id}/{date}`**에 스냅샷(additive — 프레임 델타의 토대, **v1부터 축적**).
+- **`reports/{lens_id}`**(신규 컬렉션): `{topic, headline, lead, sections[{name, items[{text, story_ids[]}]}], frame_updated_at, generated_at, review{passed,notes}}` — 프레임은 frames 컬렉션으로, 백드롭은 **`reports/_backdrop`**(런당 1회, 단일 문서 서두의 출처 — 섹션 문서에 중복 저장 안 함)으로 분리(결정⑧). `frame_updated_at` = 이 섹션이 참조한 프레임 판(§5 버전 정합). **public read**(UI 직접). report 패스 writer. 급부상은 `reports/rising`(같은 스키마 — "급부상 스토리" 단일 섹션 + 선정 기준 명시 슬롯).
 - stories(렌즈·risk·impact·developments·delta) 재사용 — 신규 필드 없음.
 - **계약 등재(plan 작업)**: `reports` 스키마·writer/reader·**보안규칙(public read)**을 `firestore-contract.md`에 추가(드리프트 가드 대상). per-run 전량 재생성이라 *_count incremental 가드 없음(통째 덮어쓰기).
 

@@ -31,3 +31,4 @@ def test_stories_for_report_filters_lens_window_status(store):
     assert [s["id"] for s in got] == ["in"]
     assert got[0]["lenses"] == ["kr_equity", "sector_tech"]   # 층화 cap이 sector 라벨을 씀
     assert got[0]["impact"] == 2 and got[0]["summary"] == "s-in"
+    assert got[0]["last_seen"] == NOW                   # M3: developments 없는 스토리의 랭킹 폴백

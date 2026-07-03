@@ -100,6 +100,16 @@ def test_section_prompt_contains_frame_stories_backdrop():
     assert "매수" in p                                  # 매수/매도 금지 지시 포함(§1)
 
 
+def test_section_prompt_survives_real_frame_with_datetime():
+    # C1 회귀: 실 프레임은 save_frame이 심는 updated_at(datetime)을 포함한다 —
+    # dict 통째 json.dumps면 TypeError로 잡 전체 사망. 3축만 추려 직렬화해야 한다.
+    frame = {**FRAME, "updated_at": datetime(2026, 7, 4, 7, 0, tzinfo=timezone.utc)}
+    p = build_section_prompt("kr_equity", frame,
+                             [{"id": "s1", "title": "제목", "summary": "요약"}], "")
+    assert isinstance(p, str)
+    assert "빅테크 capex 감속" in p and "HBM 수요" in p and "메타 실적" in p   # 3축 전부 포함
+
+
 from newsstore.enrich.report import run_report_pass
 
 
@@ -188,6 +198,8 @@ def test_run_report_pass_skips_below_min_stories():
     llm = _LLM(SECTION_OK, {"passed": True})
     totals = run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
     assert totals["skipped_empty"] == 1 and "kr_equity" not in store.reports
+    # M5: 스킵 신호 발행 — UI가 "아직 생성 전" vs "갱신 지연"을 구분(§4)
+    assert store.reports["_skips"]["lenses"] == ["kr_equity"]
 
 
 def test_run_report_pass_generation_failure_keeps_existing():
@@ -206,9 +218,13 @@ def test_run_report_pass_generation_failure_keeps_existing():
 
 
 def test_run_report_pass_generates_rising():
-    hot = _s("hot", ndev=5, impact=1)
-    store = _Store({"kr_equity": _stories() + [hot]}, {"kr_equity": FRAME})
+    # m8: 결정적 구성 — impact=3 fresh 15개가 top-K(=REPORT_MAX_STORIES)를 점유하고,
+    # hot1·hot2(impact=1, 24h 델타 5건)는 top-K 밖 + 밀도 상위 → rising 무조건 생성.
+    # SECTION_OK의 s0 인용은 rising 입력에 없어 validate가 드롭하지만 headline/lead만으로
+    # 유효(트리거 항목 드롭 ≠ None) — 저장 자체를 무조건 단언한다.
+    fillers = [_s(f"s{i}", impact=3, hours_ago=0) for i in range(15)]
+    hots = [_s("hot1", ndev=5, impact=1), _s("hot2", ndev=5, impact=1)]
+    store = _Store({"kr_equity": fillers + hots}, {"kr_equity": FRAME})
     llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
     run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
-    if "rising" in store.reports:                       # hot이 top-K에 들면 rising 없음도 합법
-        assert store.reports["rising"]["criteria"]
+    assert "rising" in store.reports and store.reports["rising"]["criteria"]

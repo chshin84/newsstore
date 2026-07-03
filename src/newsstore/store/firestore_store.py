@@ -272,7 +272,8 @@ class FirestoreStore:
                         "summary": d.get("summary", ""), "lenses": d.get("lenses") or [],
                         "risk": d.get("risk"), "impact": d.get("impact"),
                         "count": d.get("count", 0),
-                        "developments": d.get("developments") or []})
+                        "developments": d.get("developments") or [],
+                        "last_seen": d.get("last_seen")})   # 랭킹 폴백(developments 없을 때)
         return out
 
     def get_story_member_signals(self, member_ids: list) -> dict:

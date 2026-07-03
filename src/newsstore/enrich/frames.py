@@ -47,13 +47,15 @@ def frame_diff(old: dict, new: dict) -> list[dict]:
 
 def build_frame_prompt(lens_id: str, old: dict, stories: list[dict]) -> str:
     """이월 재심 프롬프트 — 어제 극 전부 + 최근 스토리(캡). 유지 판단에도 근거 검토 요구(§3 재심 계약)."""
+    # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
+    axes_only = {a: (old or {}).get(a) or [] for a in AXES}
     lines = [f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
              for i, s in enumerate(stories[:FRAME_MAX_INPUT_STORIES])]
     return (
         f"당신은 '{lens_id}' 자산군의 standing 프레임을 유지하는 애널리스트다.\n"
         "프레임 3축: risks(아킬레스건/실질 리스크), premiums(기대/컨센서스), "
         "watchpoints(극을 트리거할 수 있는 예정된 관찰 지점 — 판단/조언 금지).\n"
-        f"어제의 프레임(재검토 대상):\n{json.dumps(old or {a: [] for a in AXES}, ensure_ascii=False)}\n"
+        f"어제의 프레임(재검토 대상):\n{json.dumps(axes_only, ensure_ascii=False)}\n"
         "최근 스토리:\n" + "\n".join(lines) + "\n"
         "임무: 어제 극을 하나씩 재검토하라 — 여전히 유효하면 id 유지(근거 스토리가 최근에 없어도 "
         "구조적으로 유효하면 유지 가능하되 그 이유를 스스로 검토), 낡았으면 탈락, 새 위험/기대/"

@@ -113,7 +113,11 @@ def main(argv=None) -> int:
                 from ..enrich import topics as _topics
                 now = datetime.now(timezone.utc)
                 t = _topics.load_topics()
-                store.set_meta("report_groups", _topics.report_groups(t))  # UI 앵커(SSOT 발행)
+                # UI 앵커(SSOT 발행) — Firestore map은 키가 정렬돼 그룹 순서를 잃으므로
+                # 순서 보존 배열([{name, lens_ids}])로 발행한다(m1).
+                store.set_meta("report_groups",
+                               {"groups": [{"name": g, "lens_ids": ids}
+                                           for g, ids in _topics.report_groups(t).items()]})
                 lens_ids = _topics.report_lens_ids(t)
                 _frames.run_frame_pass(store, client, lens_ids=lens_ids, now=now)   # 선행(§4)
                 totals = _report.run_report_pass(store, client, lens_ids=lens_ids, now=now)

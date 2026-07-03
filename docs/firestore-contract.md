@@ -41,12 +41,13 @@
 - **`articled_count`** (int) · **`articled_at`** (datetime) — incremental 가드(`summary_count`·`scored_count`와 동일 per-pass 컨벤션).
 
 ### `frames` (report 패스 프레임 단계가 기록)
-`frames/{lens_id}`: `{risks[{id,text}], premiums[{id,text}], watchpoints[{id,text}], updated_at, model}`.
+`frames/{lens_id}`: `{risks[{id,text}], premiums[{id,text}], watchpoints[{id,text}], updated_at}`.
 갱신 시 이전 판을 `frames_history/{lens_id}/snapshots/{date}`에 보관(additive). 실패 런은 어제 판 유지(updated_at 미갱신 = 지연 신호).
 
 ### `reports` (report 패스가 기록, 공개 read)
-`reports/{lens_id}`: `{topic, headline, lead, sections[{name, items[{text, story_ids[], pole_id}]}], frame_updated_at, generated_at, model, review{passed, notes}}`.
-`reports/_backdrop`: `{text, generated_at, model, review{passed, notes}}`. `reports/rising`: 섹션 리포트와 같은 스키마(+`criteria` 문자열).
+`reports/{lens_id}`: `{topic, headline, lead, sections[{name, items[{text, story_ids[], pole_id}]}], frame_updated_at, generated_at, review{passed, notes}}`.
+`reports/_backdrop`: `{text, generated_at, review{passed, notes}}`. `reports/rising`: 섹션 리포트와 같은 스키마(+`criteria` 문자열).
+`reports/_skips`: `{lenses[], generated_at}` — 이번 런에서 스토리 부족으로 스킵된 렌즈 목록(UI가 "오늘 스토리 부족" vs "갱신 지연" 구분에 사용, 스킵 0건이면 빈 배열).
 sections[].name ∈ {risk_triggered, premium_triggered, not_triggered, watchpoints}. per-run 통째 덮어쓰기(비-incremental — 스펙 §6).
 
 ## 핸드오프 프로토콜 — `processed` 플래그

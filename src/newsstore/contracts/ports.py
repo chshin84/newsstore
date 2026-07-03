@@ -102,7 +102,6 @@ class Frame(TypedDict, total=False):
     premiums: list[FramePole]
     watchpoints: list[FramePole]
     updated_at: datetime
-    model: str
 
 
 class ReportStory(TypedDict, total=False):
@@ -115,6 +114,7 @@ class ReportStory(TypedDict, total=False):
     impact: int
     count: int
     developments: list[Development]
+    last_seen: datetime          # 랭킹 폴백(developments 없는 스토리 — story_rank)
 
 
 class Store(Protocol):

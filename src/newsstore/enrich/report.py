@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from .frames import AXES
 from .gemini import LLMError
 
 log = logging.getLogger("newsstore.enrich.report")
@@ -85,8 +86,7 @@ _TRIGGER_SECTIONS = ("risk_triggered", "premium_triggered")
 
 
 def _frame_pole_ids(frame: dict) -> set[str]:
-    return {p["id"] for axis in ("risks", "premiums", "watchpoints")
-            for p in (frame.get(axis) or [])}
+    return {p["id"] for axis in AXES for p in (frame.get(axis) or [])}
 
 
 def validate_report(raw, *, frame: dict, input_story_ids: set[str]) -> dict | None:
@@ -136,12 +136,14 @@ def build_backdrop_prompt(excerpts: list[str]) -> str:
 
 def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str) -> str:
     import json as _json
+    # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
+    axes_only = {a: frame.get(a) or [] for a in AXES}
     lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:200]}'
              for s in stories]
     return (
         f"당신은 '{lens_id}' 자산군 데일리 리포트 에디터다. standing 프레임(주어진 것 — "
         "새 프레임을 만들지 마라)에 오늘 스토리를 대조하라.\n"
-        f"프레임:\n{_json.dumps(frame, ensure_ascii=False)}\n"
+        f"프레임:\n{_json.dumps(axes_only, ensure_ascii=False)}\n"
         f"매크로 참고 맥락: {backdrop or '(없음)'}\n"
         "스토리(각 줄 맨 앞 [id]가 story_id):\n" + "\n".join(lines) + "\n"
         "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용. "
@@ -206,10 +208,12 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> 
 
     top_k_ids: set[str] = set()
     selected: dict[str, list[dict]] = {}
+    skipped: list[str] = []
     for lens_id in lens_ids:
         stories = per_lens[lens_id]
         if len(stories) < REPORT_MIN_STORIES:
             totals["skipped_empty"] += 1
+            skipped.append(lens_id)
             continue
         top = select_top_k(stories, now, stratify=lens_id.endswith("_equity"))
         selected[lens_id] = top
@@ -245,5 +249,8 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> 
     if len(rising) >= REPORT_MIN_STORIES:
         _one("rising", "rising", {}, rising,
              criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")
+    # 스킵 신호 발행(§4) — UI가 "아직 생성 전/오늘 스토리 부족" vs "갱신 지연"을 구분.
+    # 스킵 0건이어도 빈 배열로 덮어써 전 런의 스킵 잔재를 제거한다(멱등).
+    store.save_report("_skips", {"lenses": skipped, "generated_at": now})
     log.info("report pass: %s", totals)
     return totals

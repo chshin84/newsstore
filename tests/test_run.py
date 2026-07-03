@@ -56,9 +56,10 @@ def test_run_enrich_mode_report_wires_frame_then_report(monkeypatch, store):
     monkeypatch.setenv("GEMINI_API_KEY", "dummy")
     assert re_mod.main(["--mode", "report"]) == 0
     assert calls == ["frames", "report"]                # 프레임 선행(§4)
-    # report 모드는 UI 앵커용 그룹 매핑을 발행한다(topics.yaml SSOT → meta/report_groups)
-    groups = store.db.collection("meta").document("report_groups").get().to_dict() or {}
-    assert groups.get("주식") == ["kr_equity", "us_equity"]
+    # report 모드는 UI 앵커용 그룹 매핑을 발행한다(topics.yaml SSOT → meta/report_groups).
+    # m1: Firestore map은 키가 정렬돼 순서를 잃으므로 순서 보존 배열([{name, lens_ids}])로 발행.
+    doc = store.db.collection("meta").document("report_groups").get().to_dict() or {}
+    assert {"name": "주식", "lens_ids": ["kr_equity", "us_equity"]} in (doc.get("groups") or [])
 
 
 def test_run_uses_injected_store(monkeypatch):

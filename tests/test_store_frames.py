@@ -18,6 +18,17 @@ def test_save_and_get_frame_roundtrip(store):
     assert got["watchpoints"][0]["text"] == "메타 실적"
 
 
+def test_saved_frame_feeds_section_prompt(store):
+    # C1 통합(에뮬레이터 왕복): save_frame → get_frame 프레임(updated_at=datetime 포함)이
+    # build_section_prompt에 그대로 들어가도 예외 없이 동작 — fake가 약화시킨 실계약을 봉합.
+    from newsstore.enrich.report import build_section_prompt
+    store.save_frame("kr_equity", dict(F1), now=NOW)
+    frame = store.get_frame("kr_equity")
+    p = build_section_prompt("kr_equity", frame,
+                             [{"id": "s1", "title": "제목", "summary": "요약"}], "")
+    assert "빅테크 capex 감속" in p
+
+
 def test_save_frame_snapshots_previous_to_history(store):
     store.save_frame("fx", dict(F1), now=NOW)
     f2 = {"risks": [{"id": "r2", "text": "달러 초강세 재개"}], "premiums": [], "watchpoints": []}
