@@ -8,6 +8,7 @@
 |---|---|---|---|
 | `items` (raw 필드) | collect Job | web UI | 기사 원본 |
 | `items.processed=false` (seed) | upsert | enrich 패스 | "인리치 필요" 핸드오프 신호 |
+| `items.kind` (seed) | upsert (`_to_doc`→`classify_kind`) | web UI | **수집 시점 선분류** — UI 신선 항목 즉시 숨김(`keepInFeed`)이 의존. enrich가 같은 순수함수로 재기록(값 충돌 없음) |
 | `items` (인리치 필드) | enrich 패스 (merge) | web UI | `kind·tags·embedding·story_id·processed=true·processed_at` |
 | `feed_state` | collect Job | collect Job | etag/last_modified 폴링 상태 |
 | `meta` (sources) | collect Job | web UI | 소스 목록 발행(tier 전파는 §공유 설정 참조) |
@@ -17,7 +18,7 @@
 
 ### `items`
 - **raw (collect로 기록)** — `feed_id, source, asset_hint, language, url, title, body, published_at, fetched_at`. 모델 SSOT는 `src/newsstore/contracts/models.py`의 `RawItem`.
-- **seed (upsert 시 기록)** — `processed=false, processed_at=null, tags=[]`. 출처: `src/newsstore/store/firestore_store.py` `_to_doc`. **`processed=false`가 핸드오프 신호다.**
+- **seed (upsert 시 기록)** — `processed=false, processed_at=null, tags=[], kind`(수집 시점 `classify_kind` 선분류 — UI 신선 항목 즉시 숨김용). 출처: `src/newsstore/store/firestore_store.py` `_to_doc`. **`processed=false`가 핸드오프 신호다.**
 - **enrich (enrich 패스가 merge로 기록)** — `kind, tags[], embedding[], story_id, processed=true, processed_at`. **raw 필드는 절대 덮어쓰지 않는다(merge only).** (risk/impact는 `items`가 아니라 `stories`에 산출 — 아래 §stories.)
 
 ### `feed_state` (수집기 전용)

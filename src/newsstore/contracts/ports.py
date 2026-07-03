@@ -38,6 +38,7 @@ class LensingStory(TypedDict):
     title: str
     member_ids: list[str]
     lenses: list[str]
+    count: int
 
 
 class MemberSignals(TypedDict):
@@ -137,8 +138,10 @@ class Store(Protocol):
         ...
 
     # Phase 1 토픽 렌즈 분류 계약.
-    def save_story_lenses(self, story_id: str, lenses: list[str]) -> None:
-        """stories.lenses[](렌즈 id 배열) merge 저장(비파괴)."""
+    def save_story_lenses(self, story_id: str, lenses: list[str],
+                          count: int | None = None) -> None:
+        """stories.lenses[](렌즈 id 배열) merge 저장(비파괴). +lensed_count=count
+        (incremental 가드 — save_story_score·save_story_article과 동일 컨벤션)."""
         ...
     def get_stories_for_lensing(self, cutoff: datetime) -> list[LensingStory]:
         """status=open·last_seen>=cutoff 스토리."""

@@ -36,6 +36,19 @@ def test_finance_not_flagged_sports():
     assert classify_kind("Global bond yields climb as central banks signal caution") == "story"
 
 
+def test_kbo_inside_english_word_not_sports():
+    # 'kbo'가 경계 없이 매칭되면 checkbook/backbone 등 흔한 영단어를 오분류한다
+    assert classify_kind("Buffett's checkbook is ready for big deals") == "story"
+    assert classify_kind("AI is the backbone of the new economy") == "story"
+    assert classify_kind("Workbook apps rally after earnings") == "story"
+
+
+def test_kbo_korean_compound_still_sports():
+    # 'KBO리그'처럼 뒤에 한글이 붙는 복합어는 계속 잡아야 한다(선행 경계만 요구)
+    assert classify_kind("KBO리그 개막전 매진 행렬") == "sports"
+    assert classify_kind("KBO 정규시즌 개막") == "sports"
+
+
 def test_body_only_spam_signal_not_flagged():
     # #19: 본문에만 있는 스팸 신호로 멀쩡한 기사를 spam 처리하지 않는다(제목 기준)
     assert classify_kind("Fed holds rates steady amid inflation",

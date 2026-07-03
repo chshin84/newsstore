@@ -16,7 +16,9 @@ SPAM_SIGNALS = [
 DIGEST_SIGNALS = ["balance of power", "(podcast)", "(video)"]
 # 스포츠 (analysis-design §4 — 비파괴 마킹 후 기본 숨김). 명확한 리그/대회 용어만(금융 오분류 회피).
 SPORTS_SIGNALS = [
-    "한국시리즈", "프로야구", "kbo", "k리그", "프리미어리그", "월드컵", "올림픽",
+    # " kbo": 선행 경계만 요구 — checkbook/backbone 등 영단어 내부 매칭을 막으면서
+    # "KBO리그" 같은 한글 복합어(후행 경계 없음)는 계속 잡는다.
+    "한국시리즈", "프로야구", " kbo", "k리그", "프리미어리그", "월드컵", "올림픽",
     "premier league", "world cup", " nba ", " mlb ", " nfl ", "la liga", "bundesliga",
 ]
 
