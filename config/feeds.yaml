@@ -122,3 +122,9 @@ feeds:
   - {feed_id: ft_home,      url: "https://www.ft.com/rss/home",                      source: FT, asset_hint: global, poll_minutes: 30, body_mode: headline, tier: wire}
   - {feed_id: ft_markets,   url: "https://www.ft.com/markets?format=rss",            source: FT, asset_hint: global_market, poll_minutes: 30, body_mode: headline, tier: wire}
   - {feed_id: ft_economy,   url: "https://www.ft.com/global-economy?format=rss",     source: FT, asset_hint: macro, poll_minutes: 30, body_mode: headline, tier: wire}
+
+  # ── 스펙(2026-06-28 피드 확장) §4.6 잔여 후보 — 의식적 드롭 (사용자 결정 2026-07-03, #30) ──
+  # 아래 후보들은 프로빙을 수행하지 않은 채 드롭한다(미시도≠실패 — 흔적을 남겨 '다뤄진 척' 방지).
+  # 재개하려면 scripts/probe_feeds.py로 프로빙 후 성공분만 등재할 것.
+  # 드롭: ECB 연설 · EIA Weekly/STEO · BEA · Census · Baker Hughes rig count ·
+  #       PIIE · Bruegel · CSIS · Brookings · 기재부/금융위/KDI 계열 · S1N25(인포맥스 추가 섹션)
