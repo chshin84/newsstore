@@ -234,6 +234,23 @@ class FirestoreStore:
             doc["articled_at"] = now
         self.db.collection("stories").document(story_id).set(doc, merge=True)
 
+    # --- 리포트 탭 v1: frames(프레임 패스 단독 writer — 스펙 §3·§6) ---
+    def get_frame(self, lens_id: str) -> dict:
+        snap = self.db.collection("frames").document(lens_id).get()
+        return (snap.to_dict() or {}) if snap.exists else {}
+
+    def save_frame(self, lens_id: str, frame: dict, *, now) -> None:
+        ref = self.db.collection("frames").document(lens_id)
+        prev = ref.get()
+        if prev.exists:
+            # 이전 판 스냅샷(additive) — 프레임 델타·사후 추적의 토대(스펙 §6)
+            self.db.collection("frames_history").document(lens_id) \
+                .collection("snapshots").document(now.strftime("%Y-%m-%dT%H%M%S")) \
+                .set(prev.to_dict() or {})
+        doc = dict(frame)
+        doc["updated_at"] = now
+        ref.set(doc)                     # 통째 set: 전량 재심 산출물(merge 아님)
+
     def get_story_member_signals(self, member_ids: list) -> dict:
         """멤버 기사 분류 신호를 **배치(get_all)**로 집계(per-member 읽기 금지).
         반환 {asset_hints, languages, tags(flat), keyword_text}."""
