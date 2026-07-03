@@ -1,6 +1,6 @@
 # 리포트 탭 — 섹터 risk/기대 프레임 합성 보고서 — 설계 (린 v1)
 
-성격: 분석 레이어 위 응용 1차(섹터 의사결정 보조). 토대: Phase 1 렌즈 · Phase 2 델타 · Phase 3 score · stories. 결정 출처: 메모리 `report-tab-design`. 상위: `docs/analysis-design.md` · 계약: `docs/firestore-contract.md`. **이 문서는 3렌즈 리뷰 후 "빼기(SUBTRACT)"로 린하게 재작성됨 — 미결 사용자 결정은 §결정필요 참조(escalated).**
+성격: 분석 레이어 위 응용 1차(섹터 의사결정 보조). 토대: Phase 1 렌즈 · Phase 2 델타 · Phase 3 score · stories. 결정 출처: 메모리 `report-tab-design`. 상위: `docs/analysis-design.md` · 계약: `docs/firestore-contract.md`. **이 문서는 3렌즈 리뷰 후 "빼기(SUBTRACT)"로 린하게 재작성되었고, 2026-07-01 사용자 확정 결정(§결정)을 본문 전체에 반영해 2026-07-03 재개정되었다. §결정 블록이 SSOT이며 본문과 어긋나면 §결정이 이긴다.**
 
 ## 1. 목표 / 본질
 스토리를 **섹터별 의사결정 보조 보고서**로 합성한다. 본질: 시장의 집단적 고민을 정제해 엿듣고, 사용자가 *"조정이냐 국면 전환이냐 / over·undervalue냐"*를 판단할 재료를 깐다.
@@ -12,58 +12,59 @@
 - **델타 중심**: 힘이 모이는 곳=델타 있는 뉴스. 델타가 어디 볼지를, 실질-괴리가 판단 재료를.
 - **단극 허용**: `risk`(지정학) 등 premium 극이 N/A인 렌즈는 단극 프레임(아킬레스건만).
 
-## 3. 프레임 출처 — seed YAML (저장만, 일배치 재생성 X)
-[아킬레스건/기대]는 **구조적·준정적** 값(매일 안 바뀜). 별도 컬렉션·일배치 패스를 두지 않는다(YAGNI — 리뷰 반영).
-- **`config/theses.yaml`** (신규, 사용자 편집): 렌즈별 `{achilles_heel[], premium[]}`. 사람이 시드, LLM은 *오프라인 제안*(수동 검토 후 반영)만 — 런타임 자동 재생성 없음. "비-이벤트 포착"은 저장된 thesis만으로 됨.
-- 섹터 어휘 = `config/topics.yaml` 렌즈(SSOT). 토픽 버튼 = **watch(개별종목) 외 모든 렌즈 type**(standing·development·sector·risk)에서 도출. thesis 없는 렌즈 → 그 토픽은 v1에서 버튼 비노출(skip).
+## 3. 프레임 출처 — AI 자동 (결정④)
+[아킬레스건/기대] 프레임은 **리포트 생성 1콜이 함께 산출**한다. 별도 thesis 컬렉션·수동 config·일배치 프레임 패스를 두지 않는다(YAGNI). 사람이 편집하는 `config/theses.yaml`은 **폐기**(결정④) — 만들지 않는다.
+- 프레임도 콜 출력의 구조화 슬롯(`frame{achilles[], premium[]}`)으로 리포트 문서에 함께 저장한다 — "미발생" 섹션은 그 콜이 낸 프레임 극 중 72h 트리거 없는 것으로 도출한다. frame 저장은 후속(프레임 스냅샷 이력·delta_since_last·기준선 비교)의 토대다.
+- **한계(정직 — adversarial 리뷰 지적)**: 프레임이 그 콜의 입력 뉴스에서 역산되므로 **(a)** 모델이 뉴스에 맞춰 극을 세워 "트리거됨"이 과대해질 수 있는 자기충족 경향이 있고 §5 검증(grounding)은 이를 구조적으로 못 잡으며, **(b)** 프레임 극 집합이 런마다 달라질 수 있어 **"미발생"은 단일 런 내부에서만 유효한 신호다(런 간 비교 금지)**. 독립 기준선(프레임 이월·저널)은 후속 결정 사항 — §결정 아래 이관 노트 참조.
+- 섹터 어휘 = `config/topics.yaml` 렌즈(SSOT). 토픽 버튼 = **watch(개별종목) 외 모든 렌즈 type**(standing·development·sector·risk)에서 도출. 프레임이 콜 산출물이므로 "thesis 없는 렌즈 skip" 규칙은 폐기 — 모든 도출 렌즈가 리포트 대상이다.
 
 ## 4. 생성 파이프라인 — 단일 리치 콜 (다단계 체인 X)
 다단계 chained 합성은 환각 전파+비용폭증이라 v1에서 **제거**(리뷰 반영). 중간 자산(클러스터·score·델타·렌즈) 재사용 — 리포트는 stories의 또 다른 렌더러(기존 per-story `article` 패스와 **별개**: 그건 스토리 1개 보고서, 이건 렌즈 레벨 합성).
 ```
 (런당 1회) 매크로/교차자산 백드롭 — 채권·순환매·원자재·매크로를 1회 합성(cross-lens는 여기 1곳만)
 토픽별(렌즈당 1 report):
-  thesis(config) + 렌즈의 72h stories 중 [delta·impact 상위 K건 하드캡] + 백드롭
-   ↓ LLM 1콜(구조화 출력) → {headline, lead, sections[아킬레스건 트리거 / 기대 트리거 / 미발생]}
+  렌즈의 72h stories 중 [delta·impact 상위 K건 하드캡] + 백드롭
+   ↓ LLM 1콜(구조화 출력) → {frame{achilles[], premium[]}, headline, lead, sections[아킬레스건 트리거 / 기대 트리거 / 미발생]}
+     (프레임 산출과 뉴스 대조를 같은 콜이 수행 — 결정④)
    ↓ 검증 — 결정론(언급 티커·섹터·엔티티가 입력 출처에 존재) → LLM 리뷰 1콜(grounding+fit)
 출력: reports/{lens_id} (캐시; UI 직접 read)
 ```
-- **입력 하드캡 `REPORT_MAX_STORIES`**(예 K=15, delta·impact 상위) — 한 렌즈 클러스터가 수백 건까지 부푸는 실측(analysis-design §1) 대비 토큰 폭탄 차단. **런당 토큰/콜 예산 상한 + 초과 시 토픽 스킵**(analysis-design §11 폴백 패턴).
+- **입력 하드캡 `REPORT_MAX_STORIES`**(예 K=15, delta·impact 상위) — 한 렌즈 클러스터가 수백 건까지 부푸는 실측(analysis-design §1) 대비 토큰 폭탄 차단(품질·지연 목적 — §8). 별도의 런당 토큰/콜 예산 상한은 두지 않는다(결정② — 비용 상한 없음).
 - 출력은 **구조화 슬롯**(자유 내러티브 최소화 — 판정 누출↓). watch-list(개별종목 나열)는 v1 제거(프레임만 일관·"개별종목 콜 금지"와 충돌 회피). delta_since_last도 v1 제거(이전 스냅샷 보관 필요 — YAGNI).
-- **모델**: §결정필요 ①(실 모델 id 확정 후 단가 대입). incremental 아님 — **per-run 전량 재생성**.
+- **모델**: `gemini-3.5-flash` — env `GEMINI_MODEL`로 주입(결정①, 하드코딩 금지). incremental 아님 — **per-run 전량 재생성**.
 
 ## 5. 검증 레이어 (`domain-llm-runtime`)
 - **결정론 먼저**: 언급 티커·섹터·엔티티가 입력 출처에 존재(없으면 드롭/재생성), 길이·섹션 상한.
 - **LLM 리뷰 1콜**: `reviewer-grounding`(주장·수치가 출처 stories에 근거) + `reviewer-fit`(섹터 롤업·매수매도/개별종목 콜 금지·길이·스타일). *한계(정직)*: 동급 모델 자기검증 + 결정론은 엔티티 존재만 봄 → **가짜 인과 연결은 못 잡음**. 그래서 v1은 개방형 교차자산 인과(step2)를 빼 그 표면을 줄였다.
-- **실패 거동(v1 기본 = FAIL-LOUD)**: 생성·리뷰 실패 시 **새 문서 미커밋(기존 유지), stale 노출 안 함**. 금융 도메인이라 낡은/실패 리포트를 라벨만 붙여 노출하지 않는다.
+- **실패 거동(결정③ = 경고 라벨 노출)**: 실패를 두 경우로 구분한다. **(a) 산출물 있음**(생성은 됐으나 리뷰 실패) — 저장하되 `review.passed=false`로 기록, UI가 **"검증 실패" 배지** 노출. **(b) 산출물 없음**(생성 콜 자체 실패) — 저장할 것이 없으므로 기존 문서 유지하되, 무표시 stale 은폐를 막기 위해 UI가 `generated_at`이 기대 주기(1일)를 넘으면 **"갱신 지연" 라벨**을 표시한다(결정③의 가시성-우선을 이 경계에도 일관 적용).
 
 ## 6. 데이터 모델 (additive·비파괴 — firestore-contract 등재 필요)
-- **`config/theses.yaml`**(신규, git): 렌즈별 프레임. 컬렉션 아님.
-- **`reports/{lens_id}`**(신규 컬렉션): `{topic, headline, lead, sections[], macro_backdrop, generated_at, model, review{passed,notes}}`. **public read**(UI 직접). report 패스 writer.
+- **`reports/{lens_id}`**(신규 컬렉션): `{topic, frame{achilles[], premium[]}, headline, lead, sections[], macro_backdrop, generated_at, model, review{passed,notes}}`. **public read**(UI 직접). report 패스 writer. (config/theses.yaml은 결정④로 폐기 — 프레임은 문서 안에 저장.)
 - stories(렌즈·risk·impact·developments·delta) 재사용 — 신규 필드 없음.
 - **계약 등재(plan 작업)**: `reports` 스키마·writer/reader·**보안규칙(public read)**을 `firestore-contract.md`에 추가(드리프트 가드 대상). per-run 전량 재생성이라 *_count incremental 가드 없음(통째 덮어쓰기).
 
 ## 7. UI — 리포트 탭
 - 새 탭 `리포트`. 주제 버튼 = topics.yaml에서 도출(watch 외 type 전부; §7 예시는 예시일 뿐, 도출 규칙이 SSOT). 클릭 → `reports/{lens_id}` 캐시 렌더.
-- 렌더: headline → lead → 구조화 섹션(아킬레스건 트리거/기대 트리거/미발생). 생성시각·"가격 미반영(이슈 중심)" 표기. fail-soft: 리포트 없으면 "아직 생성 전" 강등. 순수함수(node): 버튼 도출(렌즈→버튼).
+- 렌더: headline → lead → 구조화 섹션(아킬레스건 트리거/기대 트리거/미발생). 생성시각·"가격 미반영(이슈 중심)" 표기. `review.passed=false`면 **"검증 실패" 배지**를 눈에 띄게 표시(결정③). fail-soft: 리포트 없으면 "아직 생성 전" 강등. 순수함수(node): 버튼 도출(렌즈→버튼).
 
 ## 8. 스케줄 / 운영
 - 새 모드 `run_enrich --mode report`(같은 processor 이미지) — 엔트리포인트는 기존 run_enrich --mode 확장(드리프트 가드).
 - **v1 = 1×/일**(`Asia/Seoul`, 예 07:30). 4×/일·미국장 DST(`America/New_York`) 스케줄러는 **후속**(라이브 비용 보고 빈도 상향 — 리뷰 반영, "저빈도" 주장 철회).
-- 비용: §결정필요 ②(실 모델·토큰 캡 대입해 빌드 전 수치 검증). 입력 하드캡 + 런당 예산으로 통제.
+- 비용: **상한 없음 — 사용자가 대시보드로 모니터링**(결정②). 입력 하드캡 `REPORT_MAX_STORIES`는 비용 통제가 아니라 **토큰 폭탄 방지(품질·지연 목적)**로만 유지. 빈도 상향은 사용자 판단.
 
 ## 9. 에러처리 / 드리프트
-- LLM None/retry/timeout = `GeminiClient.generate_json`. 결정론 validator 먼저. 토픽 단위 fail-soft. 실패=미커밋(§5).
+- LLM None/retry/timeout = `GeminiClient.generate_json`. 결정론 validator 먼저. 토픽 단위 fail-soft. 리뷰 실패=저장+`review.passed=false` 기록, UI 배지 노출(§5·결정③).
 - 버튼↔topics.yaml 렌즈, reports 필드명↔UI를 계약 테스트로 드리프트 가드.
 
 ## 10. 테스트 (TDD)
-- report validator 단위(fake LLM): 필수키·길이상한·결정론(출처에 없는 티커 드롭)·구조화 슬롯.
+- report validator 단위(fake LLM): 필수키(frame 포함)·길이상한·결정론(출처에 없는 티커 드롭)·구조화 슬롯.
 - store 계약(에뮬레이터): reports roundtrip + 비파괴 + per-run 재생성(덮어쓰기).
-- 파이프라인 단위(fake LLM): 입력 하드캡·예산 초과 스킵·리뷰 실패 미커밋.
-- UI 순수함수(node): 버튼 도출, thesis-없는 렌즈 skip.
+- 파이프라인 단위(fake LLM): 입력 하드캡·리뷰 실패 시 **저장+`review.passed=false` 기록**(결정③ — 미커밋 아님)·생성 자체 실패 시 기존 문서 유지.
+- UI 순수함수(node): 버튼 도출(watch 외 전 렌즈), `review.passed=false` → 검증 실패 배지, `generated_at` 기대 주기 초과 → **갱신 지연 라벨**(§5(b) — stale 무표시 금지).
 
 ## 11. 단계화 (리뷰 반영 — 면적 축소)
-- **v1**: config/theses.yaml + 단일콜 report(`--mode report`) + reports store/계약 + UI 탭 + 1×/일(Asia/Seoul). 입력 하드캡·실패 미커밋.
-- **후속**: 다단계 chained(교차자산 인과, 결정론 게이팅 동반) · 4×/일+US DST 스케줄러 · thesis 자동 갱신 · delta_since_last · watch-list · 아키타입 레이어 · pricestore 결합.
+- **v1**: 단일콜 report(`--mode report`, 프레임 산출 포함) + reports store/계약 + UI 탭(검증 실패 배지 포함) + 1×/일(Asia/Seoul). 입력 하드캡·실패 시 저장+배지.
+- **후속**: 다단계 chained(교차자산 인과, 결정론 게이팅 동반) · 4×/일+US DST 스케줄러 · 프레임 스냅샷 이력(delta_since_last 전제) · watch-list · 아키타입 레이어 · pricestore 결합.
 
 ## 결정 (사용자 확정 2026-07-01)
 1. **모델**: `gemini-3.5-flash`(env `GEMINI_MODEL`로 주입). 
@@ -72,6 +73,9 @@
 4. **thesis(프레임) 생성**: **AI 자동**. 별도 thesis 컬렉션·수동 config 없이, **리포트 생성 1콜이 프레임(아킬레스건/기대)까지 함께 산출**(§4 개정). "미발생"은 그 콜이 낸 프레임 극 중 72h 트리거 없는 것으로 도출.
 5. **스코프**: 핵심만(린 v1) — 토픽별 단일 콜 리포트 + reports store/계약 + UI 탭 + 1×/일.
 
-→ §3/§4/§5는 위 결정대로 개정됨(아래 본문 반영). config/theses.yaml(수동)은 폐기.
+→ 본문 §3·§4·§5·§6·§7·§8·§9·§10·§11이 위 결정대로 2026-07-03 실제 재작성됨. config/theses.yaml(수동)은 폐기.
 
-<!-- spec-review: decided 2026-07-01 -->
+## 🔴 escalate — 결정④에 내재한 위험 (사용자 확인 필요, 자율 구현 금지)
+3렌즈 재리뷰(2026-07-03)에서 adversarial 렌즈가 critical 1건을 냈다: **프레임 산출과 트리거 대조를 같은 콜이 하면 자기충족 회로**(뉴스에 맞춰 극을 세우고 그 극을 트리거됨으로 판정 → 트리거율 과대·미발생 과소)가 생기고, §5 검증(grounding)은 뉴스 역산 프레임을 정의상 통과시킨다. 이는 재개정 오류가 아니라 **결정④(AI 자동 프레임) 자체의 트레이드오프**라 문서 수정으로 해소할 수 없다. §3 한계 표기 + "미발생은 런-로컬" 제약으로 완화해 두었으나, **수용 여부(한계 명시로 v1 진행)** 또는 **독립 기준선 도입(전 런 프레임 이월·저널 — 후속)** 은 사용자 결정이다. 구현 착수 전 확인할 것.
+
+<!-- spec-review: escalated -->
