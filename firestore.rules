@@ -23,6 +23,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 리포트 탭(스펙 2026-06-30 §6) — 데일리 리포트·standing 프레임 공개 읽기, 쓰기 금지
+    // (report 패스는 Admin SDK라 규칙 우회해 기록. frames_history는 UI 미소비 — 기본 거부)
+    match /reports/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /frames/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // 내부 상태(조건부 GET 등)는 비공개
     match /feed_state/{id} {
       allow read, write: if false;
