@@ -433,6 +433,54 @@
     }
     // === STORIES-LOGIC-END ===
 
+    // === REPORT-LOGIC-START (node test가 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
+    const REPORT_STALE_MS = 24 * 3600 * 1000;           // §5(b) 기대 주기 1일
+    function assembleReportDoc(groups, reports) {
+      // 단일 데일리 문서 결정론 조립(§4): 백드롭 서두 → report_group 순 섹션 → rising 말미.
+      // 리포트 없는 렌즈는 생략(fail-soft — 상태는 reportStatus가 별도 판정).
+      const sections = [];
+      for (const [group, lensIds] of Object.entries(groups || {}))
+        for (const lid of lensIds)
+          if (reports && reports[lid]) sections.push({ lensId: lid, group, report: reports[lid] });
+      if (reports && reports.rising)
+        sections.push({ lensId: "rising", group: "급부상", report: reports.rising });
+      return { backdrop: (reports && reports._backdrop && reports._backdrop.text) || "",
+               sections };
+    }
+    function reportStatus(report, now) {
+      if (!report) return "not_generated";              // 스토리 부족 스킵(§4) — "아직 생성 전"
+      const g = report.generated_at;
+      const ms = g && typeof g.toDate === "function" ? g.toDate().getTime()
+        : (g instanceof Date ? g.getTime() : new Date(g).getTime());
+      if (!Number.isFinite(ms) || (now - ms) > REPORT_STALE_MS) return "stale";   // §5(b)
+      return "ok";
+    }
+    function crossLinks(sections) {
+      // 같은 story_id가 여러 섹션에 인용 → {storyId: [lensId...]} (다중 인용 결정론 — §7)
+      const byStory = {};
+      for (const { lensId, report } of (sections || []))
+        for (const sec of ((report && report.sections) || []))
+          for (const it of (sec.items || []))
+            for (const sid of (it.story_ids || [])) {
+              if (!byStory[sid]) byStory[sid] = new Set();
+              byStory[sid].add(lensId);
+            }
+      const out = {};
+      for (const [sid, set] of Object.entries(byStory))
+        if (set.size > 1) out[sid] = [...set];
+      return out;
+    }
+    function dedupCards(storyIdOrder) {
+      // 문서 전체 등장 순서에서 첫 인용만 카드(first:true), 재인용은 참조 배지(§7 dedup)
+      const seen = new Set();
+      return (storyIdOrder || []).map(id => {
+        const first = !seen.has(id);
+        seen.add(id);
+        return { id, first };
+      });
+    }
+    // === REPORT-LOGIC-END ===
+
     async function ensureLensLabels() {
       if (lensLabelsLoaded) return;
       try {
