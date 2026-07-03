@@ -50,10 +50,11 @@ def _run_cluster(store, client, taxonomy, *, noncluster, batch, concurrency) -> 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore Step-2 enrichment processor")
     ap.add_argument("--taxonomy", default="config/taxonomy.yaml")
-    ap.add_argument("--mode", choices=["cluster", "summary", "lenses", "score", "article"],
+    ap.add_argument("--mode", choices=["cluster", "summary", "lenses", "score", "article", "report"],
                     default="cluster",
                     help="cluster=embed+cluster(빠름) / summary=스토리 LLM 요약(Pass 3, 시간당) "
-                         "/ lenses=토픽 렌즈 멀티라벨 분류 / score=dual score(risk/impact) / article=보고서 생성")
+                         "/ lenses=토픽 렌즈 멀티라벨 분류 / score=dual score(risk/impact) / article=보고서 생성"
+                         " / report=프레임+데일리 리포트(스펙 2026-06-30)")
     ap.add_argument("--batch", type=int, default=50)
     args = ap.parse_args(argv)
 
@@ -105,6 +106,17 @@ def main(argv=None) -> int:
                 from ..enrich.article import run_article_pass
                 now = datetime.now(timezone.utc)
                 totals = run_article_pass(store, client, now=now, cutoff=now - OPEN_WINDOW)
+            elif args.mode == "report":
+                # 분기 내부에서 함수를 직접 임포트하지 않고 모듈 경유로 호출한다
+                # (테스트의 monkeypatch.setattr("newsstore.enrich.frames.run_frame_pass", ...)가 먹도록).
+                from ..enrich import frames as _frames, report as _report
+                from ..enrich import topics as _topics
+                now = datetime.now(timezone.utc)
+                t = _topics.load_topics()
+                store.set_meta("report_groups", _topics.report_groups(t))  # UI 앵커(SSOT 발행)
+                lens_ids = _topics.report_lens_ids(t)
+                _frames.run_frame_pass(store, client, lens_ids=lens_ids, now=now)   # 선행(§4)
+                totals = _report.run_report_pass(store, client, lens_ids=lens_ids, now=now)
         except LLMError as e:
             log.error("enrichment aborted: %s", e)
             return 1

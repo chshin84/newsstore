@@ -43,6 +43,24 @@ class _FakeStore:
     def set_feed_state(self, fid, **kw): pass
 
 
+def test_run_enrich_mode_report_wires_frame_then_report(monkeypatch, store):
+    # --mode report가 (1) 그룹 발행 → (2) 프레임 패스 → (3) 리포트 패스 순서로 배선되는지 검증
+    import newsstore.entrypoints.run_enrich as re_mod
+    calls = []
+    monkeypatch.setattr("newsstore.enrich.frames.run_frame_pass",
+                        lambda *a, **k: calls.append("frames") or 0)
+    monkeypatch.setattr("newsstore.enrich.report.run_report_pass",
+                        lambda *a, **k: calls.append("report") or {"reported": 0})
+    monkeypatch.setattr(re_mod, "make_store", lambda: store)
+    monkeypatch.setattr(re_mod, "GeminiClient", lambda *a, **k: object())
+    monkeypatch.setenv("GEMINI_API_KEY", "dummy")
+    assert re_mod.main(["--mode", "report"]) == 0
+    assert calls == ["frames", "report"]                # 프레임 선행(§4)
+    # report 모드는 UI 앵커용 그룹 매핑을 발행한다(topics.yaml SSOT → meta/report_groups)
+    groups = store.db.collection("meta").document("report_groups").get().to_dict() or {}
+    assert groups.get("주식") == ["kr_equity", "us_equity"]
+
+
 def test_run_uses_injected_store(monkeypatch):
     used = {}
 
