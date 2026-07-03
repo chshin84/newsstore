@@ -11,9 +11,27 @@ log = logging.getLogger("newsstore.enrich.lens_classify")
 
 MAX_LENSES = 4
 _REGION_PAIRS = [("kr_equity", "us_equity"), ("kr_econ", "us_econ"), ("kr_policy", "us_policy")]
-_KR_HINT = {"kr_bond", "kr_fx", "kr_macro", "kr_market", "kr_corp", "kr_realestate",
-            "kr_policy", "kr_politics"}
-_US_HINT = {"equity", "global_macro", "policy", "global_policy", "trump", "global", "global_market"}
+
+
+def _region_hint_sets(t: dict) -> tuple[set[str], set[str]]:
+    """region 변별 어휘를 topics.yaml(SSOT)에서 도출 — 손복제 상수는 topics.yaml
+    개정 시 어긋났던 실적이 있다(us_stock·kr_stock 누락). 규칙 두 가지의 합집합:
+    (a) kr_*/us_* 렌즈에 등재된 asset_hint, (b) 어휘 자체의 kr_/us_ 접두사(예: fx
+    렌즈의 kr_fx). 양쪽에 다 걸린 어휘는 모호하므로 어느 지역 신호도 아니다."""
+    kr: set[str] = set()
+    us: set[str] = set()
+    all_hints: set[str] = set()
+    for lens in t["lenses"]:
+        hints = set(lens.get("hints", {}).get("asset_hint", []))
+        all_hints |= hints
+        if lens["id"].startswith("kr_"):
+            kr |= hints
+        elif lens["id"].startswith("us_"):
+            us |= hints
+    kr |= {h for h in all_hints if h.startswith("kr_")}
+    us |= {h for h in all_hints if h.startswith("us_")}
+    ambiguous = kr & us
+    return kr - ambiguous, us - ambiguous
 
 
 def _match_score(lens: dict, *, asset_hints, tickers, entities, topics, keyword_text) -> int:
@@ -24,8 +42,9 @@ def _match_score(lens: dict, *, asset_hints, tickers, entities, topics, keyword_
     score += len(set(h.get("topics", [])) & set(topics))
     if lens.get("ticker") and lens["ticker"] in tickers:
         score += 3                                                      # watch ticker 강매칭
+    kt = (keyword_text or "").lower()      # 대소문자 무시 — 제목 첫머리 대문자(Gold …) 매칭
     for kw in (h.get("keywords", []) + lens.get("keywords", [])):
-        if kw and kw in keyword_text:
+        if kw and kw.lower() in kt:
             score += 2
     return score
 
@@ -41,8 +60,9 @@ def classify_stage1(t: dict, *, asset_hints, tickers, entities, topics, language
     chosen = {lid for _, lid in scored}
 
     # region 변별: kr/us 쌍 둘 다면 asset_hint로 결정(언어는 약신호 폴백). 모호하면 둘 다 유지(MAX_LENSES가 정리).
-    kr_sig = bool(set(asset_hints) & _KR_HINT)
-    us_sig = bool(set(asset_hints) & _US_HINT)
+    kr_hint, us_hint = _region_hint_sets(t)
+    kr_sig = bool(set(asset_hints) & kr_hint)
+    us_sig = bool(set(asset_hints) & us_hint)
     for kr, us in _REGION_PAIRS:
         if kr in chosen and us in chosen:
             if kr_sig and not us_sig:
@@ -75,14 +95,18 @@ def classify_stage2(t: dict, client, *, story_text, candidates, timeout=30.0) ->
         f"Story:\n{story_text[:1500]}\n"
         'Return JSON {"lenses": ["id", ...]} only.')
     try:
-        resp = client.generate_json(prompt, timeout=timeout) or {}
+        resp = client.generate_json(prompt, timeout=timeout)
     except LLMError as e:                   # LLM 장애만 prior 폴백(로깅) — 코드 버그는 전파(FAIL-LOUD)
         log.warning("lens stage2 fallback to prior (LLM): %s", e)
         return list(candidates)[:MAX_LENSES]
-    ids = resp.get("lenses", []) if isinstance(resp, dict) else []
+    ids = resp.get("lenses") if isinstance(resp, dict) else None
+    if not isinstance(ids, list):           # {"lenses": null}·top-level 배열 등 형태 위반 → prior(fail-soft)
+        log.warning("lens stage2 malformed output (lenses=%s) — prior fallback",
+                    type(ids).__name__)
+        return list(candidates)[:MAX_LENSES]
     valid = valid_ids(t)
     out: list[str] = []
     for i in ids:                           # 결정론 validator: 어휘 밖·중복 제거(FAIL-LOUD 대신 드롭)
         if isinstance(i, str) and i in valid and i not in out:
             out.append(i)
-    return out[:MAX_LENSES]
+    return out[:MAX_LENSES]                 # 빈 리스트는 정상 무선택 판정 — 호출자가 prior로 덮지 않는다

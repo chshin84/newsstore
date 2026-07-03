@@ -11,6 +11,15 @@ class LLMError(RuntimeError):
     """LLM 호출 실패(타임아웃/레이트리밋/빈 응답/비JSON)를 호출자가 처리할 구조화 에러."""
 
 
+def _json_object_or_none(raw: str | None):
+    """generate_json 응답 파싱 — 계약(-> dict)상 JSON 객체만 합법. top-level 배열/
+    문자열/숫자는 malformed로 None(=call_with_retry 재시도, 소진 시 LLMError)."""
+    if raw is None:
+        return None
+    parsed = json.loads(raw)
+    return parsed if isinstance(parsed, dict) else None
+
+
 def call_with_retry(call_fn: Callable[[], Any], *, attempts: int = 3,
                     base_delay: float = 0.5,
                     is_transient: Callable[[BaseException], bool] | None = None) -> Any:
@@ -48,15 +57,16 @@ class GeminiClient:
     DEFAULT_TIMEOUT = 30.0
 
     # Gemini Developer API(GEMINI_API_KEY 경로) 모델명 — 라이브 models.list로 검증한 값.
-    # gemini-embedding-001은 기본 3072차원 → output_dimensionality=embed_dim(768)로 받음.
+    # gemini-embedding-001은 기본 3072차원 → output_dimensionality=embed_dim으로 받음.
     # (Vertex의 text-embedding-004/text-multilingual-embedding은 ADC 경로라 이 키에 없음)
     def __init__(self, api_key: str, *, model: str = "gemini-3.1-flash-lite-preview",
-                 embed_model: str = "gemini-embedding-001", embed_dim: int = 768):
+                 embed_model: str = "gemini-embedding-001", embed_dim: int | None = None):
         from google import genai            # lazy
+        from .embedder import EMBED_DIM     # 차원 SSOT — 독립 리터럴 이중 정의 금지
         self._client = genai.Client(api_key=api_key)
         self._model = model
         self._embed_model = embed_model
-        self._embed_dim = embed_dim
+        self._embed_dim = EMBED_DIM if embed_dim is None else embed_dim
 
     @staticmethod
     def _is_transient(e: BaseException) -> bool:
@@ -88,10 +98,9 @@ class GeminiClient:
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     http_options=types.HttpOptions(timeout=int(timeout * 1000))))
-            raw = getattr(r, "text", None)
-            if raw is None:
-                return None                      # None 가드 → call_with_retry가 재시도
-            return json.loads(raw)               # 파싱을 콜 안에서 → 일시적 malformed JSON도 재시도
+            # None·비객체 JSON 가드 → call_with_retry가 재시도. 파싱을 콜 안에서 →
+            # 일시적 malformed JSON도 재시도.
+            return _json_object_or_none(getattr(r, "text", None))
 
         # 파싱 실패(ValueError)는 call_with_retry가 재시도 후 소진 시 LLMError로 변환.
         return call_with_retry(_call, is_transient=self._is_transient)

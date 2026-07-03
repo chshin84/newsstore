@@ -26,6 +26,17 @@ def test_none_response_raises_llmerror():
         call_with_retry(lambda: None, attempts=1, base_delay=0)
 
 
+def test_json_object_guard_rejects_non_object():
+    # generate_json 계약은 -> dict. top-level 배열/문자열/숫자는 malformed로 None
+    # (=call_with_retry 재시도, 소진 시 LLMError) — 하류 raw.get() AttributeError 방지.
+    from newsstore.enrich.gemini import _json_object_or_none
+    assert _json_object_or_none('{"a": 1}') == {"a": 1}
+    assert _json_object_or_none('["a"]') is None
+    assert _json_object_or_none('"str"') is None
+    assert _json_object_or_none('42') is None
+    assert _json_object_or_none(None) is None
+
+
 def test_no_retry_when_not_transient():
     # 비일시적 에러(4xx 404/400)는 재시도 낭비 없이 즉시 실패 (advisor-nonfunctional)
     calls = {"n": 0}

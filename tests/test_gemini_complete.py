@@ -28,3 +28,11 @@ def test_complete_returns_plain_text():
 
 def test_complete_none_guard_retries():
     assert _client([None, "DIFFERENT"]).complete("p").startswith("DIFFERENT")
+
+
+def test_embed_dim_default_derived_from_embedder():
+    # 임베딩 차원의 SSOT는 embedder.EMBED_DIM — 생성자 기본값이 독립 리터럴(768)로
+    # 이중 정의되면 한쪽만 바꿨을 때 런타임 ValueError로만 발견된다(드리프트 가드).
+    from newsstore.enrich.embedder import EMBED_DIM
+    c = GeminiClient(api_key="dummy-key-for-ctor-test")
+    assert c._embed_dim == EMBED_DIM

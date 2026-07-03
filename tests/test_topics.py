@@ -24,6 +24,22 @@ def test_hint_vocab_integrity():
         assert set(h.get("entities", [])) <= ev, f"{lens['id']} entities drift"
 
 
+def test_asset_hint_vocab_exists_in_feeds():
+    # 스펙(phase1 §7·§8) 드리프트 가드의 나머지 절반: 렌즈의 asset_hint 어휘는 feeds.yaml이
+    # 실제 발행하는 어휘여야 한다 — 아무 피드도 안 내는 힌트는 영원히 매칭 불가(죽은 어휘)로
+    # 조용히 썩는다(과거 kr_fx). 역방향(피드 어휘 전부가 렌즈에 매핑)은 요구하지 않는다.
+    from newsstore.collect.feeds import load_feeds
+    feed_hints = set()
+    for f in load_feeds("config/feeds.yaml"):
+        for h in (f.asset_hint or "").split(","):
+            if h.strip():
+                feed_hints.add(h.strip())
+    t = topics.load_topics()
+    lens_hints = {h for l in t["lenses"] for h in l.get("hints", {}).get("asset_hint", [])}
+    dead = lens_hints - feed_hints
+    assert not dead, f"topics.yaml 렌즈 asset_hint 중 feeds.yaml이 발행하지 않는 어휘: {sorted(dead)}"
+
+
 def test_watch_and_sector_count():
     t = topics.load_topics()
     watch = [l for l in t["lenses"] if l["type"] == "watch"]

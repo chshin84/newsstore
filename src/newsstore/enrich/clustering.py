@@ -276,9 +276,13 @@ class EventClusterer:
         emb = getattr(article, "embedding", None)
         if emb is not None:
             vec: Vector = [float(x) for x in emb]
-        else:                                           # 임베딩 입력=제목 기준(_embed_text와 일치)
-            text = (getattr(article, "title", "") or getattr(article, "body", "") or "")
-            out = self._embed([text])
+        else:
+            # 폴백 임베딩 입력도 정본 규칙(title+body — _embed_text→embedder.embed_text)로
+            # 도출한다. centroid_sum은 title+body 벡터의 합이라 규칙이 다르면 코사인이
+            # 체계적으로 어긋난다(#24 결정: title+body가 정본).
+            d = _Doc(str(getattr(article, "id", "")), getattr(article, "title", "") or "",
+                     getattr(article, "body", "") or "", (), None)
+            out = self._embed([_embed_text(d)])
             if not out or out[0] is None:               # 임베더 계약 위반 → 폭발(FAIL-LOUD)
                 raise ValueError("임베더가 빈/None 결과를 반환함")
             vec = [float(x) for x in out[0]]

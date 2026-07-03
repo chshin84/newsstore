@@ -17,12 +17,13 @@ def validate_tags(raw: dict, taxonomy: dict) -> dict:
     비파괴: 저장 전 필터링일 뿐 원본 raw 응답은 호출자가 로깅. 결정론으로 잡히는 것은
     LLM 리뷰 콜 없이 코드로(비용↓). 환각 grounding 등 결정론 불가한 건만 추후 LLM 리뷰.
     """
-    raw = raw or {}
+    # 실 LLM은 비-dict나 {"entities": null}을 줄 수 있다 — .get 기본값은 null을 못 막는다.
+    raw = raw if isinstance(raw, dict) else {}
     ent_vocab = set(taxonomy["entities"])
     top_vocab = set(taxonomy["topics"])
-    entities = [e for e in raw.get("entities", []) if e in ent_vocab]
-    topics = [t for t in raw.get("topics", []) if t in top_vocab]
-    tickers = [t for t in raw.get("tickers", [])
+    entities = [e for e in (raw.get("entities") or []) if e in ent_vocab]
+    topics = [t for t in (raw.get("topics") or []) if t in top_vocab]
+    tickers = [t for t in (raw.get("tickers") or [])
                if isinstance(t, str) and _TICKER_RE.match(t)]
     return {"tickers": tickers[:MAX_TICKERS], "entities": entities, "topics": topics}
 
@@ -54,7 +55,9 @@ def tag_items(items: list, client: LLMClient, taxonomy: dict, *, batch: int = 10
         except LLMError as e:        # 한 배치 실패가 전체를 죽이지 않게 fail-soft(빈 태그)
             log.warning("tagging batch failed, continuing with empty tags: %s", e)
             resp = {}
-        results = (resp or {}).get("results", [])
+        results = resp.get("results") if isinstance(resp, dict) else None
+        if not isinstance(results, list):    # {"results": null}·top-level 배열 → 빈 태그(fail-soft)
+            results = []
         for j in range(len(chunk)):
             raw = results[j] if j < len(results) else {}
             out.append(validate_tags(raw, taxonomy))

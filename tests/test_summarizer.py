@@ -11,6 +11,19 @@ from newsstore.enrich.milestone import MILESTONE_PRIOR_MAX  # noqa: F401
 T0 = datetime(2026, 6, 13, 7, 0, tzinfo=timezone.utc)
 
 
+def test_event_time_sanity_window_symmetric():
+    # timedelta.days는 음수에서 내림(floor) — 과거 14일+1초는 days=-15로 드롭되는데
+    # 미래 14일+1초는 days=14로 통과하던 비대칭 회귀 가드.
+    from newsstore.enrich.summarizer import _parse_event_time, EVENT_SANITY_DAYS
+    ref = datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc)
+    past_out = ref - timedelta(days=EVENT_SANITY_DAYS, seconds=1)
+    future_out = ref + timedelta(days=EVENT_SANITY_DAYS, seconds=1)
+    at_edge = ref - timedelta(days=EVENT_SANITY_DAYS)
+    assert _parse_event_time(past_out.isoformat(), ref) is None
+    assert _parse_event_time(future_out.isoformat(), ref) is None
+    assert _parse_event_time(at_edge.isoformat(), ref) == at_edge
+
+
 def _members(n):
     return [{"title": f"title{i}", "body": "x" * 300, "source": f"S{i}",
              "published_at": T0 + timedelta(hours=i)} for i in range(n)]

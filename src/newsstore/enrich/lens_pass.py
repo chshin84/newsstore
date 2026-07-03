@@ -22,11 +22,11 @@ def run_lens_pass(store, *, now, cutoff, client=None) -> int:
             language=("ko" if langs and langs.count("ko") >= len(langs) / 2 else "en"),
             keyword_text=sig["keyword_text"])
         if client is not None:
+            # 장애·형태위반은 stage2가 prior로 폴백한다. 빈 []는 LLM의 정상 무선택
+            # 판정이므로 prior로 덮지 않는다(덮으면 Stage1 오탐 제거 목적이 무력화).
             lenses = classify_stage2(
                 t, client, story_text=r.get("title", "") + "\n" + sig["keyword_text"][:1200],
                 candidates=prior)
-            if not lenses:                       # LLM 빈 결과 → prior 유지(보수)
-                lenses = prior
         else:
             lenses = prior
         store.save_story_lenses(r["id"], lenses, count=r.get("count"))

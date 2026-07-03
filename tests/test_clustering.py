@@ -46,6 +46,24 @@ def test_assign_gray_band_llm_error_failsoft_new():
     assert c.assign(_art("a", [0.83, 1.0]), [s]) is None
 
 
+def test_assign_fallback_embed_input_is_title_plus_body():
+    # 폴백 임베딩 입력도 정본 규칙(title+body[:500] — embedder.embed_text)을 따라야 한다.
+    # 스토리 centroid는 title+body 벡터의 합이라 규칙이 다르면(과거 title-only 잔재)
+    # 코사인이 체계적으로 어긋나 0.62/0.80 임계 판정이 왜곡된다.
+    from newsstore.enrich.embedder import BODY_CAP
+    captured = {}
+
+    def embed(texts):
+        captured["text"] = texts[0]
+        return [[1.0, 0.0]]
+
+    c = EventClusterer(embed=embed)
+    art = Article(id="a", title="Title", body="B" * (BODY_CAP + 100),
+                  source="S", published_at="2026-06-12T00:00:00Z")
+    c.assign(art, [])
+    assert captured["text"] == "Title " + "B" * BODY_CAP
+
+
 def test_cluster_articles_merges_same_event():
     llm = _LLM()
     out = cluster_articles([_art("a", [1.0, 0.0]), _art("b", [1.0, 0.0])],

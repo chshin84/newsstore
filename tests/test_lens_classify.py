@@ -65,6 +65,49 @@ def test_stage2_failsoft_to_candidates():
     assert classify_stage2(T, llm, story_text="x", candidates=["kr_rates"]) == ["kr_rates"]
 
 
+def test_stage2_null_lenses_falls_back_to_prior():
+    # {"lenses": null}: .get(key, [])는 null을 그대로 주므로 순회 시 TypeError로
+    # 렌즈 패스 전체가 죽던 회귀 — 형태 위반은 prior 폴백(fail-soft)
+    from newsstore.enrich.lens_classify import classify_stage2
+    llm = _FakeLLM(None)
+    assert classify_stage2(T, llm, story_text="x", candidates=["kr_rates"]) == ["kr_rates"]
+
+
+def test_stage2_non_dict_response_falls_back_to_prior():
+    from newsstore.enrich.lens_classify import classify_stage2
+
+    class _Arr:                              # top-level JSON 배열(형태 위반)
+        def generate_json(self, prompt, *, timeout=30.0):
+            return ["kr_rates"]
+    assert classify_stage2(T, _Arr(), story_text="x", candidates=["crypto"]) == ["crypto"]
+
+
+def test_stage2_valid_empty_is_respected():
+    # LLM의 정상 무선택 판정("아무 렌즈도 안 맞음")은 prior로 덮지 않는다(오탐 제거 목적)
+    from newsstore.enrich.lens_classify import classify_stage2
+    llm = _FakeLLM([])
+    assert classify_stage2(T, llm, story_text="x", candidates=["kr_rates"]) == []
+
+
+def test_region_us_stock_hint_beats_ko_language():
+    # us_stock은 topics.yaml us_equity의 asset_hint — 손복제 _US_HINT에서 빠졌던 회귀.
+    # 한국어 기사여도 asset_hint가 미국이면 us_equity가 남아야 한다(infomax_overseas 사례).
+    out = _c(topics=["equities"], asset_hints=["us_stock"], language="ko")
+    assert "us_equity" in out and "kr_equity" not in out
+
+
+def test_region_kr_stock_hint_recognized():
+    # kr_stock도 topics.yaml kr_equity asset_hint — 손복제 _KR_HINT에서 빠졌던 회귀
+    out = _c(topics=["equities"], asset_hints=["kr_stock"], language="en")
+    assert "kr_equity" in out and "us_equity" not in out
+
+
+def test_keyword_match_is_case_insensitive():
+    # topics.yaml 키워드는 소문자(gold 등) — 제목 첫머리 대문자 표기를 놓치면 안 된다
+    out = _c(keyword_text="Gold Hits Record High")
+    assert "precious_metals" in out
+
+
 def test_stage2_propagates_non_llm_bug():
     import pytest
     from newsstore.enrich.lens_classify import classify_stage2

@@ -71,3 +71,21 @@ def test_tag_items_failsoft_on_llmerror():
     # 한 배치 태깅이 LLMError(malformed JSON 등)여도 전체를 죽이지 말고 빈 태그로 진행
     out = tag_items([_item("a"), _item("b")], _RaisingClient(), TAX)
     assert out == [{"tickers": [], "entities": [], "topics": []}] * 2
+
+
+def test_validate_tags_null_values_guarded():
+    # 실 LLM은 키를 null 값으로 줄 수 있다({"entities": null}) — .get 기본값이 안 먹는다
+    out = validate_tags({"tickers": None, "entities": None, "topics": None}, TAX)
+    assert out == {"tickers": [], "entities": [], "topics": []}
+
+
+def test_validate_tags_non_dict_guarded():
+    assert validate_tags(["not", "a", "dict"], TAX) == {"tickers": [], "entities": [], "topics": []}
+
+
+def test_tag_items_null_results_failsoft():
+    # {"results": null}·top-level 배열 응답도 배치를 죽이지 않고 빈 태그로 진행
+    out = tag_items([_item("a")], _FakeClient({"results": None}), TAX)
+    assert out == [{"tickers": [], "entities": [], "topics": []}]
+    out2 = tag_items([_item("a")], _FakeClient([{"tickers": []}]), TAX)
+    assert out2 == [{"tickers": [], "entities": [], "topics": []}]

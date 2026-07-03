@@ -5,7 +5,7 @@ stories 문서에 merge 저장한다. time·latest는 LLM이 아니라 코드가
 """
 from __future__ import annotations
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..contracts.ports import LLMClient
 from .gemini import LLMError
@@ -28,7 +28,8 @@ def _parse_event_time(raw, ref):
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-    if isinstance(ref, datetime) and abs((dt - ref).days) > EVENT_SANITY_DAYS:
+    # timedelta 비교로 대칭 창(±14일) — .days는 음수에서 내림(floor)이라 과거/미래가 비대칭이었다
+    if isinstance(ref, datetime) and abs(dt - ref) > timedelta(days=EVENT_SANITY_DAYS):
         return None                 # ref 비-datetime(이상값)이면 sanity 생략·dt 보존(강건성)
     return dt
 
