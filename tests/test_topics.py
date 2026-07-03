@@ -54,3 +54,26 @@ def test_lens_labels():
     assert labels["us_equity"] == "미국 주식"          # UI 라벨(SSOT=label.ko)
     assert labels["watch_nvidia"] == "엔비디아"
     assert set(labels) == topics.valid_ids(t)          # 모든 렌즈 포함(누락 없음)
+
+
+def test_report_lenses_derived_excludes_watch_and_sector():
+    # 리포트 대상 = watch·sector 외 렌즈 전부(스펙 §3.5 — 손 목록 금지, 도출이 SSOT)
+    t = topics.load_topics()
+    ids = topics.report_lens_ids(t)
+    assert "kr_equity" in ids and "fx" in ids and "risk" in ids
+    assert not any(i.startswith("watch_") for i in ids)
+    assert not any(i.startswith("sector_") for i in ids)
+    # 불변식: 대상 렌즈는 전부 report_group을 가진다(fail-loud — 누락 시 여기서 터짐)
+    for lens in t["lenses"]:
+        if lens["id"] in ids:
+            assert lens.get("report_group"), f"{lens['id']}: report_group 누락"
+
+
+def test_report_groups_ordered_mapping():
+    # 그룹 → 렌즈 목록(yaml 등장 순서 보존). UI 앵커 도출용.
+    t = topics.load_topics()
+    groups = topics.report_groups(t)
+    assert groups["주식"] == ["kr_equity", "us_equity"]
+    assert set(groups["원자재"]) == {"oil_energy", "precious_metals", "commodities"}
+    flat = [lid for lids in groups.values() for lid in lids]
+    assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 전 대상 렌즈가 정확히 1그룹
