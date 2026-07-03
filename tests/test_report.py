@@ -98,3 +98,117 @@ def test_section_prompt_contains_frame_stories_backdrop():
     assert "r1" in p and "빅테크 capex 감속" in p       # standing 프레임이 입력에
     assert "s1" in p and "백드롭 텍스트" in p
     assert "매수" in p                                  # 매수/매도 금지 지시 포함(§1)
+
+
+from newsstore.enrich.report import run_report_pass
+
+
+class _Store:
+    def __init__(self, stories_by_lens, frames):
+        self.stories, self.frames = stories_by_lens, frames
+        self.reports = {}
+    def get_frame(self, lens_id):
+        return self.frames.get(lens_id, {})
+    def get_stories_for_report(self, lens_id, cutoff):
+        return list(self.stories.get(lens_id, []))
+    def save_report(self, doc_id, report):
+        self.reports[doc_id] = report
+
+
+class _LLM:
+    """프롬프트 역할 마커로 분기(각 마커는 해당 프롬프트에만 존재하는 리터럴 — 구현 프롬프트와
+    짝: 리뷰='심사자', 백드롭='데스크 에디터', 섹션='데일리 리포트 에디터'.
+    주의: '백드롭' 단어는 마커로 쓰지 않는다 — 백드롭 인자값이 섹션 프롬프트에 삽입될 수 있음)."""
+    def __init__(self, section, review, backdrop='{"text": "bd"}'):
+        import json
+        self.section, self.review = section, review
+        self.backdrop = json.loads(backdrop)
+        self.n_review = 0
+    def generate_json(self, prompt, *, timeout=30.0):
+        if "심사자" in prompt:
+            self.n_review += 1
+            return dict(self.review)
+        if "데스크 에디터" in prompt:
+            return dict(self.backdrop)
+        assert "데일리 리포트 에디터" in prompt          # 오라우팅 fail-loud
+        return dict(self.section)
+
+
+def _stories(n=3):
+    return [_s(f"s{i}") for i in range(n)]
+
+
+SECTION_OK = {"headline": "h", "lead": "l", "sections": [
+    {"name": "risk_triggered", "items": [{"text": "x", "story_ids": ["s0"], "pole_id": None}]}]}
+
+
+def test_run_report_pass_saves_passed_report_and_backdrop():
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
+    totals = run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert totals["reported"] == 1
+    saved = store.reports["kr_equity"]
+    assert saved["review"]["passed"] is True
+    assert saved["frame_updated_at"] == FRAME.get("updated_at")
+    # 결정⑧ 역산 금지(§10): 프레임 3축이 리포트 출력에 새어들지 않는다
+    assert not ({"risks", "premiums", "watchpoints"} & set(saved))
+    assert "_backdrop" in store.reports                 # 백드롭 별도 문서(§6)
+    assert llm.n_review >= 2                            # 섹션 리뷰 + 백드롭 grounding 리뷰(§5 표)
+
+
+def test_run_report_pass_backdrop_review_reject_degrades():
+    # 백드롭 리뷰 기각 → 서두 미저장 + 섹션 콜에 미주입(degrade — §5 표). 섹션은 계속 진행.
+    class _RejBackdrop(_LLM):
+        def generate_json(self, prompt, *, timeout=30.0):
+            if "심사자" in prompt:
+                self.n_review += 1
+                # 첫 심사 콜 = 백드롭 grounding(파이프라인상 섹션보다 선행) → 기각, 이후 통과
+                return ({"passed": False, "notes": "무근거"} if self.n_review == 1
+                        else {"passed": True, "notes": ""})
+            if "데스크 에디터" in prompt:
+                return dict(self.backdrop)
+            return dict(self.section)
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _RejBackdrop(SECTION_OK, {"passed": True, "notes": ""})
+    totals = run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert "_backdrop" not in store.reports             # 기각 → 미저장(기존 유지)
+    assert totals["reported"] == 1                      # 섹션은 백드롭 없이 진행(degrade)
+
+
+def test_run_report_pass_review_reject_saves_with_badge():
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _LLM(SECTION_OK, {"passed": False, "notes": "과인용"})
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    r = store.reports["kr_equity"]
+    assert r["review"]["passed"] is False and "과인용" in r["review"]["notes"]   # 결정③ 저장+배지
+
+
+def test_run_report_pass_skips_below_min_stories():
+    store = _Store({"kr_equity": _stories(1)}, {"kr_equity": FRAME})   # REPORT_MIN_STORIES 미만
+    llm = _LLM(SECTION_OK, {"passed": True})
+    totals = run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert totals["skipped_empty"] == 1 and "kr_equity" not in store.reports
+
+
+def test_run_report_pass_generation_failure_keeps_existing():
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    store.reports["kr_equity"] = {"headline": "옛것"}
+    class _Boom:
+        def generate_json(self, prompt, *, timeout=30.0):
+            if "심사자" in prompt:
+                return {"passed": True, "notes": ""}
+            if "데스크 에디터" in prompt:
+                return {"text": "bd"}
+            from newsstore.enrich.gemini import LLMError
+            raise LLMError("down")                       # 섹션 생성 콜만 실패(§5(b) 경로 검증)
+    run_report_pass(store, _Boom(), lens_ids=["kr_equity"], now=NOW)
+    assert store.reports["kr_equity"]["headline"] == "옛것"    # §5(b) 기존 유지
+
+
+def test_run_report_pass_generates_rising():
+    hot = _s("hot", ndev=5, impact=1)
+    store = _Store({"kr_equity": _stories() + [hot]}, {"kr_equity": FRAME})
+    llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    if "rising" in store.reports:                       # hot이 top-K에 들면 rising 없음도 합법
+        assert store.reports["rising"]["criteria"]

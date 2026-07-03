@@ -150,3 +150,100 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
         '{"name":"risk_triggered","items":[{"text":"...","story_ids":["..."],"pole_id":"..."}]},'
         '{"name":"premium_triggered","items":[...]},{"name":"not_triggered","items":[...]},'
         '{"name":"watchpoints","items":[...]}]}')
+
+
+MAX_BACKDROP = 1200
+
+
+def build_review_prompt(report: dict, stories: list[dict]) -> str:
+    import json as _json
+    lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
+             for s in stories]
+    return (
+        "당신은 리포트 심사자다(grounding+fit). 기각 기준: (1) 항목 주장이 인용 story와 "
+        "실제로 무관(과인용), (2) 매수/매도/비중 조언 포함, (3) 출처에 없는 수치 단정.\n"
+        f"리포트:\n{_json.dumps(report, ensure_ascii=False)}\n스토리:\n" + "\n".join(lines) + "\n"
+        '아래 JSON만 출력: {"passed": true|false, "notes": "기각 사유 또는 빈 문자열"}')
+
+
+def _review(client, report: dict, stories: list[dict]) -> dict:
+    """리뷰 콜 — 실패는 passed=false(통과 위장 금지, §5 표)."""
+    try:
+        v = client.generate_json(build_review_prompt(report, stories), timeout=60.0)
+    except LLMError as e:
+        return {"passed": False, "notes": f"리뷰 불가: {e}"}
+    if not isinstance(v, dict) or not isinstance(v.get("passed"), bool):
+        return {"passed": False, "notes": "리뷰 응답 형식 위반"}
+    return {"passed": v["passed"], "notes": str(v.get("notes") or "")}
+
+
+def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> dict:
+    """§4 파이프라인: 백드롭 → 섹션(렌즈별) → 급부상 → 저장. 프레임은 입력(frames.py 선행)."""
+    cutoff = now - (window or timedelta(hours=72))
+    totals = {"reported": 0, "skipped_empty": 0, "failed": 0}
+
+    per_lens: dict[str, list[dict]] = {l: store.get_stories_for_report(l, cutoff=cutoff)
+                                       for l in lens_ids}
+    # 백드롭(생성 1콜 + grounding 리뷰 1콜 — §5 표: 16개 섹션 공통 입력이라 오염 전파 지점).
+    # 생성·검증·리뷰 어느 것이든 실패 → 서두 생략 + 섹션 미주입(degrade), _backdrop 미저장(기존 유지).
+    backdrop = ""
+    all_top3 = [s for ss in per_lens.values() for s in ss[:3]]
+    excerpts = [f'{s.get("title", "")}' for s in all_top3]
+    if excerpts:
+        try:
+            raw = client.generate_json(build_backdrop_prompt(excerpts), timeout=60.0)
+            text = (raw.get("text") or "").strip() if isinstance(raw, dict) else ""
+            if text and len(text) <= MAX_BACKDROP:       # 결정론: 비어있지 않음·길이 상한
+                verdict = _review(client, {"text": text}, all_top3)
+                if verdict["passed"]:
+                    backdrop = text
+                    store.save_report("_backdrop", {"text": backdrop, "generated_at": now,
+                                                    "review": verdict})
+                else:
+                    log.warning("backdrop 리뷰 기각(%s) — 서두 생략", verdict["notes"])
+        except LLMError as e:
+            log.warning("backdrop 실패 — 서두 생략: %s", e)
+
+    top_k_ids: set[str] = set()
+    selected: dict[str, list[dict]] = {}
+    for lens_id in lens_ids:
+        stories = per_lens[lens_id]
+        if len(stories) < REPORT_MIN_STORIES:
+            totals["skipped_empty"] += 1
+            continue
+        top = select_top_k(stories, now, stratify=lens_id.endswith("_equity"))
+        selected[lens_id] = top
+        top_k_ids |= {s["id"] for s in top}
+
+    def _one(doc_id, lens_id, frame, top, criteria=None):
+        try:
+            raw = client.generate_json(build_section_prompt(lens_id, frame, top, backdrop),
+                                       timeout=90.0)
+        except LLMError as e:
+            log.warning("report %s: 생성 실패 — 기존 유지(§5b): %s", doc_id, e)
+            totals["failed"] += 1
+            return
+        v = validate_report(raw, frame=frame, input_story_ids={s["id"] for s in top})
+        if v is None:
+            log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
+            totals["failed"] += 1
+            return
+        review = _review(client, v, top)                # 기각이어도 저장+배지(결정③)
+        doc = {**v, "topic": lens_id, "generated_at": now,
+               "frame_updated_at": frame.get("updated_at"), "review": review}
+        if criteria:
+            doc["criteria"] = criteria
+        store.save_report(doc_id, doc)
+        totals["reported"] += 1
+
+    for lens_id, top in selected.items():
+        _one(lens_id, lens_id, store.get_frame(lens_id), top)
+
+    # 급부상 — 전 렌즈 top-K 확정 후(§3.5 순서 의존)
+    all_stories = {s["id"]: s for ss in per_lens.values() for s in ss}
+    rising = select_rising(list(all_stories.values()), top_k_ids=top_k_ids, now=now)
+    if len(rising) >= REPORT_MIN_STORIES:
+        _one("rising", "rising", {}, rising,
+             criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")
+    log.info("report pass: %s", totals)
+    return totals
