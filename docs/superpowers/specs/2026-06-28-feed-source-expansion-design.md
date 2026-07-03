@@ -106,7 +106,7 @@ URL `https://www.mk.co.kr/rss/{code}/`. 전부 `tier: wire`. 스킵: 헤드라�
 
 > 귀금속·유가·에너지 렌즈 공급. Baker Hughes는 주간 데이터라 RSS 없을 수 있음 → 미충족 시 노트(§4.9).
 
-**(D) 기업 공시 (tier=primary — 워치리스트 한정)**
+**(D) 기업 공시 (tier=primary — 워치리스트 한정) — ⚠️ 다음 버전으로 이월(§7, #31). 아래는 재개 시 참고용 카탈로그이며 이번 범위의 등록 대상이 아니다.**
 | 소스 | 후보 URL | asset_hint |
 |---|---|---|
 | SEC EDGAR(구조화 공시) | `sec.gov/...` 회사별/유형별 RSS(10분 갱신) | us_filing |
@@ -138,7 +138,7 @@ URL `https://www.mk.co.kr/rss/{code}/`. 전부 `tier: wire`. 스킵: 헤드라�
 | 기재부·금융위 보도 | `moef.go.kr`·`fsc.go.kr`(RSS 프로빙) | kr_policy | primary |
 | KDI·KIEP·KCMI·KIF·KIET | 각 기관(RSS 프로빙) | research | analysis |
 
-> 한국 기관은 RSS를 전면에 안 내세움 → 프로빙으로 경로 확인, **미제공 시 제외**(없는 걸 있는 척 안 함). 거래소 KIND·DART는 (D) 공시로.
+> 한국 기관은 RSS를 전면에 안 내세움 → 프로빙으로 경로 확인, **미제공 시 제외**(없는 걸 있는 척 안 함). 거래소 KIND·DART는 (D) 공시로(§7 이월 — 이번 범위 아님).
 
 ### 4.7 후속(이 스펙 밖)
 Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도 후속.
@@ -148,7 +148,7 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 
 ### 4.9 중요 노트 / 판단 (전문가 관점 — 자기 빈틈 인식)
 - **RSS로 못 닫는 빈틈(정직히)**: 엘리트 소스 상당수가 **이메일·X(트위터) 전용** — Apollo *Daily Spark*(Torsten Slok)·Fed whisperer(Nick Timiraos) 등. RSS 없음 → **본 스펙 미충족, 미래 ingest(email/X 브리지)로 후속**. 빈칸을 채운 척하지 않는다.
-- **공시(EDGAR/DART)**: 고신호지만 firehose는 노이즈·볼륨 폭발 → **워치 종목/유형 스코프만**. 구조화 데이터 파싱은 후속 세션.
+- **공시(EDGAR/DART)**: 고신호지만 firehose는 노이즈·볼륨 폭발 → 재개하더라도 **워치 종목/유형 스코프만**(방침). 등록 자체는 **다음 버전으로 이월**(§7, 사용자 결정 2026-07-03).
 - **데이터 릴리스 성격**: 캘린더성(주간/월간), body 얇음 → `headline`/`calendar` mode, 정기 중복 잦음 → dedup.
 - **통합 피드 중복**: BIS cbspeeches·Google News 경유 등 **aggregator는 개별 소스와 중복** → 수집기 dedup(기존 link 해시)에 의존, 동일 사건 다중 등장은 후속 세션 클러스터가 처리.
 - **주요 페이월 와이어(WSJ·FT)**: 공개 RSS의 **헤드라인/요약만 수용**(전문은 페이월) — **스크래핑 금지**(§9.1.6 정당성). WSJ RSS(`feeds.a.dj.com/rss/...`)는 안정적, FT(`ft.com/...?format=rss`)는 제한적 → 프로빙으로 가지치기. tier=wire(오피니언=analysis).
@@ -165,7 +165,7 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 - `tier`의 *소비*(스코어링 prior·랭킹) — 본 스펙은 필드 제공까지. 소비는 후속 세션.
 - Reuters 섹션 확장.
 - **이메일·X(트위터) 전용 엘리트 소스 ingest**(Apollo Daily Spark·Fed whisperer 등) — RSS 아님, 별도 ingest 메커니즘 후속(§4.9).
-- **공시 firehose·구조화 파싱**(EDGAR/DART 전체) — 본 스펙은 워치-스코프 등록까지, 대량 구조화 처리는 후속.
+- **공시(EDGAR/DART) 전체** — 워치-스코프 등록 포함 **다음 버전으로 이월**(사용자 결정 2026-07-03, #31 — 원안 "워치-스코프 등록까지 본 범위"에서 축소. 후속 진입점: GitHub #37). 재개 시 검증은 **별도 설계 필요** — 본 스펙 프로빙 스크립트는 RSS 전용이라 EDGAR 회사별 RSS엔 부분 적용(워치리스트 CIK 열거 별도), 인증키 기반 OpenDART API엔 부적용이다.
 
 ## 8. 구현 메모 (plan화 시)
 - Task 순서: `tier` 필드(모델·TDD) → 소스별 yaml 추가(인포맥스/한경/매경/Bloomberg/Benzinga/리서치) → 라이브 프로빙·가지치기 → (사용자 게이트) 배포.
@@ -179,7 +179,7 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 1. **신호 밀도** — body 있는(summary/full) > headline-only. (headline도 유지하되 tier로 표시.)
 2. **1차성** — 공식·1차(중앙은행·공시·데이터) 우선. 파생 aggregator(Google News)는 직접 RSS가 없을 때만.
 3. **비중복** — 다른 피드를 단순 재방출하는 것 제외(clickTop·allArticle·인기기사). 정확 중복은 link 해시 dedup, 근사 중복은 후속 클러스터.
-4. **빈틈 메움** — §4.8 체크리스트 빈틈(CB발언·에너지·공시)을 메우는 피드를 또 다른 일반 wire보다 우선.
+4. **빈틈 메움** — §4.8 체크리스트 빈틈(CB발언·에너지)을 메우는 피드를 또 다른 일반 wire보다 우선. (공시는 §7 이월로 이번 빈틈 목록에서 제외.)
 5. **케이던스 적합** — poll_minutes를 소스 속도로(§9.2).
 6. **정당성** — 공개 RSS만, 페이월 우회·스크래핑 금지(공식 피드 또는 Google News 경유).
 7. **생존성** — 라이브 프로빙(HTTP 200 + 파싱 + entries>0) 통과만. 죽은/빈 피드는 사유 주석 후 제외(비파괴).
@@ -192,3 +192,5 @@ Reuters 추가 섹션 카탈로그(현재 Google News 경유 1피드) — 별도
 - **tz_offset**: naive-local 피드만(infomax KST=9). 그 외 생략.
 - **asset_hint**: 렌즈 라우팅 키, 멀티값은 콤마.
 
+
+<!-- spec-review: passed -->
