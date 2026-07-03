@@ -86,3 +86,4 @@
 - **'last_seen 상위 N 스캔창'은 starvation을 낳는다** — 버스트로 창 밖에 밀린 대상은 순위 동결로 영구 미처리. → 대상 선정은 **전수 스캔+incremental 카운터**(이 레포의 lensing/scoring/article 패턴)로 하고, limit은 **콜 상한**으로만(오래 굶은 것부터 소진).
 - **requirements.lock을 pip `-c`(constraints)로 쓰면 전이 의존성이 비고정** — constraints는 설치되는 것만 핀하고 목록에 없는 전이는 자유 해석. → 재현성이 목적이면 **전체 `pip freeze`로 재생성**(도커 안: `pip install -e '.[extras]' && pip freeze --exclude-editable`).
 - **compose 서비스가 `image:`만 참조하고 아무도 빌드하지 않으면 절차 문서가 거짓이 된다** — `build:` 블록을 함께 배선해 머리말 절차만으로 실행 가능하게.
+- **fake store가 실계약 필드를 빼먹어 datetime 직렬화 크래셔가 테스트를 통과** — 리포트 탭 구현에서 fake가 `updated_at` 없는 프레임만 줘서 `json.dumps(frame)`의 TypeError(프로덕션 첫 런 잡 전체 사망)를 287개 테스트가 못 잡음(최종 리뷰가 Docker 재현으로 발견). → 다음엔 **저장 계약이 심는 모든 필드를 fake에도 심고**, 프롬프트/직렬화 경로는 **에뮬레이터 왕복 실물로 1개 이상** 테스트한다("mock이 프로덕션 계약을 약화" gotcha의 직렬화 변형).
