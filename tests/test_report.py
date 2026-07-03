@@ -51,3 +51,50 @@ def test_select_rising_density_and_exclusion():
 
 def test_min_stories_constant():
     assert REPORT_MIN_STORIES >= 2                      # 사이트 표시 기준(count>=2)과 동일 발상
+
+
+from newsstore.enrich.report import validate_report, build_section_prompt, build_backdrop_prompt
+
+FRAME = {"risks": [{"id": "r1", "text": "빅테크 capex 감속"}],
+         "premiums": [{"id": "p1", "text": "HBM 수요"}],
+         "watchpoints": [{"id": "w1", "text": "메타 실적"}]}
+GOOD = {"headline": "반도체, capex 우려 속 수요 견조", "lead": "핵심 요약.",
+        "sections": [
+            {"name": "risk_triggered", "items": [
+                {"text": "MS가 capex 재검토 시사", "story_ids": ["s1"], "pole_id": "r1"}]},
+            {"name": "premium_triggered", "items": []},
+            {"name": "not_triggered", "items": [{"text": "HBM 수요", "story_ids": [], "pole_id": "p1"}]},
+            {"name": "watchpoints", "items": [{"text": "메타 실적", "story_ids": [], "pole_id": "w1"}]}]}
+
+
+def test_validate_report_accepts_good_and_drops_hallucinated():
+    bad_items = {**GOOD, "sections": [
+        {"name": "risk_triggered", "items": [
+            {"text": "실재", "story_ids": ["s1"], "pole_id": "r1"},
+            {"text": "환각 스토리", "story_ids": ["ghost"], "pole_id": "r1"},   # story 환각 → 드롭
+            {"text": "환각 극", "story_ids": ["s1"], "pole_id": "r99"}]}]}      # 극 환각 → 드롭
+    v = validate_report(bad_items, frame=FRAME, input_story_ids={"s1"})
+    items = v["sections"][0]["items"]
+    assert [i["text"] for i in items] == ["실재"]
+
+
+def test_validate_report_trigger_requires_citation():
+    # 트리거 주장은 story_ids 인용 필수(B) — 빈 인용의 *_triggered 항목은 드롭
+    r = {**GOOD, "sections": [{"name": "risk_triggered",
+                               "items": [{"text": "인용 없음", "story_ids": [], "pole_id": "r1"}]}]}
+    v = validate_report(r, frame=FRAME, input_story_ids={"s1"})
+    assert v["sections"][0]["items"] == []
+
+
+def test_validate_report_rejects_missing_required():
+    assert validate_report(None, frame=FRAME, input_story_ids=set()) is None
+    assert validate_report({"headline": "", "lead": "x", "sections": []},
+                           frame=FRAME, input_story_ids=set()) is None
+
+
+def test_section_prompt_contains_frame_stories_backdrop():
+    p = build_section_prompt("kr_equity", FRAME,
+                             [{"id": "s1", "title": "제목", "summary": "요약"}], "백드롭 텍스트")
+    assert "r1" in p and "빅테크 capex 감속" in p       # standing 프레임이 입력에
+    assert "s1" in p and "백드롭 텍스트" in p
+    assert "매수" in p                                  # 매수/매도 금지 지시 포함(§1)

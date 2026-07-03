@@ -75,3 +75,78 @@ def select_rising(stories: list[dict], *, top_k_ids: set[str], now) -> list[dict
     cands = [(d, s) for d, s in cands if d > 0]
     cands.sort(key=lambda t: (-t[0], t[1].get("id", "")))
     return [s for _, s in cands[:RISING_MAX]]
+
+
+MAX_HEADLINE = 100
+MAX_LEAD = 300
+MAX_ITEM_TEXT = 240
+SECTION_NAMES = ("risk_triggered", "premium_triggered", "not_triggered", "watchpoints")
+_TRIGGER_SECTIONS = ("risk_triggered", "premium_triggered")
+
+
+def _frame_pole_ids(frame: dict) -> set[str]:
+    return {p["id"] for axis in ("risks", "premiums", "watchpoints")
+            for p in (frame.get(axis) or [])}
+
+
+def validate_report(raw, *, frame: dict, input_story_ids: set[str]) -> dict | None:
+    """결정론 검증(§5 표): 스키마·headline/lead 필수·인용 story_id 실재(환각 드롭)·
+    pole_id가 standing frame에 실재·트리거 항목은 인용 필수(B). 실패 → None."""
+    if not isinstance(raw, dict):
+        return None
+    headline = raw.get("headline")
+    lead = raw.get("lead")
+    if not (isinstance(headline, str) and headline.strip()
+            and isinstance(lead, str) and lead.strip()):
+        return None
+    pole_ids = _frame_pole_ids(frame)
+    sections_in = raw.get("sections")
+    if not isinstance(sections_in, list):
+        return None
+    sections = []
+    for sec in sections_in:
+        if not (isinstance(sec, dict) and sec.get("name") in SECTION_NAMES):
+            continue
+        items = []
+        for it in (sec.get("items") or []):
+            if not (isinstance(it, dict) and isinstance(it.get("text"), str)
+                    and it["text"].strip()):
+                continue
+            ids = [i for i in (it.get("story_ids") or [])
+                   if isinstance(i, str) and i in input_story_ids]   # 환각 story 드롭
+            pid = it.get("pole_id")
+            if pid is not None and pid not in pole_ids:
+                continue                                              # 환각 극 드롭
+            if sec["name"] in _TRIGGER_SECTIONS and not ids:
+                continue                                              # 트리거 = 인용 필수(B)
+            items.append({"text": it["text"].strip()[:MAX_ITEM_TEXT],
+                          "story_ids": ids, "pole_id": pid})
+        sections.append({"name": sec["name"], "items": items})
+    return {"headline": headline.strip()[:MAX_HEADLINE], "lead": lead.strip()[:MAX_LEAD],
+            "sections": sections}
+
+
+def build_backdrop_prompt(excerpts: list[str]) -> str:
+    return (
+        "당신은 매크로/교차자산 데스크 에디터다. 아래 오늘의 주요 스토리 발췌로 "
+        "채권·순환매·원자재·매크로 백드롭을 4~6문장으로 합성하라. 예측·매수/매도 조언 금지, "
+        "관측된 사실·내러티브만.\n" + "\n".join(excerpts[:40]) +
+        '\n아래 JSON만 출력: {"text": "..."}')
+
+
+def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str) -> str:
+    import json as _json
+    lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:200]}'
+             for s in stories]
+    return (
+        f"당신은 '{lens_id}' 자산군 데일리 리포트 에디터다. standing 프레임(주어진 것 — "
+        "새 프레임을 만들지 마라)에 오늘 스토리를 대조하라.\n"
+        f"프레임:\n{_json.dumps(frame, ensure_ascii=False)}\n"
+        f"매크로 참고 맥락: {backdrop or '(없음)'}\n"
+        "스토리(각 줄 맨 앞 [id]가 story_id):\n" + "\n".join(lines) + "\n"
+        "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용. "
+        "미발생(not_triggered)은 프레임 극 중 72h 트리거 없는 것. watchpoints는 관찰 지점 재확인.\n"
+        '아래 JSON만 출력: {"headline":"...","lead":"...","sections":['
+        '{"name":"risk_triggered","items":[{"text":"...","story_ids":["..."],"pole_id":"..."}]},'
+        '{"name":"premium_triggered","items":[...]},{"name":"not_triggered","items":[...]},'
+        '{"name":"watchpoints","items":[...]}]}')
