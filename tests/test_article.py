@@ -66,6 +66,17 @@ def test_build_input_prefers_summary_then_members():
     assert build_article_input({"summary": "", "developments": []}, []) == ""
 
 
+def test_build_input_member_fallback_takes_latest_not_oldest():
+    # get_story_members는 published_at asc — 상한(40)을 앞에서 자르면 '가장 오래된 40'이
+    # 되어 최신 전개가 통째로 빠진다('최신 전개 전면' 헤드라인 계약 회귀 가드).
+    from newsstore.enrich.article import ARTICLE_MAX_MEMBERS
+    members = [{"title": f"m{i}"} for i in range(ARTICLE_MAX_MEMBERS + 10)]  # asc: m0(가장 오래)…
+    out = build_article_input({"summary": "", "developments": []}, members)
+    lines = out.splitlines()
+    assert lines[0] == f"m{ARTICLE_MAX_MEMBERS + 9}"     # 최신 멤버가 전면
+    assert "m0" not in lines                             # 가장 오래된 멤버는 상한 밖
+
+
 # ── article_story (fail-soft + ref) ──
 class _FakeLLM:
     def __init__(self, resp):

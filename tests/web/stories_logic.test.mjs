@@ -11,8 +11,9 @@ const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "STORIES-LOGIC 마커가 index.html에 있어야 한다(드리프트 가드)");
 const block = html.slice(i, j);
 const { toMs, groupItemsByDevelopment, pickDisplayItems,
-        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains } =
-  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains };")();
+        storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains,
+        displayHead, displayLead } =
+  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains, displayHead, displayLead };")();
 
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
@@ -122,6 +123,20 @@ test("delta: ref 있으면 ▲▼, 없으면 null, 0이면 null", () => {
   assert.equal(deltaBadge(2, 2), null);
   assert.equal(deltaBadge(3, null), null);     // ref 없음 → 화살표 생략
   assert.equal(deltaBadge(null, 2), null);
+});
+test("delta: score_ref_at 신선도 게이트 — 24h 지난 stale ref는 화살표 생략", () => {
+  assert.equal(deltaBadge(3, 2, new Date(NOW - 25 * 3600000), NOW), null);          // stale
+  assert.deepEqual(deltaBadge(3, 2, new Date(NOW - 3600000), NOW), { dir: "up", n: 1 }); // fresh
+  assert.deepEqual(deltaBadge(3, 2), { dir: "up", n: 1 });     // refAt 미전달(레거시) → best-effort 유지
+});
+// --- displayHead/displayLead (계약 §stories 폴백 강등: headline→title, lead→summary) ---
+test("폴백 강등: headline→title, lead→summary", () => {
+  assert.equal(displayHead({ headline: "H", title: "T" }), "H");
+  assert.equal(displayHead({ title: "T" }), "T");              // article 패스 미실행 강등
+  assert.equal(displayHead({}), "");
+  assert.equal(displayLead({ lead: "L", summary: "S" }), "L");
+  assert.equal(displayLead({ summary: "S" }), "S");            // summary 폴백
+  assert.equal(displayLead(null), "");
 });
 // --- isNew ---
 test("isNew: first_seen이 REF_WINDOW 이내", () => {

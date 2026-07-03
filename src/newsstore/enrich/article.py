@@ -60,7 +60,9 @@ def build_article_input(story: dict, members: list | None) -> str:
         if isinstance(d, dict) and d.get("text"):
             parts.append(str(d["text"]))
     if not parts and members:
-        for m in members[:ARTICLE_MAX_MEMBERS]:
+        # 멤버 폴백은 최신순으로 — get_story_members는 published_at asc라 앞에서 자르면
+        # '가장 오래된 40'이 되어 최신 전개가 통째로 빠진다('최신 전개 전면' 헤드라인 계약 §스펙).
+        for m in list(reversed(members))[:ARTICLE_MAX_MEMBERS]:
             if m.get("title"):
                 parts.append(str(m["title"]))
     return "\n".join(parts)

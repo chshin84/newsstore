@@ -244,7 +244,9 @@
       }).join("");
     }
 
+    let loadSeq = 0;                       // 응답 레이스 가드: 늦게 도착한 이전 필터 응답 폐기
     async function load() {
+      const seq = ++loadSeq;
       statusEl.textContent = "불러오는 중…";
       const tag = tagSel.value, src = srcSel.value;
       const col = collection(db, "items");
@@ -257,11 +259,14 @@
         q = query(col, orderBy("published_at", "desc"), limit(80));
       try {
         const snap = await getDocs(q);
+        if (seq !== loadSeq) return;                         // 더 새 요청이 나감 → 낡은 응답 버림
         const rawItems = snap.docs.map(d => d.data());
         // 제목(정규화) 기준 중복 제거 — 같은 뉴스가 URL만 달라 여러 번 들어온 경우 한 건만
         const seen = new Set(); const items = [];
         for (const it of rawItems) {
           if (!keepInFeed(it)) continue;                     // 백엔드 kind=spam/digest 숨김(SSOT)
+          // 소스+태그 동시 선택: 쿼리는 소스만 걸고(복합 인덱스 회피) 태그는 클라이언트 필터
+          if (src !== "__all__" && tag !== "__all__" && !(it.tags || []).includes(tag)) continue;
           const k = decode(it.title).trim().toLowerCase().replace(/\s+/g, " ");
           if (k && seen.has(k)) continue;
           if (k) seen.add(k);
@@ -271,6 +276,7 @@
         render(items);
         statusEl.textContent = `${items.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
       } catch (e) {
+        if (seq !== loadSeq) return;
         if (/requires an index|currently building/i.test(e.message)) {
           statusEl.textContent = "인덱스 생성 중…";
           listEl.innerHTML = `<div class="empty">소스 필터용 인덱스를 만드는 중이에요 (최초 1회, 보통 1~3분).<br>잠시 후 자동으로 다시 불러옵니다…</div>`;
@@ -307,7 +313,7 @@
     let detailMode = "translated", detailSort = "report";   // 번역/원문 · 보도순/발생순 토글 상태
     let LENS_LABELS = {}, lensLabelsLoaded = false;          // meta/lenses(렌즈 id→ko 라벨), 스토리 탭 1회 로드
     const storyById = new Map();
-    const memberCache = new Map();         // story_id -> items[] (클릭당 1회 읽기, 캐시)
+    const memberCache = new Map();         // story_id -> {count, items} — count가 변하면(새 멤버) 무효화
 
     // === STORIES-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
     function toMs(t) {
@@ -369,12 +375,19 @@
       const ageH = (now != null && ms != null) ? Math.max(0, (now - ms) / 3600000) : 1e9;
       return impact * (1 / (1 + ageH / FRESH_TAU_H));     // impact × 신선도
     }
-    function deltaBadge(cur, ref) {
+    function deltaBadge(cur, ref, refAt, now) {
       if (cur == null || ref == null) return null;        // ref 없으면 화살표 생략(best-effort)
+      if (refAt != null && now != null) {                  // §스펙: ref 신선도 게이트 — 24h 지난
+        const ms = toMs(refAt);                            // stale ref로 '전일대비'를 주장하지 않는다
+        if (ms == null || (now - ms) > REF_WINDOW_MS) return null;
+      }
       const d = Number(cur) - Number(ref);
       if (!d) return null;
       return { dir: d > 0 ? "up" : "down", n: Math.abs(d) };
     }
+    // 렌더 폴백 강등 계약(firestore-contract §stories): headline→title, lead→summary
+    function displayHead(s) { return (s && (s.headline || s.title)) || ""; }
+    function displayLead(s) { return (s && (s.lead || s.summary)) || ""; }
     function isNew(firstSeen, now) {
       const ms = toMs(firstSeen);
       return ms != null && (now - ms) < REF_WINDOW_MS;
@@ -422,11 +435,11 @@
 
     async function ensureLensLabels() {
       if (lensLabelsLoaded) return;
-      lensLabelsLoaded = true;
       try {
         const snap = await getDoc(doc(db, "meta", "lenses"));
         if (snap.exists()) LENS_LABELS = snap.data() || {};
-      } catch (e) { /* fail-soft: 라벨 없으면 id 폴백 */ }
+        lensLabelsLoaded = true;           // 성공 시에만 — 실패가 세션 내내 id 폴백으로 고착되지 않게
+      } catch (e) { /* fail-soft: 이번 렌더는 id 폴백, 다음 로드에서 재시도 */ }
     }
     function lensChipsHtml(s, max) {                          // "기저 스토리"(렌즈) 라벨 칩
       const ids = s.lenses || [];
@@ -441,7 +454,7 @@
       const row = (label, val, ref, cls) => {
         if (val == null) return "";
         const dots = [0, 1, 2].map(i => dot(i < Number(val), cls)).join("");
-        const db = deltaBadge(val, ref);
+        const db = deltaBadge(val, ref, s.score_ref_at, Date.now());   // stale ref 화살표 생략(신선도 게이트)
         const badge = db ? `<span class="delta ${db.dir}">${db.dir === "up" ? "▲" : "▼"}${db.n}</span>` : "";
         return `<span class="mtr"><b style="color:var(--${cls})">${label}</b>${dots}${badge}</span>`;
       };
@@ -449,7 +462,7 @@
     }
     function storyCardHtml(s, lensLabel) {
       const c = srcColors(s.id);
-      const head = txt(s.headline || s.title) || "(제목 없음)";
+      const head = txt(displayHead(s)) || "(제목 없음)";
       const last = s.last_seen && s.last_seen.toDate ? s.last_seen.toDate() : null;
       const newb = isNew(s.first_seen, Date.now()) ? `<span class="newb">NEW</span>` : "";
       const sec = lensLabel ? `<div class="seclbl">${txt(lensLabel)}</div>` : "";
@@ -484,8 +497,8 @@
         groups = [...groups].sort((a, b) =>
           (b.dev ? nodeTimes(b.dev).event : 0) - (a.dev ? nodeTimes(a.dev).event : 0));
       detailGroups = groups;
-      const head = txt(s.headline || s.title) || "(제목 없음)";
-      const lead = s.lead || s.summary;
+      const head = txt(displayHead(s)) || "(제목 없음)";
+      const lead = displayLead(s);
       const meta = `${Number(s.count) || items.length}개 기사 · ${groups.filter(g => g.dev).length}개 전개`;
       const toggle = `<div class="dtoggle">
         <button data-m="translated" class="${detailMode === 'translated' ? 'on' : ''}">번역</button>
@@ -526,12 +539,13 @@
       const s = storyById.get(id);
       if (!s) return;
       detailEl.innerHTML = `<div class="sdetail"><div class="sempty">불러오는 중…</div></div>`;
-      let items = memberCache.get(id);
+      const cached = memberCache.get(id);
+      let items = (cached && cached.count === (Number(s.count) || 0)) ? cached.items : null;
       if (!items) {
         try {
           const qs = query(collection(db, "items"), where("story_id", "==", id), orderBy("published_at"));
           items = (await getDocs(qs)).docs.map(d => d.data());
-          memberCache.set(id, items);
+          memberCache.set(id, { count: Number(s.count) || 0, items });
         } catch (err) {
           if (openStoryId === id)
             detailEl.innerHTML = `<div class="sdetail"><div class="sempty">기사 불러오기 실패: <code>${esc(err.message)}</code></div></div>`;
@@ -575,10 +589,10 @@
     detailEl.addEventListener("click", e => {
       const mt = e.target.closest(".dtoggle button");         // 번역/원문 토글
       if (mt) { detailMode = mt.dataset.m;
-        const s = storyById.get(openStoryId); if (s) renderDetail(s, memberCache.get(openStoryId) || []); return; }
+        const s = storyById.get(openStoryId); if (s) renderDetail(s, (memberCache.get(openStoryId) || {}).items || []); return; }
       const stog = e.target.closest(".htoggle button");       // 보도순/발생순 토글
       if (stog) { detailSort = stog.dataset.s;
-        const s = storyById.get(openStoryId); if (s) renderDetail(s, memberCache.get(openStoryId) || []); return; }
+        const s = storyById.get(openStoryId); if (s) renderDetail(s, (memberCache.get(openStoryId) || {}).items || []); return; }
       const btn = e.target.closest(".amore");                 // "+N개 더" 전개
       if (!btn) return;
       const g = detailGroups[Number(btn.dataset.gi)];
