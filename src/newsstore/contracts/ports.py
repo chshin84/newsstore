@@ -90,6 +90,33 @@ class ArticleStory(TypedDict, total=False):
     first_seen: datetime
 
 
+class FramePole(TypedDict):
+    """프레임 극 1개. id는 리포트 섹션이 pole_id로 인용(결정론 실재 검증용)."""
+    id: str
+    text: str
+
+
+class Frame(TypedDict, total=False):
+    """frames/{lens_id} — 프레임 패스 단독 writer(스펙 §3·§6). 3축, 축당 ≤FRAME_MAX_POLES."""
+    risks: list[FramePole]
+    premiums: list[FramePole]
+    watchpoints: list[FramePole]
+    updated_at: datetime
+
+
+class ReportStory(TypedDict, total=False):
+    """get_stories_for_report 반환 — 리포트 입력 후보(open·72h·해당 렌즈)."""
+    id: str
+    title: str
+    summary: str
+    lenses: list[str]
+    risk: int
+    impact: int
+    count: int
+    developments: list[Development]
+    last_seen: datetime          # 랭킹 폴백(developments 없는 스토리 — story_rank)
+
+
 class Store(Protocol):
     def upsert_items(self, items: list[RawItem]) -> int:
         """Insert items, skipping ids already present. Returns count of NEW items."""
@@ -180,6 +207,24 @@ class Store(Protocol):
                            count=None, now=None) -> None:
         """헤드라인/리드/아티클 + ref만 merge 저장(+articled_count=count, articled_at=now).
         developments는 안 씀(summary 단독 writer) — 기존 필드 보존(비파괴 by construction)."""
+        ...
+
+    # 리포트 탭(v1, 스펙 2026-06-30) — frames/reports 계약.
+    def get_frame(self, lens_id: str) -> Frame:
+        """frames/{lens_id}. 없으면 {}(첫 런)."""
+        ...
+    def save_frame(self, lens_id: str, frame: Frame, *, now: datetime) -> None:
+        """frames/{lens_id} 통째 set(전량 재심 산출물) + 이전 판을
+        frames_history/{lens_id}/snapshots/{ISO date}에 스냅샷(additive — 스펙 §6)."""
+        ...
+    def get_stories_for_report(self, lens_id: str, cutoff: datetime) -> list[ReportStory]:
+        """status=open·last_seen>=cutoff·lenses∋lens_id. 전수 스캔+클라 필터(타 패스 패턴)."""
+        ...
+    def save_report(self, doc_id: str, report: dict) -> None:
+        """reports/{doc_id} 통째 set(per-run 전량 재생성 — 스펙 §6). _backdrop·rising 포함."""
+        ...
+    def get_report(self, doc_id: str) -> dict:
+        """reports/{doc_id}. 없으면 {}."""
         ...
 
 

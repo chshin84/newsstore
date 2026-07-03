@@ -13,6 +13,8 @@
 | `feed_state` | collect Job | collect Job | etag/last_modified 폴링 상태 |
 | `meta` (sources) | collect Job | web UI | 소스 목록 발행(tier 전파는 §공유 설정 참조) |
 | `stories` | enrich 패스 | web UI | centroid·member_ids·요약·점수 |
+| `frames` | report 패스(프레임 단계) | report 패스·web UI | standing 프레임(risk/premium/watchpoints, 축당≤5) — 이월·재심. history는 frames_history |
+| `reports` | report 패스 | web UI | 섹션 리포트(`{lens_id}`)·백드롭(`_backdrop`)·급부상(`rising`). per-run 전량 재생성, public read |
 
 ## 컬렉션 스키마
 
@@ -37,6 +39,16 @@
 - **`headline`·`lead`·`article[]`** (str·str·string[]) — 생성 보고서. **article 패스**(`run_enrich --mode article`)가 write, UI가 헤드라인/리드/bullet로 read. **article 패스는 `developments`를 안 쓴다(자기 필드만 merge — 비파괴 by construction).** 없으면 UI 폴백(`headline`→`title`, `lead`→`summary`, `article`→생략).
 - **`risk_ref`·`impact_ref`** (int 0~3) · **`score_ref_at`** (datetime) — 전일대비 24h 롤링 기준(article 패스 유지). UI가 `risk−risk_ref`로 ▲▼ 도출(ref 없으면 화살표 생략, best-effort). `NEW`는 `first_seen`만으로 판정(ref 무관).
 - **`articled_count`** (int) · **`articled_at`** (datetime) — incremental 가드(`summary_count`·`scored_count`와 동일 per-pass 컨벤션).
+
+### `frames` (report 패스 프레임 단계가 기록)
+`frames/{lens_id}`: `{risks[{id,text}], premiums[{id,text}], watchpoints[{id,text}], updated_at}`.
+갱신 시 이전 판을 `frames_history/{lens_id}/snapshots/{date}`에 보관(additive). 실패 런은 어제 판 유지(updated_at 미갱신 = 지연 신호).
+
+### `reports` (report 패스가 기록, 공개 read)
+`reports/{lens_id}`: `{topic, headline, lead, sections[{name, items[{text, story_ids[], pole_id}]}], frame_updated_at, generated_at, review{passed, notes}}`.
+`reports/_backdrop`: `{text, generated_at, review{passed, notes}}`. `reports/rising`: 섹션 리포트와 같은 스키마(+`criteria` 문자열).
+`reports/_skips`: `{lenses[], generated_at}` — 이번 런에서 스토리 부족으로 스킵된 렌즈 목록(UI가 "오늘 스토리 부족" vs "갱신 지연" 구분에 사용, 스킵 0건이면 빈 배열).
+sections[].name ∈ {risk_triggered, premium_triggered, not_triggered, watchpoints}. per-run 통째 덮어쓰기(비-incremental — 스펙 §6).
 
 ## 핸드오프 프로토콜 — `processed` 플래그
 1. newsstore가 raw item을 쓸 때 `processed=false`를 박는다(verified: `firestore_store.py` `_to_doc`).

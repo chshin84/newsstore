@@ -33,3 +33,19 @@ def lens_labels(t: dict) -> dict[str, str]:
         lab = l.get("label") if isinstance(l.get("label"), dict) else {}
         out[l["id"]] = (lab.get("ko") if lab else None) or l["id"]
     return out
+
+
+def report_lens_ids(t: dict) -> list[str]:
+    """리포트 대상 렌즈 id(등장 순서). watch(개별종목)·sector(층화용)는 제외 — 스펙 §3.5."""
+    return [l["id"] for l in t["lenses"] if l["type"] not in ("watch", "sector")]
+
+
+def report_groups(t: dict) -> dict[str, list[str]]:
+    """report_group → [lens_id...] (yaml 등장 순서 보존). UI 섹션 앵커 도출(SSOT).
+    대상 렌즈에 report_group이 없으면 KeyError로 fail-loud(조용한 드롭 금지)."""
+    out: dict[str, list[str]] = {}
+    for l in t["lenses"]:
+        if l["type"] in ("watch", "sector"):
+            continue
+        out.setdefault(l["report_group"], []).append(l["id"])
+    return out

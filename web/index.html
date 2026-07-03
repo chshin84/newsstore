@@ -137,6 +137,7 @@
       <div class="tabs">
         <button class="tab active" id="tabFeed">피드</button>
         <button class="tab" id="tabStories">스토리</button>
+        <button class="tab" id="tabReport">리포트</button>
       </div>
       <div class="controls" id="feedControls">
         <label for="src">소스</label>
@@ -158,11 +159,12 @@
       </div>
       <div id="storiesDetail"></div>
     </div>
+    <div id="reportView" hidden><div id="reportDoc"></div></div>
   </div></main>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, query, orderBy, limit, where, getDocs, doc, getDoc }
+    import { getFirestore, collection, query, orderBy, limit, where, getDocs, doc, getDoc, documentId }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { firebaseConfig } from "./config.js";
 
@@ -433,6 +435,57 @@
     }
     // === STORIES-LOGIC-END ===
 
+    // === REPORT-LOGIC-START (node test가 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
+    const REPORT_STALE_MS = 24 * 3600 * 1000;           // §5(b) 기대 주기 1일
+    function assembleReportDoc(groups, reports) {
+      // 단일 데일리 문서 결정론 조립(§4): 백드롭 서두 → report_group 순 섹션 → rising 말미.
+      // groups는 순서 보존 배열([{name, lens_ids}]) — Firestore map 키 정렬로 순서가 깨지지 않게(m1).
+      // 리포트 없는 렌즈는 생략(fail-soft — 상태는 reportStatus가 별도 판정).
+      const sections = [];
+      for (const g of (groups || []))
+        for (const lid of (g.lens_ids || []))
+          if (reports && reports[lid]) sections.push({ lensId: lid, group: g.name, report: reports[lid] });
+      if (reports && reports.rising)
+        sections.push({ lensId: "rising", group: "급부상", report: reports.rising });
+      return { backdrop: (reports && reports._backdrop && reports._backdrop.text) || "",
+               sections };
+    }
+    function reportStatus(report, now, skippedToday) {
+      if (!report) return "not_generated";              // 스토리 부족 스킵(§4) — "아직 생성 전"
+      const g = report.generated_at;
+      const ms = g && typeof g.toDate === "function" ? g.toDate().getTime()
+        : (g instanceof Date ? g.getTime() : new Date(g).getTime());
+      const stale = !Number.isFinite(ms) || (now - ms) > REPORT_STALE_MS;
+      if (stale && skippedToday) return "skipped_today"; // 오늘 런이 스토리 부족으로 스킵(§4 구분)
+      if (stale) return "stale";                        // §5(b) 갱신 지연
+      return "ok";
+    }
+    function crossLinks(sections) {
+      // 같은 story_id가 여러 섹션에 인용 → {storyId: [lensId...]} (다중 인용 결정론 — §7)
+      const byStory = {};
+      for (const { lensId, report } of (sections || []))
+        for (const sec of ((report && report.sections) || []))
+          for (const it of (sec.items || []))
+            for (const sid of (it.story_ids || [])) {
+              if (!byStory[sid]) byStory[sid] = new Set();
+              byStory[sid].add(lensId);
+            }
+      const out = {};
+      for (const [sid, set] of Object.entries(byStory))
+        if (set.size > 1) out[sid] = [...set];
+      return out;
+    }
+    function dedupCards(storyIdOrder) {
+      // 문서 전체 등장 순서에서 첫 인용만 카드(first:true), 재인용은 참조 배지(§7 dedup)
+      const seen = new Set();
+      return (storyIdOrder || []).map(id => {
+        const first = !seen.has(id);
+        seen.add(id);
+        return { id, first };
+      });
+    }
+    // === REPORT-LOGIC-END ===
+
     async function ensureLensLabels() {
       if (lensLabelsLoaded) return;
       try {
@@ -606,16 +659,130 @@
     document.getElementById("snavR").addEventListener("click", () => stripEl.scrollBy({ left: 360, behavior: "smooth" }));
     document.addEventListener("keydown", e => { if (e.key === "Escape" && openStoryId) closeDetail(); });
 
-    function showTab(which) {
-      const stories = which === "stories";
-      feedView.hidden = stories; feedControls.hidden = stories; storiesView.hidden = !stories;
-      tabFeed.classList.toggle("active", !stories);
-      tabStories.classList.toggle("active", stories);
-      if (stories && !storiesLoaded) { storiesLoaded = true; loadStories(); }
+    // ============================ 리포트 뷰 ============================
+    const reportView = document.getElementById("reportView");
+    const reportDocEl = document.getElementById("reportDoc");
+    const tabReport = document.getElementById("tabReport");
+    let reportLoaded = false;
+
+    async function loadReport() {
+      reportDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
+      await ensureLensLabels();
+      try {
+        const [repSnap, frameSnap, groupsSnap] = await Promise.all([
+          getDocs(collection(db, "reports")), getDocs(collection(db, "frames")),
+          getDoc(doc(db, "meta", "report_groups"))]);
+        const reports = {}; repSnap.docs.forEach(d => reports[d.id] = d.data());
+        const frames = {}; frameSnap.docs.forEach(d => frames[d.id] = d.data());
+        const groups = groupsSnap.exists() ? ((groupsSnap.data() || {}).groups || []) : [];
+        // _skips는 그룹 렌즈 id가 아니므로 assembleReportDoc(그룹 id 키잉)에서 자동 배제된다(M5)
+        const skips = (reports._skips && reports._skips.lenses) || [];
+        const docm = assembleReportDoc(groups, reports);
+        if (!docm.sections.length) {
+          reportDocEl.innerHTML = `<div class="sempty">아직 생성된 리포트가 없어요.<br>매일 아침 자동 생성됩니다.</div>`;
+          return;
+        }
+        const now = Date.now();
+        const links = crossLinks(docm.sections);
+        // 인용 스토리 카드용 스토리 문서 일괄 로드(documentId in ≤30 청크)
+        const citedIds = [...new Set(docm.sections.flatMap(({ report }) =>
+          (report.sections || []).flatMap(s => (s.items || []).flatMap(i => i.story_ids || []))))];
+        const cited = new Map();
+        for (let k = 0; k < citedIds.length; k += 30) {
+          const chunk = citedIds.slice(k, k + 30);
+          const qs = await getDocs(query(collection(db, "stories"),
+                                         where(documentId(), "in", chunk)));
+          qs.docs.forEach(d => cited.set(d.id, { id: d.id, ...d.data() }));
+        }
+        renderReportDoc(docm, frames, links, cited, now, skips);
+      } catch (e) {
+        reportDocEl.innerHTML = `<div class="sempty">불러오기 실패: <code>${esc(e.message)}</code></div>`;
+      }
     }
-    function routeFromHash() { showTab(location.hash === "#stories" ? "stories" : "feed"); }
+
+    const SEC_LABEL = { risk_triggered: "아킬레스건 트리거", premium_triggered: "기대 트리거",
+                        not_triggered: "미발생", watchpoints: "주시 포인트" };
+    function frameChipsHtml(f) {
+      if (!f) return "";
+      const ax = (arr, cls) => (arr || []).map(p =>
+        `<span class="lchip" title="${esc(p.id)}" style="color:var(--${cls})">${txt(p.text)}</span>`).join("");
+      return `<div class="lchips">${ax(f.risks, "risk")}${ax(f.premiums, "imp")}${ax(f.watchpoints, "green")}</div>`;
+    }
+    function tsToMs(v) {
+      if (!v) return null;
+      if (typeof v.toDate === "function") return v.toDate().getTime();
+      const n = new Date(v).getTime();
+      return Number.isFinite(n) ? n : null;
+    }
+    function renderReportDoc(docm, frames, links, cited, now, skips) {
+      const seenCards = new Set();
+      const anchors = docm.sections.map(({ lensId, group }) =>
+        `<a href="#rep-${esc(lensId)}" class="pill">${txt(group)} · ${txt(LENS_LABELS[lensId] || lensId)}</a>`).join(" ");
+      const body = docm.sections.map(({ lensId, group, report }) => {
+        const st = reportStatus(report, now, (skips || []).includes(lensId));
+        const badge = report.review && report.review.passed === false
+          ? `<span class="newb" style="background:var(--risk)">검증 실패</span>` : "";
+        // "오늘 스토리 부족"(오늘 런이 스킵) vs "갱신 지연"(런 자체가 늦음)을 구분(M5 — §4)
+        const stale = st === "stale" ? `<span class="newb" style="background:var(--mut)">갱신 지연</span>`
+          : st === "skipped_today" ? `<span class="newb" style="background:var(--mut)">오늘 스토리 부족</span>` : "";
+        // §5(c)·§7: 프레임 자체가 낡았거나(updated_at 1일+), 본문이 참조한 판과 현행 판이 다르면 표기
+        const f = frames[lensId];
+        const fMs = tsToMs(f && f.updated_at);
+        const frameStale = fMs != null && (now - fMs) > REPORT_STALE_MS
+          ? `<span class="newb" style="background:var(--mut)">프레임 갱신 지연</span>` : "";
+        const refMs = tsToMs(report.frame_updated_at);
+        const skew = (fMs != null && refMs != null && fMs !== refMs)
+          ? `<span class="pill">본문은 이전 프레임 기준</span>` : "";
+        const secs = (report.sections || []).map(sec => {
+          const items = (sec.items || []).map(it => {
+            const cards = (it.story_ids || []).map(sid => {
+              const s = cited.get(sid);
+              if (!s) return "";
+              if (seenCards.has(sid)) {                  // dedup: 재인용은 참조 배지
+                const rel = (links[sid] || []).filter(l => l !== lensId)
+                  .map(l => LENS_LABELS[l] || l).join(", ");
+                return `<span class="pill">↩ 위 카드 참조${rel ? ` · 관련: ${txt(rel)}` : ""}</span>`;
+              }
+              seenCards.add(sid);
+              return storyCardHtml(s);                   // 기존 스토리 카드 재사용(§7)
+            }).join("");
+            return `<li>${txt(it.text)}<div class="darts">${cards}</div></li>`;
+          }).join("");
+          return items ? `<h4>${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
+        }).join("");
+        const gen = tsToMs(report.generated_at);
+        return `<section class="sdetail" id="rep-${esc(lensId)}">
+          <div class="seclbl">${txt(group)}</div>
+          <div class="dt">${txt(report.headline) || "(제목 없음)"} ${badge}${stale}${frameStale}${skew}</div>
+          ${frameChipsHtml(f)}
+          <div class="dlead">${txt(report.lead)}</div>${secs}
+          <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
+        </section>`;
+      }).join("");
+      reportDocEl.innerHTML =
+        (docm.backdrop ? `<div class="sdetail"><div class="dlead">${txt(docm.backdrop)}</div></div>` : "") +
+        `<div class="lchips">${anchors}</div>` + body;
+    }
+
+    function showTab(which) {
+      const stories = which === "stories", report = which === "report";
+      feedView.hidden = stories || report; feedControls.hidden = stories || report;
+      storiesView.hidden = !stories; reportView.hidden = !report;
+      tabFeed.classList.toggle("active", !stories && !report);
+      tabStories.classList.toggle("active", stories);
+      tabReport.classList.toggle("active", report);
+      if (stories && !storiesLoaded) { storiesLoaded = true; loadStories(); }
+      if (report && !reportLoaded) { reportLoaded = true; loadReport(); }
+    }
+    function routeFromHash() {
+      // #rep-* 는 리포트 문서 내 섹션 앵커 — 리포트 탭을 유지해야 브라우저 기본 스크롤이 동작(M1)
+      const h = location.hash;
+      showTab(h === "#stories" ? "stories"
+        : (h === "#report" || h.startsWith("#rep-")) ? "report" : "feed");
+    }
     tabFeed.addEventListener("click", () => { location.hash = "#feed"; });
     tabStories.addEventListener("click", () => { location.hash = "#stories"; });
+    tabReport.addEventListener("click", () => { location.hash = "#report"; });
     window.addEventListener("hashchange", routeFromHash);
 
     initSources();
@@ -627,6 +794,7 @@
     setInterval(() => {
       if (document.hidden) return;
       if (!storiesView.hidden) { if (!openStoryId) loadStories(); }
+      else if (!reportView.hidden) loadReport();
       else load();
     }, AUTO_REFRESH_MS);
   </script>
