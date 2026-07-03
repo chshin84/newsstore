@@ -25,6 +25,14 @@
       ]
     },
     {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "published_at", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "stories",
       "queryScope": "COLLECTION",
       "fields": [

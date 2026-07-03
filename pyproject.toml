@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.2", "mock-firestore>=0.11.0"]
+dev = ["pytest>=8.2"]
 gcp = ["google-cloud-firestore>=2.16"]
 # Step-2 LLM 인리치(Processor Job#2 전용). 로직은 DI라 미설치 환경서도 테스트 가능;
 # 실 GeminiClient만 이 SDK에 의존(lazy import). GEMINI_API_KEY=Developer API 경로.

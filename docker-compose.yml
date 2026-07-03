@@ -31,6 +31,12 @@ services:
     command: pytest -q
 
   collect:
+    build:                        # 머리말 절차(docker compose build)만으로 실행 가능해야 한다 —
+      context: .                  # 빌드 주체 없는 image 참조는 'image not found'로 깨진다.
+      dockerfile: infra/Dockerfile
+      args:
+        INSTALL_DEV: "false"
+        INSTALL_GCP: "true"       # 실 Firestore 접속(run_collect) — firestore 라이브러리 필수
     image: newsstore
     volumes:
       - ".:/app"

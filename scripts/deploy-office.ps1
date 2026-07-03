@@ -17,9 +17,18 @@ param([Parameter(Position=0)][ValidateSet("auth","deploy")][string]$cmd = "deplo
 $IMG    = "google/cloud-sdk:402.0.0-slim"
 $VOL    = "gcloud-cfg"
 $REPO   = (Resolve-Path "$PSScriptRoot\..").Path
-$PROC   = "asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/processor:latest"
-$REGION = "asia-northeast3"
-$PROJECT= "daily-recap-498506"
+
+# 프로젝트/리전은 .env(GOOGLE_CLOUD_PROJECT·GCP_REGION)에서 도출 — 하드코딩 이중 정의 금지(SSOT)
+$envFile = Join-Path $REPO ".env"
+if (-not (Test-Path $envFile)) { throw ".env 없음 — cp .env.example .env 후 값을 채워라" }
+$envMap = @{}
+foreach ($line in Get-Content $envFile) {
+  if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)=(.*)$') { $envMap[$Matches[1]] = $Matches[2].Trim() }
+}
+$PROJECT = $envMap["GOOGLE_CLOUD_PROJECT"]
+$REGION  = $envMap["GCP_REGION"]
+if (-not $PROJECT -or -not $REGION) { throw ".env에 GOOGLE_CLOUD_PROJECT·GCP_REGION이 필요하다" }
+$PROC   = "$REGION-docker.pkg.dev/$PROJECT/newsstore/processor:latest"
 
 # 컨테이너 진입 시 ePrism CA 신뢰 + gcloud CA 지정(모든 호출 공통)
 $setup = "cp /work/ePrism-SSL-ROOT-CA.crt /usr/local/share/ca-certificates/eprism.crt && update-ca-certificates >/dev/null 2>&1 && gcloud config set core/custom_ca_certs_file /etc/ssl/certs/ca-certificates.crt >/dev/null && gcloud config set project $PROJECT >/dev/null"

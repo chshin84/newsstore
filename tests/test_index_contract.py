@@ -10,6 +10,7 @@ import pathlib
 REQUIRED = [
     ("items", ("processed", "fetched_at")),    # get_unprocessed: where(processed==False).order_by(fetched_at)
     ("items", ("story_id", "published_at")),   # 뷰 타임라인: where(story_id==X).order_by(published_at)
+    ("items", ("source", "published_at")),     # UI 소스 필터: where(source==X).order_by(published_at desc)
     ("stories", ("status", "last_seen")),       # 카드 정렬: where(status==open).order_by(last_seen)
 ]
 
