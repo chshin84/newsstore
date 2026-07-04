@@ -30,3 +30,6 @@ data/
 .DS_Store
 Thumbs.db
 .superpowers/
+
+# Playwright MCP 세션 잔재(로컬 전용)
+.playwright-mcp/
