@@ -24,6 +24,31 @@ def test_validate_frame_rejects_garbage():
     assert [p["id"] for p in v["risks"]] == ["r1"]
 
 
+def test_validate_frame_preserves_achilles_and_evidence():
+    # v1 구조화: achilles_kind(words_deeds|structural만) + evidence_dev_ids 보존.
+    raw = {"risks": [
+        {"id": "r1", "text": "메타 capex 감축 실토", "achilles_kind": "words_deeds",
+         "evidence_dev_ids": ["s1", "ghost"]},          # ghost는 입력에 없음 → 드롭
+        {"id": "r2", "text": "구조적 이월", "achilles_kind": "structural",
+         "evidence_dev_ids": []},                        # 이월 구조극은 공란 허용
+        {"id": "r3", "text": "미분류", "achilles_kind": "bogus"}],  # 잘못된 enum → null
+        "premiums": [], "watchpoints": []}
+    v = validate_frame(raw, input_story_ids={"s1"})
+    r = {p["id"]: p for p in v["risks"]}
+    assert r["r1"]["achilles_kind"] == "words_deeds"
+    assert r["r1"]["evidence_dev_ids"] == ["s1"]         # 환각 dev_id 드롭
+    assert r["r2"]["achilles_kind"] == "structural" and r["r2"]["evidence_dev_ids"] == []
+    assert r["r3"]["achilles_kind"] is None              # 잘못된 enum → null
+
+
+def test_validate_frame_backward_compat_text_only():
+    # 기존 {id,text}만 있는 극도 그대로 통과(하위호환) — 신규 필드는 기본값.
+    v = validate_frame({"risks": [{"id": "r1", "text": "옛 극"}], "premiums": [], "watchpoints": []})
+    p = v["risks"][0]
+    assert p["id"] == "r1" and p["text"] == "옛 극"
+    assert p["achilles_kind"] is None and p["evidence_dev_ids"] == []
+
+
 def test_frame_diff_new_and_changed_only():
     new = {"risks": [{"id": "r1", "text": "빅테크 capex 감속(수정)"},   # 텍스트 변경
                      {"id": "r9", "text": "관세 재점화"}],              # 신규
@@ -72,6 +97,15 @@ def test_frame_prompt_survives_real_frame_with_datetime():
     p = build_frame_prompt("kr_equity", old, STORIES)
     assert isinstance(p, str)
     assert "빅테크 capex 감속" in p and "HBM 수요" in p   # 3축 극이 프롬프트에 실림
+
+
+def test_frame_prompt_has_ras_and_structured_output():
+    # v1: RAS(말-행동 괴리) 준거 + 구조화 출력 형식이 프롬프트에 명시되고, 스토리 id가 실려
+    # LLM이 evidence를 인용할 수 있어야 한다.
+    p = build_frame_prompt("sector_tech", OLD, STORIES)
+    assert "행동" in p and ("achilles_kind" in p and "evidence_dev_ids" in p)
+    assert "words_deeds" in p
+    assert "s1" in p                                     # 스토리 id 노출(evidence 인용 근거)
 
 
 def test_frame_prompt_carries_yesterday_and_caps_input():
