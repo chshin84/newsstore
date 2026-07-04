@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 import logging
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -58,11 +59,15 @@ def parse_quote(raw) -> dict | None:
             "datetime": raw.get("datetime"), "currency": raw.get("currency")}
 
 
-def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbol]) -> int:
+def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbol],
+                   *, delay_s: float = 0.0) -> int:
     """각 심볼을 fetch(td_symbol)→parse→store.save_price(key, ...). 반환=저장 수.
-    개별 심볼 실패(에러 응답·파싱 실패)는 스킵(fail-soft, 비파괴 — 기존 값 유지)."""
+    개별 심볼 실패(에러 응답·파싱 실패)는 스킵(fail-soft, 비파괴 — 기존 값 유지).
+    delay_s: 콜 간 지연(무료 tier 8콜/분 rate limit 대응 — 엔트리포인트가 주입)."""
     n = 0
-    for s in symbols:
+    for i, s in enumerate(symbols):
+        if delay_s and i:
+            time.sleep(delay_s)
         try:
             raw = fetch(s.td_symbol)
         except Exception as e:                       # 네트워크/타임아웃 — 그 심볼만 스킵

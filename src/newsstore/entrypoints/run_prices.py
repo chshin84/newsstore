@@ -36,9 +36,11 @@ def main(argv=None) -> int:
         r.raise_for_status()
         return r.json()
 
+    # 무료 tier 8콜/분 rate limit 대응 — 콜 간 지연(env, 기본 8s → 8심볼 ~1분)
+    delay_s = float(os.environ.get("NEWSSTORE_PRICE_DELAY_S", "8"))
     try:
         with make_store() as store:
-            n = run_price_pass(store, fetch, symbols)
+            n = run_price_pass(store, fetch, symbols, delay_s=delay_s)
     finally:
         client.close()
     log.info("price collect done: %d/%d saved", n, len(symbols))

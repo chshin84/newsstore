@@ -11,7 +11,8 @@ REPO = Path(__file__).resolve().parents[1]
 def test_load_real_prices_yaml():
     syms = load_price_symbols(str(REPO / "config" / "prices.yaml"))
     keys = {s.key for s in syms}
-    assert {"kospi", "sp500", "usdkrw", "wti", "gold", "btc"} <= keys      # 커버리지
+    # 무료 tier 실측 확정 키(ETF 프록시): 자산군 커버리지
+    assert {"kr_equity", "sp500", "nasdaq", "usdkrw", "wti", "gold", "btc"} <= keys
     assert all(isinstance(s, PriceSymbol) and s.td_symbol for s in syms)
 
 
