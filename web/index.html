@@ -739,9 +739,16 @@
       if (openStoryId === id) { closeDetail(); return; }       // 토글
       openStoryId = id;
       [...stripEl.querySelectorAll(".scard")].forEach(c => c.classList.toggle("sel", c.dataset.id === id));
-      const s = storyById.get(id);
-      if (!s) return;
       detailEl.innerHTML = `<div class="sdetail"><div class="sempty">불러오는 중…</div></div>`;
+      let s = storyById.get(id);
+      if (!s) {                                                // 딥링크: 리포트 인용 스토리가 스트립 top-40 밖일 수 있음 → 직접 fetch
+        try {
+          const snap = await getDoc(doc(db, "stories", id));
+          if (snap.exists()) { s = { id: snap.id, ...snap.data() }; storyById.set(id, s); }
+        } catch (e) { /* fail-soft */ }
+        if (openStoryId !== id) return;
+      }
+      if (!s) { detailEl.innerHTML = `<div class="sdetail"><div class="sempty">스토리를 찾을 수 없어요.</div></div>`; return; }
       const cached = memberCache.get(id);
       let items = (cached && cached.count === (Number(s.count) || 0)) ? cached.items : null;
       if (!items) {
@@ -776,9 +783,9 @@
         }
         const lensLabel = g => LENS_LABELS[g.lensId] || (g.lensId === "_etc" ? "기타" : g.lensId);
         stripEl.innerHTML = groups.map(g => storyCardHtml(g.main, lensLabel(g))).join("");   // 섹션별 메인 1개
-        if (pendingStoryId) {                                  // #story-{id} 딥링크 대기분 열기
+        if (pendingStoryId) {                                  // #story-{id} 딥링크 대기분 열기(openStory가 없으면 직접 fetch)
           const t = pendingStoryId; pendingStoryId = null;
-          if (storyById.has(t)) openStory(t);
+          openStory(t);
         }
       } catch (e) {
         if (/requires an index|currently building/i.test(e.message)) {
@@ -989,7 +996,7 @@
       if (h.startsWith("#story-")) {                           // 스토리 딥링크 → 스토리 탭 + 상세 열기
         const id = h.slice(7);
         showTab("stories");
-        if (storiesLoaded && storyById.has(id)) { if (openStoryId !== id) openStory(id); }
+        if (storiesLoaded) { if (openStoryId !== id) openStory(id); }   // openStory가 storyById 없으면 직접 fetch
         else pendingStoryId = id;                              // 로드 전이면 loadStories 끝에서 연다
         return;
       }
