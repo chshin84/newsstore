@@ -32,36 +32,45 @@ def test_load_fails_loud_on_dup_key(tmp_path):
 E = [1782777600, 1782864000, 1782950400]
 
 
-def _yc(closes, *, epochs=None, prev=None, currency="USD", price=None):
-    """Yahoo chart 응답 fake — closes=오래된→최신(Yahoo 순서)."""
+def _yc(closes, *, epochs=None, chart_prev=None, currency="USD", price=None):
+    """Yahoo chart 응답 fake — closes=오래된→최신(Yahoo 순서). chart_prev=meta.chartPreviousClose."""
     ts = epochs if epochs is not None else E[:len(closes)]
     meta = {"regularMarketPrice": price if price is not None else closes[-1], "currency": currency}
-    if prev is not None:
-        meta["chartPreviousClose"] = prev
+    if chart_prev is not None:
+        meta["chartPreviousClose"] = chart_prev
     return {"chart": {"result": [{"meta": meta, "timestamp": ts,
             "indicators": {"quote": [{"close": closes}]}}], "error": None}}
 
 
 def test_parse_yahoo_ok_value_and_chart():
-    # meta.regularMarketPrice=현재값, chartPreviousClose=직전 → 등락. series=오래된→최신 {날짜,c}.
-    q = parse_yahoo_chart(_yc([746.77, 745.76, 744.78], prev=745.76, price=744.78))
+    # regularMarketPrice=현재값, 전일=series[-2] → 등락. series=오래된→최신 {날짜,c}.
+    q = parse_yahoo_chart(_yc([746.77, 745.76, 744.78], price=744.78))
     assert q["close"] == 744.78 and q["currency"] == "USD"
-    assert abs(q["percent_change"] - ((744.78 - 745.76) / 745.76 * 100)) < 1e-9
+    assert abs(q["percent_change"] - ((744.78 - 745.76) / 745.76 * 100)) < 1e-9   # 전일=745.76
     assert [p["c"] for p in q["series"]] == [746.77, 745.76, 744.78]   # 오래된→최신
     assert all(_DATE.match(p["t"]) for p in q["series"])               # t=날짜 문자열
     assert q["datetime"] == q["series"][-1]["t"]                       # 최신 날짜
 
 
-def test_parse_yahoo_no_prev_no_change():
-    q = parse_yahoo_chart(_yc([100.0], price=100.0))                   # chartPreviousClose 없음
+def test_parse_yahoo_daychange_ignores_month_ago_chartprevclose():
+    # 회귀 가드: range=1mo의 meta.chartPreviousClose는 '한 달 전'이라 일간 등락에 쓰면 오답
+    # (코스닥 ▼15% 사고). 전일 등락은 series[-2]에서 도출해야 한다.
+    q = parse_yahoo_chart(_yc([900.0, 1000.0, 1010.0], chart_prev=900.0, price=1010.0))
+    assert abs(q["percent_change"] - ((1010.0 - 1000.0) / 1000.0 * 100)) < 1e-9   # 전일=1000, +1%
+    assert abs(q["percent_change"]) < 2                                # 월간(+12%) 아님
+
+
+def test_parse_yahoo_no_prior_day_no_change():
+    q = parse_yahoo_chart(_yc([100.0], price=100.0))                   # 시계열 1점 → 전일 없음
     assert q["close"] == 100.0 and q["change"] is None and q["percent_change"] is None
     assert [p["c"] for p in q["series"]] == [100.0]
 
 
 def test_parse_yahoo_drops_null_closes():
     # Yahoo는 휴장일 close에 null을 낀다 — 걸러야 함(길이 불일치 zip 안전).
-    q = parse_yahoo_chart(_yc([100.0, None, 102.0], epochs=E, prev=100.0, price=102.0))
+    q = parse_yahoo_chart(_yc([100.0, None, 102.0], epochs=E, price=102.0))
     assert [p["c"] for p in q["series"]] == [100.0, 102.0]             # null 드롭
+    assert abs(q["percent_change"] - ((102.0 - 100.0) / 100.0 * 100)) < 1e-9   # 전일=100(null 건너뜀)
 
 
 def test_parse_yahoo_error_or_empty():
@@ -84,7 +93,7 @@ def test_run_price_pass_fetches_and_saves():
     calls = []
     def fake_fetch(symbol):                          # 주입 HTTP(Yahoo chart) — 심볼별 응답
         calls.append(symbol)
-        return _yc([100.0, 101.0], prev=100.0, price=101.0)
+        return _yc([100.0, 101.0], price=101.0)
     store = _Store()
     n = run_price_pass(store, fake_fetch, syms)
     assert n == 2 and set(store.saved) == {"sp500", "wti"}
