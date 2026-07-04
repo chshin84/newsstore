@@ -13,7 +13,7 @@ from ..collect.prices import load_price_symbols, run_price_pass
 from ..store.factory import make_store
 
 log = logging.getLogger("newsstore.entrypoints.run_prices")
-BASE = "https://api.twelvedata.com/quote"
+BASE = "https://api.twelvedata.com/time_series"   # 값+차트 겸용(일봉 시계열 1콜)
 
 
 def main(argv=None) -> int:
@@ -32,7 +32,8 @@ def main(argv=None) -> int:
     client = httpx.Client(timeout=15.0)
 
     def fetch(td_symbol: str) -> dict:               # 주입 HTTP — 모듈은 파싱만
-        r = client.get(BASE, params={"symbol": td_symbol, "apikey": api_key})
+        r = client.get(BASE, params={"symbol": td_symbol, "interval": "1day",
+                                     "outputsize": "30", "apikey": api_key})
         r.raise_for_status()
         return r.json()
 

@@ -83,36 +83,23 @@
     .tab { font-weight:600; color:var(--mut); }
     .tab.active { color:var(--fg); border-color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent); }
     .tabprice.active { border-color:var(--price); box-shadow:inset 0 -2px 0 var(--price); }   /* 가격 탭=인디고 */
-    /* ===== 가격 탭 ===== */
-    .ptop { border-left:3px solid var(--price); background:color-mix(in srgb, var(--price) 7%, transparent);
-      border-radius:0 8px 8px 0; padding:9px 13px; margin:0 0 14px; font-size:calc(13px*var(--fs)); }
-    .ptop b { font-weight:800; } .ptop .up { color:var(--green); } .ptop .down { color:var(--risk); }
-    .ptop-note { font-size:calc(10.5px*var(--fs)); color:var(--mut); margin-top:3px; }
-    .plens { margin:0 0 12px; }
-    .plens-h { font-size:calc(11px*var(--fs)); font-weight:700; color:var(--price); text-transform:uppercase;
-      letter-spacing:.02em; margin:0 0 6px; display:flex; align-items:center; gap:7px; }
-    .plens-fear { color:var(--mut); font-weight:600; display:inline-flex; align-items:center; gap:3px; }
-    .plens-fear .dot { width:6px; height:6px; }
-    .pgrid { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
-    .ptile { position:relative; background:var(--btn); border:1px solid var(--line); border-radius:9px;
-      padding:9px 11px; cursor:pointer; transition:box-shadow .15s; }
-    @media (hover:hover) { .ptile:hover { box-shadow:0 6px 18px var(--shadow); } }
-    .ptile.t-strong-up { background:color-mix(in srgb, var(--green) 15%, var(--btn)); }
-    .ptile.t-mild-up   { background:color-mix(in srgb, var(--green) 7%, var(--btn)); }
-    .ptile.t-strong-down { background:color-mix(in srgb, var(--risk) 15%, var(--btn)); }
-    .ptile.t-mild-down   { background:color-mix(in srgb, var(--risk) 7%, var(--btn)); }
-    .ptl-h { display:flex; align-items:center; justify-content:space-between; gap:6px; }
-    .ptl-name { font-size:calc(12px*var(--fs)); font-weight:700; }
-    .ptl-fear { display:inline-flex; gap:2px; } .ptl-fear .dot { width:6px; height:6px; }
-    .ptl-close { font-size:calc(17px*var(--fs)); font-weight:700; margin:3px 0 1px; letter-spacing:-.2px; }
-    .ptl-pct { font-size:calc(12.5px*var(--fs)); font-weight:800; }
-    .ptl-pct.up { color:var(--green); } .ptl-pct.down { color:var(--risk); } .ptl-pct.flat { color:var(--mut); }
-    .pdiv { margin-top:4px; font-size:calc(10.5px*var(--fs)); font-weight:700; color:var(--price);
-      background:color-mix(in srgb, var(--price) 12%, transparent); border-radius:6px; padding:1px 6px; display:inline-block; }
-    .ptl-scx { max-height:0; overflow:hidden; transition:max-height .18s ease-out; }
-    .ptile.open .ptl-scx { max-height:var(--expand-max); overflow:auto; margin-top:7px; }
-    .ptl-meta { font-size:calc(10.5px*var(--fs)); color:var(--mut); margin-top:6px; line-height:1.5; }
-    @media (max-width:680px) { .pgrid { gap:6px; } .ptile { padding:8px 9px; } }
+    /* ===== 가격 탭 (값 + 차트만) ===== */
+    .pcards { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
+    .pcard { background:var(--btn); border:1px solid var(--line); border-radius:11px; padding:11px 13px; }
+    .pc-h { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
+    .pc-name { font-size:calc(12.5px*var(--fs)); font-weight:700; }
+    .pc-sym { font-size:calc(10px*var(--fs)); color:var(--mut); font-weight:600; }
+    .pc-val { font-size:calc(19px*var(--fs)); font-weight:800; margin:4px 0 1px; letter-spacing:-.3px; }
+    .pc-pct { font-size:calc(12.5px*var(--fs)); font-weight:800; }
+    .pc-pct.up { color:var(--green); } .pc-pct.down { color:var(--risk); } .pc-pct.flat { color:var(--mut); }
+    .pspark { width:100%; height:46px; margin-top:8px; display:block; overflow:visible; }
+    .pspark polyline { fill:none; stroke:var(--price); stroke-width:1.6; vector-effect:non-scaling-stroke;
+      stroke-linejoin:round; stroke-linecap:round; }
+    .pspark.up polyline { stroke:var(--green); } .pspark.down polyline { stroke:var(--risk); }
+    .pspark-empty { height:46px; margin-top:8px; display:flex; align-items:center; justify-content:center;
+      font-size:calc(10.5px*var(--fs)); color:var(--mut); }
+    .pc-meta { font-size:calc(10px*var(--fs)); color:var(--mut); margin-top:6px; }
+    @media (max-width:680px) { .pcards { grid-template-columns:1fr; } }
     [hidden] { display:none !important; }
 
     /* ===== 모바일 베이스 (토대) ===== */
@@ -668,49 +655,14 @@
     // === REPORT-LOGIC-END ===
 
     // === PRICE-LOGIC-START (node test 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
-    // 가격 탭: 뉴스 센티먼트(프레임 공포) vs 실제 가격 반응 = over/under-reaction 재료(판정 X).
+    // 가격 탭: 값 + 차트만(뉴스와의 정합은 별도 — 여기선 순수 시세). 순수함수만.
     function _num(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
     function pctClass(pct) { const n = _num(pct); return n == null || n === 0 ? "flat" : (n > 0 ? "up" : "down"); }
-    function pctBucket(pct) { const a = Math.abs(_num(pct) || 0); return a >= 1.5 ? "strong" : a >= 0.5 ? "mild" : "flat"; }
-    function fearScore(f) { return f && Array.isArray(f.risks) ? f.risks.length : 0; }
-    function sentimentLean(f) {                       // premiums - risks: >0 기대우세, <0 공포우세
-      if (!f) return 0;
-      return ((f.premiums || []).length) - ((f.risks || []).length);
-    }
-    function isDivergent(f, pct) {                     // 공포우세인데 상승 or 기대우세인데 하락(부호 반대·둘다 유효)
-      const lean = sentimentLean(f), p = _num(pct);
-      if (!lean || p == null || p === 0) return false;
-      return (lean < 0 && p > 0) || (lean > 0 && p < 0);
-    }
-    function divergenceMag(f, pct) {                   // |lean|×|pct| (발산 시만) — 랭킹용
-      return isDivergent(f, pct) ? Math.abs(sentimentLean(f)) * Math.abs(_num(pct)) : 0;
-    }
-    function marketSummary(prices) {                   // '9자산 中 6↓·평균 -0.8%'
-      const vals = Object.values(prices || {}).map(p => _num(p.percent_change)).filter(v => v != null);
-      const down = vals.filter(v => v < 0).length, up = vals.filter(v => v > 0).length;
-      const avgPct = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-      return { total: vals.length, down, up, avgPct };
-    }
-    function mostDivergent(prices, frames) {           // 정합대각선에서 가장 먼 자산(2×2 이식)
-      let best = null;
-      for (const [key, p] of Object.entries(prices || {})) {
-        const f = (frames || {})[p.lens];
-        const m = divergenceMag(f, p.percent_change);
-        if (m > 0 && (!best || m > best.mag)) best = { key, mag: m, price: p, frame: f };
-      }
-      return best;
-    }
-    function groupPricesByLens(prices, frames) {       // 렌즈별 묶기 + 공포 desc(스파크라인·히트맵 이식)
-      const by = new Map();
-      for (const [key, p] of Object.entries(prices || {})) {
-        const lens = p.lens || "_etc";
-        if (!by.has(lens)) by.set(lens, []);
-        by.get(lens).push({ key, ...p });
-      }
-      const out = [];
-      for (const [lens, items] of by) out.push({ lens, items, fear: fearScore((frames || {})[lens]) });
-      out.sort((a, b) => b.fear - a.fear);             // 무서운 자산군이 위로
-      return out;
+    function sparkPoints(series, w, h) {               // 시계열 close → SVG polyline points(정규화, 오래된→최신)
+      const cs = (series || []).map(p => _num(p && p.c)).filter(v => v != null);
+      if (cs.length < 2) return "";
+      const min = Math.min(...cs), max = Math.max(...cs), rng = (max - min) || 1, step = w / (cs.length - 1);
+      return cs.map((c, i) => `${(i * step).toFixed(1)},${(h - ((c - min) / rng) * h).toFixed(1)}`).join(" ");
     }
     // === PRICE-LOGIC-END ===
 
@@ -1075,58 +1027,41 @@
         { maximumFractionDigits: currency === "KRW" ? 0 : 2 }).format(n); }
       catch (e) { return String(n); }
     }
-    function fearDots(n) { return [0, 1, 2].map(i => `<span class="dot risk${i < n ? " on" : ""}"></span>`).join(""); }
     function pctStr(pct) {
       const n = Number(pct); if (!Number.isFinite(n)) return "—";
       const c = pctClass(n); return `${c === "up" ? "▲" : c === "down" ? "▼" : "·"}${Math.abs(n).toFixed(2)}%`;
     }
     async function loadPrices(bg) {
       if (!bg) priceDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
-      await ensureLensLabels();
       try {
-        const [priceSnap, frameSnap] = await Promise.all([
-          getDocs(collection(db, "prices")), getDocs(collection(db, "frames"))]);
-        const prices = {}; priceSnap.docs.forEach(d => prices[d.id] = d.data());
-        const frames = {}; frameSnap.docs.forEach(d => frames[d.id] = d.data());
+        const snap = await getDocs(collection(db, "prices"));
+        const prices = {}; snap.docs.forEach(d => prices[d.id] = d.data());
         if (!Object.keys(prices).length) {
-          priceDocEl.innerHTML = `<div class="sempty">가격 데이터 준비 중이에요.<br>수집이 시작되면 자산별 시세와 뉴스↔가격 괴리(over/under-reaction 재료)가 나타납니다.</div>`;
+          priceDocEl.innerHTML = `<div class="sempty">가격 데이터 준비 중이에요.</div>`;
           return;
         }
-        renderPriceDashboard(prices, frames);
+        renderPriceDashboard(prices);
       } catch (e) {
         priceDocEl.innerHTML = `<div class="sempty">불러오기 실패: <code>${esc(e.message)}</code></div>`;
       }
     }
-    function renderPriceDashboard(prices, frames) {
-      const mkt = frames["_market"];
-      const mktBlock = (mkt && ((mkt.risks || []).length || (mkt.premiums || []).length))
-        ? `<div class="mktframe"><div class="mktframe-h">글로벌 시장 프레임</div>${frameChipsHtml(mkt)}</div>` : "";
-      const sm = marketSummary(prices), md = mostDivergent(prices, frames);
-      const mdText = md ? ` · 가장 어긋난 자산 <b>${txt(md.price.label || md.key)}</b>(${sentimentLean(md.frame) < 0 ? "공포↑" : "기대↑"} 값${pctClass(md.price.percent_change) === "up" ? "▲" : "▼"})` : "";
-      const topline = `<div class="ptop">${sm.total}자산 中 <b>${sm.down}↓·${sm.up}↑</b> · 평균 <span class="${pctClass(sm.avgPct)}">${sm.avgPct >= 0 ? "▲" : "▼"}${Math.abs(sm.avgPct).toFixed(2)}%</span>${mdText}<div class="ptop-note">뉴스 공포 대비 가격 반응 — 판정 아닌 재료</div></div>`;
-      const body = groupPricesByLens(prices, frames).map(g => {
-        const f = frames[g.lens];
-        const label = LENS_LABELS[g.lens] || (g.lens === "_etc" ? "기타" : g.lens);
-        const cards = g.items.map(p => {
-          const cls = pctClass(p.percent_change), bucket = pctBucket(p.percent_change), fear = fearScore(f);
-          const div = isDivergent(f, p.percent_change)
-            ? `<div class="pdiv" title="뉴스 공포와 가격 방향이 어긋남 — over/under-reaction 재료">◇ ${sentimentLean(f) < 0 ? "공포↑ 값↑" : "기대↑ 값↓"}</div>` : "";
-          const meta = `<div class="ptl-meta">종가 ${fmtClose(p.close, p.currency)} ${esc(p.currency || "")}${p.change != null ? ` · 전일 ${Number(p.change) >= 0 ? "△" : "▽"}${Math.abs(Number(p.change)).toFixed(2)}` : ""}${p.datetime ? ` · ${esc(String(p.datetime))}` : ""}${p.td_symbol ? ` · ${esc(p.td_symbol)}` : ""}</div>`;
-          return `<div class="ptile t-${bucket}-${cls}" data-key="${esc(p.key)}">
-            <div class="ptl-h"><span class="ptl-name">${txt(p.label || p.key)}</span>${fear ? `<span class="ptl-fear" title="뉴스 공포 극 ${fear}개">${fearDots(Math.min(3, fear))}</span>` : ""}</div>
-            <div class="ptl-close">${fmtClose(p.close, p.currency)}</div>
-            <div class="ptl-pct ${cls}">${pctStr(p.percent_change)}</div>${div}
-            <div class="ptl-scx">${frameChipsHtml(f)}${meta}</div></div>`;
-        }).join("");
-        return `<div class="plens"><div class="plens-h">${txt(label)}${g.fear ? `<span class="plens-fear">공포 ${fearDots(Math.min(3, g.fear))}</span>` : ""}</div><div class="pgrid">${cards}</div></div>`;
+    function renderPriceDashboard(prices) {
+      // 값 + 차트만. 뉴스와의 정합(over/under-reaction)은 별도 — 여기선 순수 시세.
+      const cards = Object.entries(prices).map(([key, p]) => {
+        const cls = pctClass(p.percent_change);
+        const pts = sparkPoints(p.series, 220, 46);
+        const chart = pts
+          ? `<svg class="pspark ${cls}" viewBox="0 0 220 46" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`
+          : `<div class="pspark-empty">차트 준비 중</div>`;
+        return `<div class="pcard">
+          <div class="pc-h"><span class="pc-name">${txt(p.label || key)}</span><span class="pc-sym">${esc(p.td_symbol || "")}</span></div>
+          <div class="pc-val">${fmtClose(p.close, p.currency)}</div>
+          <div class="pc-pct ${cls}">${pctStr(p.percent_change)}</div>
+          ${chart}
+          <div class="pc-meta">${p.datetime ? esc(String(p.datetime)) : ""}${p.currency ? " · " + esc(p.currency) : ""}</div></div>`;
       }).join("");
-      priceDocEl.innerHTML = mktBlock + topline + body;
+      priceDocEl.innerHTML = `<div class="pcards">${cards}</div>`;
     }
-    priceDocEl.addEventListener("click", e => {                // 타일 클릭 → 프레임칩+가격 상세 확장(.scx)
-      if (e.target.closest("a,button,select")) return;
-      const tile = e.target.closest(".ptile");
-      if (tile) tile.classList.toggle("open");
-    });
 
     function showTab(which) {
       const stories = which === "stories", report = which === "report", price = which === "price";

@@ -42,21 +42,40 @@ def load_price_symbols(path: str) -> list[PriceSymbol]:
     return out
 
 
-def parse_quote(raw) -> dict | None:
-    """Twelve Data /quote 응답 파싱. 에러/무close/비수치 → None(fail-soft, 저장 안 함)."""
+SERIES_MAX_POINTS = 30           # 차트에 실을 일봉 수(값+차트 = 이 시계열 하나로 도출)
+
+
+def _fnum(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_series(raw, *, max_points: int = SERIES_MAX_POINTS) -> dict | None:
+    """Twelve Data /time_series(일봉) 응답 파싱 → 현재값·등락 + 차트 시계열(값+차트 겸용).
+    values는 최신순: [0]=오늘 close, [1]=직전 → 등락 도출. series는 오래된→최신 {t,c}.
+    에러/빈 값/비수치 → None(fail-soft, 저장 안 함)."""
     if not isinstance(raw, dict) or raw.get("status") == "error":
         return None
-    try:
-        close = float(raw["close"])
-    except (KeyError, TypeError, ValueError):
+    vals = raw.get("values")
+    if not isinstance(vals, list) or not vals:
         return None
-    def _f(k):
-        try:
-            return float(raw[k])
-        except (KeyError, TypeError, ValueError):
-            return None
-    return {"close": close, "change": _f("change"), "percent_change": _f("percent_change"),
-            "datetime": raw.get("datetime"), "currency": raw.get("currency")}
+    close = _fnum(vals[0].get("close") if isinstance(vals[0], dict) else None)
+    if close is None:
+        return None
+    prev = _fnum(vals[1].get("close")) if len(vals) > 1 and isinstance(vals[1], dict) else None
+    change = (close - prev) if prev is not None else None
+    pct = ((close - prev) / prev * 100.0) if prev not in (None, 0) else None
+    series = []
+    for v in reversed(vals[:max_points]):            # 오래된→최신
+        c = _fnum(v.get("close")) if isinstance(v, dict) else None
+        if c is not None and v.get("datetime"):
+            series.append({"t": v["datetime"], "c": c})
+    meta = raw.get("meta") or {}
+    return {"close": close, "change": change, "percent_change": pct,
+            "datetime": vals[0].get("datetime"), "currency": meta.get("currency"),
+            "series": series}
 
 
 def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbol],
@@ -73,7 +92,7 @@ def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbo
         except Exception as e:                       # 네트워크/타임아웃 — 그 심볼만 스킵
             log.warning("price fetch %s(%s) 실패: %s", s.key, s.td_symbol, e)
             continue
-        q = parse_quote(raw)
+        q = parse_series(raw)
         if q is None:
             log.warning("price %s(%s): 무효 응답 — 스킵", s.key, s.td_symbol)
             continue
