@@ -87,3 +87,6 @@
 - **requirements.lock을 pip `-c`(constraints)로 쓰면 전이 의존성이 비고정** — constraints는 설치되는 것만 핀하고 목록에 없는 전이는 자유 해석. → 재현성이 목적이면 **전체 `pip freeze`로 재생성**(도커 안: `pip install -e '.[extras]' && pip freeze --exclude-editable`).
 - **compose 서비스가 `image:`만 참조하고 아무도 빌드하지 않으면 절차 문서가 거짓이 된다** — `build:` 블록을 함께 배선해 머리말 절차만으로 실행 가능하게.
 - **fake store가 실계약 필드를 빼먹어 datetime 직렬화 크래셔가 테스트를 통과** — 리포트 탭 구현에서 fake가 `updated_at` 없는 프레임만 줘서 `json.dumps(frame)`의 TypeError(프로덕션 첫 런 잡 전체 사망)를 287개 테스트가 못 잡음(최종 리뷰가 Docker 재현으로 발견). → 다음엔 **저장 계약이 심는 모든 필드를 fake에도 심고**, 프롬프트/직렬화 경로는 **에뮬레이터 왕복 실물로 1개 이상** 테스트한다("mock이 프로덕션 계약을 약화" gotcha의 직렬화 변형).
+
+## 2026-07-04 리포트 탭 배포
+- **Firebase Hosting 배포는 파일 전체 스냅샷 — index.html만 올리면 config.js가 404로 증발** — operations.md §B 스크립트가 `/index.html` 하나만 populateFiles에 넣어서, 재배포 순간 이전 릴리스의 `/config.js`(index.html이 import하는 Firebase 웹 설정)가 새 릴리스에서 사라짐 → 모듈 import 404 → Firebase 미초기화 → 피드·리포트 무한 "불러오는 중". 사이트는 HTTP 200이라 얕은 검증은 통과(스모크가 첫화면만 봄). → 다음엔 **Hosting은 배포 대상 전체를 한 릴리스에 올린다**(§B를 `web/` 전 파일 루프로 수정 완료). 검증도 **config.js 200 + 콘솔 404 없음 + 피드 실제 렌더(카드 수>0)**까지 봐야 한다(첫화면 200으로 "됐다" 금지). 진단은 브라우저 콘솔/네트워크가 SSOT — 단, Playwright 세션 캐시가 옛 404를 하드캐싱하니 캐시-우회 fetch나 새 클라(PowerShell curl)로 서버 실상태를 봐라.

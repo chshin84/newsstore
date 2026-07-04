@@ -48,26 +48,35 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
   --freshness=5m --format="value(textPayload)" | Select-String "feed\(s\) failed|collected .* new item"
 ```
 
-## B. 사이트 재배포 (web/index.html 변경 시)
-Firebase CLI/Node 없이 **Hosting REST API**로 배포 (PowerShell):
+## B. 사이트 재배포 (web/ 변경 시)
+Firebase CLI/Node 없이 **Hosting REST API**로 배포 (PowerShell).
+> ⚠️ **Hosting 릴리스는 파일 전체 스냅샷이다.** populateFiles에 넣은 파일만 새 릴리스에 존재하고, 빠뜨린 파일은 **404로 사라진다**(이전 릴리스가 갖고 있어도 무관). `index.html`은 `./config.js`(Firebase 웹 설정)를 import하므로 **둘 다** 올려야 한다 — 하나만 올리면 config.js 404 → Firebase 초기화 실패 → 피드/리포트 무한 로딩(2026-07-04 실제 사고). 그래서 아래는 `web/` 배포 대상 **전체**를 자동으로 올린다(파일 추가 시 `$deployFiles`만 갱신).
 ```powershell
 $g="C:\Users\ho381\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
 $tok=(& $g auth print-access-token).Trim()
 $H=@{Authorization="Bearer $tok"; "x-goog-user-project"="daily-recap-498506"}
 $site="https://firebasehosting.googleapis.com/v1beta1/projects/daily-recap-498506/sites/daily-recap-498506"
-$raw=[IO.File]::ReadAllBytes("D:\projects\newsstore\web\index.html")
-$ms=New-Object IO.MemoryStream
-$gz=New-Object IO.Compression.GzipStream($ms,[IO.Compression.CompressionMode]::Compress)
-$gz.Write($raw,0,$raw.Length); $gz.Close(); $gzb=$ms.ToArray()
-$hash=([Security.Cryptography.SHA256]::Create().ComputeHash($gzb)|%{$_.ToString("x2")}) -join ""
+# 배포 대상 전체 (URL경로 → 로컬파일). 새 정적파일 추가 시 여기만 늘린다.
+$deployFiles=@{ "/index.html"="D:\projects\newsstore\web\index.html"; "/config.js"="D:\projects\newsstore\web\config.js" }
+$gzmap=@{}; $hashmap=@{}
+foreach($p in $deployFiles.Keys){
+  $raw=[IO.File]::ReadAllBytes($deployFiles[$p])
+  $ms=New-Object IO.MemoryStream
+  $gz=New-Object IO.Compression.GzipStream($ms,[IO.Compression.CompressionMode]::Compress)
+  $gz.Write($raw,0,$raw.Length); $gz.Close(); $gzb=$ms.ToArray()
+  $gzmap[$p]=$gzb; $hashmap[$p]=(([Security.Cryptography.SHA256]::Create().ComputeHash($gzb)|%{$_.ToString("x2")}) -join "")
+}
 $ver=Invoke-RestMethod -Method POST -Uri "$site/versions" -Headers $H -ContentType "application/json" -Body "{}"
-$pop=Invoke-RestMethod -Method POST -Uri "https://firebasehosting.googleapis.com/v1beta1/$($ver.name):populateFiles" -Headers $H -ContentType "application/json" -Body (@{files=@{"/index.html"=$hash}}|ConvertTo-Json)
-if($pop.uploadRequiredHashes){Invoke-WebRequest -Method POST -Uri "$($pop.uploadUrl)/$hash" -Headers $H -ContentType "application/octet-stream" -Body $gzb|Out-Null}
+$pop=Invoke-RestMethod -Method POST -Uri "https://firebasehosting.googleapis.com/v1beta1/$($ver.name):populateFiles" -Headers $H -ContentType "application/json" -Body (@{files=$hashmap}|ConvertTo-Json)
+foreach($need in $pop.uploadRequiredHashes){
+  $p=($hashmap.GetEnumerator()|Where-Object{$_.Value -eq $need}).Key
+  Invoke-WebRequest -Method POST -Uri "$($pop.uploadUrl)/$need" -Headers $H -ContentType "application/octet-stream" -Body $gzmap[$p]|Out-Null
+}
 Invoke-RestMethod -Method PATCH -Uri "https://firebasehosting.googleapis.com/v1beta1/$($ver.name)?updateMask=status" -Headers $H -ContentType "application/json" -Body '{"status":"FINALIZED"}'|Out-Null
 Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -Headers $H -ContentType "application/json" -Body "{}"|Out-Null
-"deployed -> https://daily-recap-498506.web.app"
+"deployed ($($deployFiles.Keys -join ', ')) -> https://daily-recap-498506.web.app"
 ```
-배포 후 브라우저는 **Ctrl+F5**(캐시).
+배포 후 브라우저는 **Ctrl+F5**(캐시). 검증: `Invoke-WebRequest .../config.js`가 200인지, 사이트 콘솔에 404 없는지.
 
 ## C. 보안 규칙 변경 (firestore.rules)
 `firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기.
