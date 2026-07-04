@@ -6,6 +6,8 @@ grounding 리뷰. 실패 시 어제 프레임 유지(이월 폴백)."""
 from __future__ import annotations
 import json
 import logging
+import os
+from datetime import timedelta
 
 from .gemini import LLMError
 from .model_config import model_for
@@ -100,12 +102,18 @@ def build_frame_review_prompt(diff: list[dict], stories: list[dict]) -> str:
 
 
 def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> int:
-    """렌즈별 프레임 재심. 실패(콜·검증·리뷰 기각)는 어제 판 유지(fail-soft, §5(c)). 반환=갱신 수."""
-    from datetime import timedelta
+    """렌즈별 프레임 재심. 실패(콜·검증·리뷰 기각)는 어제 판 유지(fail-soft, §5(c)). 반환=갱신 수.
+
+    6a age-gate: updated_at이 min_age(env NEWSSTORE_FRAME_MIN_AGE_HOURS, 기본 20h) 이내로
+    신선하면 재심 스킵(#45 완화 — 프레임은 준정적, 리포트 4×/일마다 재생성할 필요 없음)."""
     cutoff = now - (window or timedelta(hours=72))
+    min_age = timedelta(hours=float(os.environ.get("NEWSSTORE_FRAME_MIN_AGE_HOURS", "20")))
     n = 0
     for lens_id in lens_ids:
         old = store.get_frame(lens_id)
+        ua = (old or {}).get("updated_at")
+        if ua is not None and (now - ua) < min_age:    # 신선 → 스킵(콜 0)
+            continue
         stories = store.get_stories_for_report(lens_id, cutoff=cutoff)
         try:
             raw = client.generate_json(build_frame_prompt(lens_id, old, stories), timeout=60.0,

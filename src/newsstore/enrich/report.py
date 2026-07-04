@@ -4,6 +4,8 @@
 top-K 랭킹은 UI(web/index.html storyRank)와 같은 정의: impact × 신선도(delta_time 최신성)."""
 from __future__ import annotations
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 from .frames import AXES
@@ -222,36 +224,41 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> 
         selected[lens_id] = top
         top_k_ids |= {s["id"] for s in top}
 
-    def _one(doc_id, lens_id, frame, top, criteria=None):
+    def _one(doc_id, lens_id, frame, top, criteria=None) -> str:
+        """한 렌즈 리포트 생성. 반환 'reported'|'failed'(집계는 호출부 — 스레드 안전).
+        store.save_report만 부수효과(Firestore 클라 스레드 안전). 실패=기존 유지(§5b)."""
         try:
             raw = client.generate_json(build_section_prompt(lens_id, frame, top, backdrop),
                                        timeout=90.0, model=model_for("report_section"))
         except LLMError as e:
             log.warning("report %s: 생성 실패 — 기존 유지(§5b): %s", doc_id, e)
-            totals["failed"] += 1
-            return
+            return "failed"
         v = validate_report(raw, frame=frame, input_story_ids={s["id"] for s in top})
         if v is None:
             log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
-            totals["failed"] += 1
-            return
+            return "failed"
         review = _review(client, v, top)                # 기각이어도 저장+배지(결정③)
         doc = {**v, "topic": lens_id, "generated_at": now,
                "frame_updated_at": frame.get("updated_at"), "review": review}
         if criteria:
             doc["criteria"] = criteria
         store.save_report(doc_id, doc)
-        totals["reported"] += 1
+        return "reported"
 
-    for lens_id, top in selected.items():
-        _one(lens_id, lens_id, store.get_frame(lens_id), top)
+    # 5a: 렌즈별 리포트를 유계 동시성으로 병렬화(#45 벽시간 절감). 동시성=1이면 직렬과 동일(가역).
+    # rising은 top_k 확정 의존이라 팬아웃 뒤 순차(§3.5 순서). save_report만 부수효과라 스레드 안전.
+    conc = max(1, int(os.environ.get("NEWSSTORE_REPORT_CONCURRENCY", "6")))
+    units = [(lid, lid, store.get_frame(lid), top) for lid, top in selected.items()]
+    with ThreadPoolExecutor(max_workers=min(conc, max(1, len(units)))) as ex:
+        for r in ex.map(lambda u: _one(*u), units):
+            totals[r] += 1
 
     # 급부상 — 전 렌즈 top-K 확정 후(§3.5 순서 의존)
     all_stories = {s["id"]: s for ss in per_lens.values() for s in ss}
     rising = select_rising(list(all_stories.values()), top_k_ids=top_k_ids, now=now)
     if len(rising) >= REPORT_MIN_STORIES:
-        _one("rising", "rising", {}, rising,
-             criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")
+        totals[_one("rising", "rising", {}, rising,
+                    criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")] += 1
     # 스킵 신호 발행(§4) — UI가 "아직 생성 전/오늘 스토리 부족" vs "갱신 지연"을 구분.
     # 스킵 0건이어도 빈 배열로 덮어써 전 런의 스킵 잔재를 제거한다(멱등).
     store.save_report("_skips", {"lenses": skipped, "generated_at": now})

@@ -6,9 +6,9 @@ const html = readFileSync(new URL("../../web/index.html", import.meta.url), "utf
 const START = "// === REPORT-LOGIC-START", END = "// === REPORT-LOGIC-END";
 const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "REPORT-LOGIC 마커 필요(드리프트 가드)");
-const { assembleReportDoc, reportStatus, crossLinks, dedupCards } =
+const { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks } =
   new Function(html.slice(i, j) +
-    "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards };")();
+    "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -54,6 +54,19 @@ test("crossLinks: 같은 스토리 다중 섹션 인용 → 상호 링크", () =
                 { lensId: "us_policy", report: rep("us_policy") }];
   const links = crossLinks(secs);                       // s1이 두 섹션에 인용됨
   assert.deepEqual(links["s1"].sort(), ["kr_equity", "us_policy"]);
+});
+
+test("topRisks: 전 렌즈 risk_triggered item을 문서 순서대로 수집(다이제스트)", () => {
+  const docm = { backdrop: "", sections: [
+    { lensId: "risk", group: "리스크", report: { sections: [
+      { name: "risk_triggered", items: [{ text: "연준 독립성 훼손" }, { text: "지정학" }] },
+      { name: "premium_triggered", items: [{ text: "무시됨(리스크 아님)" }] }] } },
+    { lensId: "kr_equity", group: "주식", report: { sections: [
+      { name: "risk_triggered", items: [{ text: "메타 capex 피크아웃" }] }] } }] };
+  const tr = topRisks(docm);
+  assert.deepEqual(tr.map(r => r.text), ["연준 독립성 훼손", "지정학", "메타 capex 피크아웃"]);
+  assert.deepEqual(tr.map(r => r.lensId), ["risk", "risk", "kr_equity"]);   // 순서·렌즈 보존
+  assert.equal(topRisks({ sections: [] }).length, 0);                       // 빈 문서 → []
 });
 
 test("dedupCards: 한 리포트 내 카드 1회, 재인용은 참조 배지 (스코프=단일 리포트 — 참조가 리포트를 벗어나면 안 됨)", () => {

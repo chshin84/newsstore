@@ -216,8 +216,27 @@
     .scx .abul li::before { top:9px; }
     /* 앵커 pill 행(리포트 목차) */
     .ranchors { margin:0 0 12px; gap:5px 6px; }
+    /* 1a 핵심 리스크 다이제스트 스트립 */
+    .reprisks { border-left:4px solid var(--risk); background:color-mix(in srgb, var(--risk) 8%, transparent);
+      border-radius:0 8px 8px 0; padding:10px 14px; margin:0 0 14px; }
+    .reprisks-h { font-size:calc(11px*var(--fs)); font-weight:800; letter-spacing:.02em; color:var(--risk);
+      text-transform:uppercase; margin-bottom:6px; }
+    .reprisk { display:block; color:var(--fg); text-decoration:none; font-size:calc(13px*var(--fs));
+      line-height:1.5; padding:2px 0; border-bottom:1px solid color-mix(in srgb, var(--risk) 12%, transparent); }
+    .reprisk:last-of-type { border-bottom:0; } .reprisk b { color:var(--risk); margin-right:5px; }
+    @media (hover:hover) { .reprisk:hover { color:var(--risk); } }
+    .reprisk-more { font-size:calc(11px*var(--fs)); color:var(--mut); margin-top:4px; }
+    /* 1c 위험 렌즈 accent(세로 스캔) */
+    #reportDoc .sdetail.hot { border-left:4px solid var(--risk); }
+    /* 3a achilles_kind 이중부호화(프레임 칩) */
+    .fchip .ras { font-size:.85em; margin-right:2px; }
+    .fchip.structural { border-style:dashed; opacity:.72; }
+    .fchip .evn { font-weight:800; margin-left:3px; opacity:.7; }
+    /* 2a 딥링크 스크롤 오프셋(스티키 헤더에 안 가리게) */
+    #reportDoc .sdetail[id^="rep-"] { scroll-margin-top:120px; }
     @media (max-width:680px) {
       #reportDoc .sdetail { padding:12px; }
+      #reportDoc .sdetail[id^="rep-"] { scroll-margin-top:96px; }
       .ranchors .pill { padding:4px 10px; font-size:calc(11.5px*var(--fs)); }
       .fchips { gap:5px; }
     }
@@ -349,9 +368,9 @@
     }
 
     let loadSeq = 0;                       // 응답 레이스 가드: 늦게 도착한 이전 필터 응답 폐기
-    async function load() {
+    async function load(bg) {
       const seq = ++loadSeq;
-      statusEl.textContent = "불러오는 중…";
+      if (!bg) statusEl.textContent = "불러오는 중…";   // 4a: bg면 상태 텍스트 유지
       const tag = tagSel.value, src = srcSel.value;
       const col = collection(db, "items");
       let q;
@@ -599,6 +618,13 @@
         return { id, first };
       });
     }
+    function topRisks(docm) {
+      // 1a: 전 렌즈 risk_triggered item을 문서 순서 보존해 수집(최상단 '핵심 리스크' 다이제스트).
+      // 순서·렌즈 유지(재정렬 X — SSOT 섹션순서 불변). 소비: renderReportDoc가 상단 스트립으로.
+      return (docm && docm.sections || []).flatMap(({ lensId, group, report }) =>
+        ((report && report.sections) || []).filter(x => x.name === "risk_triggered")
+          .flatMap(x => (x.items || []).map(it => ({ lensId, group, text: it.text }))));
+    }
     // === REPORT-LOGIC-END ===
 
     async function ensureLensLabels() {
@@ -623,7 +649,8 @@
         if (val == null) return "";
         const dots = [0, 1, 2].map(i => dot(i < Number(val), cls)).join("");
         const db = deltaBadge(val, ref, s.score_ref_at, Date.now());   // stale ref 화살표 생략(신선도 게이트)
-        const badge = db ? `<span class="delta ${db.dir}">${db.dir === "up" ? "▲" : "▼"}${db.n}</span>` : "";
+        // delta 화살표 색을 해당 지표(imp|risk) 색으로 상속 — up=risk색 오독 방지(색-의미 일관)
+        const badge = db ? `<span class="delta ${db.dir}" style="color:var(--${cls})">${db.dir === "up" ? "▲" : "▼"}${db.n}</span>` : "";
         return `<span class="mtr"><b style="color:var(--${cls})">${label}</b>${dots}${badge}</span>`;
       };
       return row("impact", s.impact, s.impact_ref, "imp") + row("risk", s.risk, s.risk_ref, "risk");
@@ -726,9 +753,9 @@
       if (openStoryId !== id) return;                          // 사용자가 다른 카드로 이동
       renderDetail(s, items);
     }
-    async function loadStories() {
-      detailEl.innerHTML = ""; openStoryId = null;
-      stripEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
+    async function loadStories(bg) {
+      if (!bg) { detailEl.innerHTML = ""; openStoryId = null;   // 4a: bg면 상세·상태 안 건드림
+        stripEl.innerHTML = `<div class="sempty">불러오는 중…</div>`; }
       await ensureLensLabels();
       try {
         const q2 = query(collection(db, "stories"), where("status", "==", "open"),
@@ -790,8 +817,8 @@
     let reportLoaded = false;
     const reportCited = new Map();   // 인용 스토리 id→doc — 카드 클릭 확장(.scx)이 조회, loadReport가 채움
 
-    async function loadReport() {
-      reportDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
+    async function loadReport(bg) {
+      if (!bg) reportDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;   // 4a: bg면 깜빡임 없음
       await ensureLensLabels();
       try {
         const [repSnap, frameSnap, groupsSnap] = await Promise.all([
@@ -821,6 +848,9 @@
           qs.docs.forEach(d => cited.set(d.id, { id: d.id, ...d.data() }));
         }
         renderReportDoc(docm, frames, links, cited, now, skips);
+        // 2a: async 렌더 완료 후 딥링크(#rep-*) 재스크롤 — 네이티브 앵커는 섹션 렌더 전 헛돎.
+        const h = location.hash;
+        if (h.startsWith("#rep-")) document.getElementById(h.slice(1))?.scrollIntoView({ block: "start" });
       } catch (e) {
         reportDocEl.innerHTML = `<div class="sempty">불러오기 실패: <code>${esc(e.message)}</code></div>`;
       }
@@ -830,8 +860,15 @@
                         not_triggered: "미발생", watchpoints: "주시 포인트" };
     function frameChipsHtml(f) {
       if (!f) return "";
-      const ax = (arr, cls) => (arr || []).map(p =>
-        `<span class="fchip ${cls}" title="${esc(p.id)}">${txt(p.text)}</span>`).join("");
+      // 3a: achilles_kind 이중부호화 — words_deeds(RAS 말-행동 괴리)는 ⚡ + 근거건수, structural은 파선.
+      const ax = (arr, cls) => (arr || []).map(p => {
+        const kind = p.achilles_kind, evN = (p.evidence_dev_ids || []).length;
+        const ras = kind === "words_deeds" ? `<span class="ras" aria-label="말-행동 괴리">⚡</span>` : "";
+        const evn = evN ? `<sup class="evn">${evN}</sup>` : "";
+        const title = kind === "words_deeds" ? `말-행동 괴리(RAS) · 근거 ${evN}건`
+          : kind === "structural" ? "구조적 이월" : esc(p.id || "");
+        return `<span class="fchip ${cls}${kind === "structural" ? " structural" : ""}" title="${esc(title)}">${ras}${txt(p.text)}${evn}</span>`;
+      }).join("");
       return `<div class="fchips">${ax(f.risks, "risk")}${ax(f.premiums, "imp")}${ax(f.watchpoints, "green")}</div>`;
     }
     function tsToMs(v) {
@@ -845,6 +882,8 @@
         `<a href="#rep-${esc(lensId)}" class="pill">${txt(group)} · ${txt(LENS_LABELS[lensId] || lensId)}</a>`).join(" ");
       const body = docm.sections.map(({ lensId, group, report }) => {
         const seenCards = new Set();                     // dedup 스코프 = 이 리포트 안(참조가 리포트를 벗어나지 않게)
+        const rc = (report.sections || []).filter(x => x.name === "risk_triggered")   // 1c: 아킬레스 트리거 수
+          .reduce((n, x) => n + ((x.items || []).length), 0);
         const st = reportStatus(report, now, (skips || []).includes(lensId));
         const badge = report.review && report.review.passed === false
           ? `<span class="newb" style="background:var(--risk)" title="${esc((report.review.notes || "").slice(0, 300))}">검증 실패</span>` : "";
@@ -877,17 +916,26 @@
           return items ? `<h4 class="rsec-h ${esc(sec.name || "")}">${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
         }).join("");
         const gen = tsToMs(report.generated_at);
-        return `<section class="sdetail" id="rep-${esc(lensId)}">
+        const hot = rc ? `<span class="newb" style="background:var(--risk)">아킬레스 ${rc}</span>` : "";
+        return `<section class="sdetail${rc ? " hot" : ""}" id="rep-${esc(lensId)}">
           <div class="seclbl">${txt(group)}</div>
-          <div class="dt">${txt(report.headline) || "(제목 없음)"} ${badge}${stale}${frameStale}${skew}</div>
+          <div class="dt">${txt(report.headline) || "(제목 없음)"} ${hot}${badge}${stale}${frameStale}${skew}</div>
           <div class="dlead">${txt(report.lead)}</div>
           ${frameChipsHtml(f)}${secs}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
       }).join("");
+      // 1a: 최상단 '핵심 리스크' 다이제스트 — 전 렌즈 아킬레스 트리거를 요약, 클릭 시 해당 렌즈로.
+      const tr = topRisks(docm);
+      const digest = tr.length
+        ? `<div class="reprisks"><div class="reprisks-h">지금 시장이 두려워하는 것</div>` +
+          tr.slice(0, 7).map(r =>
+            `<a href="#rep-${esc(r.lensId)}" class="reprisk"><b>${txt(r.group)}</b> ${txt(r.text)}</a>`).join("") +
+          (tr.length > 7 ? `<div class="reprisk-more">+${tr.length - 7}개 더 (아래 섹션)</div>` : "") +
+          `</div>` : "";
       reportDocEl.innerHTML =
         (docm.backdrop ? `<div class="sdetail"><div class="dlead">${txt(docm.backdrop)}</div></div>` : "") +
-        `<div class="lchips ranchors">${anchors}</div>` + body;
+        digest + `<div class="lchips ranchors">${anchors}</div>` + body;
     }
 
     // 리포트 내 스토리 카드 클릭 확장(요구 7) — 패턴 E: .open 토글, 링크/버튼 가드.
@@ -940,9 +988,15 @@
     const AUTO_REFRESH_MS = 5 * 60 * 1000;
     setInterval(() => {
       if (document.hidden) return;
-      if (!storiesView.hidden) { if (!openStoryId) loadStories(); }
-      else if (!reportView.hidden) loadReport();
-      else load();
+      // 4a: 깜빡임 없는 bg 갱신 + 펼친 카드가 있으면 스킵(사용자 방해 방지).
+      // 4b: 리포트는 4×/일 생성이라 5분 폴링 제거(탭 재진입 시 갱신) — 낭비 read 절감.
+      if (!storiesView.hidden) {
+        if (!openStoryId && !stripEl.querySelector(".scard.open")) loadStories(true);
+      } else if (!reportView.hidden) {
+        /* 리포트는 폴링 안 함(4b) */
+      } else {
+        if (!listEl.querySelector(".card.open")) load(true);
+      }
     }, AUTO_REFRESH_MS);
 
     // ===== 토대: 테마·글자크기 토글 (헤더 우상단 버튼) =====

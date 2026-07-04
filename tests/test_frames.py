@@ -140,6 +140,24 @@ def test_run_frame_pass_keeps_yesterday_on_review_reject_and_llm_error():
     assert "fx" not in store2.saved                     # 콜 실패 → 폴백(전파 금지, fail-soft)
 
 
+def test_run_frame_pass_age_gate_skips_fresh(monkeypatch):
+    # 6a age-gate: updated_at이 신선하면(min_age 이내) generate_json 0콜로 스킵 — #45 완화.
+    monkeypatch.setenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", "20")
+    fresh = {"risks": [{"id": "r1", "text": "신선"}], "premiums": [], "watchpoints": [],
+             "updated_at": NOW - __import__("datetime").timedelta(hours=1)}
+    llm = _LLM(frame_resp={"risks": [], "premiums": [], "watchpoints": []},
+               review_resp={"passed": True})
+    store = _Store({"fx": fresh})
+    n = run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)
+    assert n == 0 and len(llm.calls) == 0            # 신선 → 콜 0(불변식, 매직넘버 없음)
+    assert "fx" not in store.saved
+    # 낡은(updated_at 없음) 프레임은 정상 재심
+    llm2 = _LLM(frame_resp={"risks": [{"id": "r1", "text": "새"}], "premiums": [], "watchpoints": []},
+                review_resp={"passed": True})
+    store2 = _Store({"fx": {"risks": [], "premiums": [], "watchpoints": []}})
+    assert run_frame_pass(store2, llm2, lens_ids=["fx"], now=NOW) == 1 and len(llm2.calls) >= 1
+
+
 def test_run_frame_pass_no_diff_skips_review():
     same = {"risks": [{"id": "r1", "text": "동일"}], "premiums": [], "watchpoints": []}
     llm = _LLM(frame_resp=same, review_resp={"passed": False})   # 리뷰가 불려도 False지만
