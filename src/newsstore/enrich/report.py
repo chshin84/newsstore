@@ -137,7 +137,8 @@ def build_backdrop_prompt(excerpts: list[str]) -> str:
         '\n아래 JSON만 출력: {"text": "..."}')
 
 
-def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str) -> str:
+def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str,
+                         reject_notes: str | None = None) -> str:
     import json as _json
     # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
     axes_only = {a: frame.get(a) or [] for a in AXES}
@@ -151,6 +152,8 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
         "스토리(각 줄 맨 앞 [id]가 story_id):\n" + "\n".join(lines) + "\n"
         "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용. "
         "미발생(not_triggered)은 프레임 극 중 72h 트리거 없는 것. watchpoints는 관찰 지점 재확인.\n"
+        + (f"직전 시도가 다음 사유로 기각됨: {reject_notes}. 이를 반영해 기각 사유를 해소해 "
+           "재작성하라.\n" if reject_notes else "") +
         '아래 JSON만 출력: {"headline":"...","lead":"...","sections":['
         '{"name":"risk_triggered","items":[{"text":"...","story_ids":["..."],"pole_id":"..."}]},'
         '{"name":"premium_triggered","items":[...]},{"name":"not_triggered","items":[...]},'
@@ -238,6 +241,20 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> 
             log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
             return "failed"
         review = _review(client, v, top)                # 기각이어도 저장+배지(결정③)
+        if not review["passed"]:
+            # 리뷰 실패 → 실패 사유(notes)를 넣어 1회만 재생성·재검증·재리뷰(루프 금지, 개선 기회).
+            # 재리뷰 통과 시 개선분으로 교체; 실패해도 기존 v를 그대로 저장(배지 계약 불변).
+            try:
+                raw2 = client.generate_json(
+                    build_section_prompt(lens_id, frame, top, backdrop, reject_notes=review["notes"]),
+                    timeout=90.0, model=model_for("report_section"))
+                v2 = validate_report(raw2, frame=frame, input_story_ids={s["id"] for s in top})
+                if v2 is not None:
+                    review2 = _review(client, v2, top)
+                    if review2["passed"]:
+                        v, review = v2, review2         # 개선분 채택
+            except LLMError as e:                       # 재시도 콜 실패 → 기존 v 유지(전파 금지)
+                log.warning("report %s: 재시도 생성 실패 — 기존 결과 유지: %s", doc_id, e)
         doc = {**v, "topic": lens_id, "generated_at": now,
                "frame_updated_at": frame.get("updated_at"), "review": review}
         if criteria:
