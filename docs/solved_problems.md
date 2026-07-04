@@ -21,6 +21,7 @@
 - **머지 후 이미지 재빌드 필수 (배포 전)**: 코드를 main에 머지해도 `processor:latest` 이미지가 그대로면 **라이브 Job이 옛 코드를 돌린다** → 새 `--mode`(예 `score`)가 `invalid choice`로 죽음. **머지 → `gcloud builds submit` 재빌드 → `jobs update --image` → execute** 순서를 지켜라.
 - **사내(ePrism MITM) gcloud SSL**: 최신 gcloud(urllib3 v2 strict)가 프록시 인증서 AKI 부재를 거부(`Missing Authority Key Identifier`) → 로컬·Cloud Shell 모두 차단, CA 추가로 안 풀림. **우회: `scripts/deploy-office.ps1`**(옛 gcloud 402 컨테이너 + ePrism CA + `core/custom_ca_certs_file` + Cloud Run Jobs는 `beta` 트랙 + Job용 SA `newsstore-job@`로 secret 접근). 집(MITM 없음)에선 평범하게 됨.
 - **PowerShell→bash 루프변수 깨짐**: `bash -c "for J in ...; do gcloud ... \$J; done"`를 PowerShell에서 호출하면 `$J`가 안 풀려 인자가 밀림(`Invalid resource name [ --image=...]`). → 루프 대신 **명시적 커맨드 나열**.
+- **LLM grounding 리뷰어 오탐 = 리뷰어 입력 부실(생성기보다 적게 봄)**: 리포트 리뷰어가 "아일랜드 1,500BTC 압수"를 '출처 없는 날조'로 기각했으나 **실제 사실**(크립토 프레임 watchpoint 극). 원인 ① 리뷰어가 요약 150자만 받고 생성기는 200자 → 리뷰어가 **덜 봄** ② 구체 사실(수치·고유명사)은 요약이 아니라 스토리 `developments`에 있는데 **둘 다 전개 미전달** ③ 리뷰어가 **프레임을 아예 못 받아** 정당한 극 restate(watchpoints)를 날조로 오판. → **리뷰어 입력 = 생성기 입력 이상 + 출력이 근거하는 모든 출처(여기선 standing 프레임 극)를 명시적으로 제공**. 공유 `_story_line`(제목+요약+최신 전개)으로 생성기·리뷰어 대칭, `build_review_prompt(frame)`로 프레임을 2차 출처로 인정. 결과 10/10 통과(오탐 0). **일반화(domain-llm-runtime): grounding 리뷰어에는 판정 대상이 근거로 삼을 수 있는 컨텍스트를 남김없이 줘라 — 덜 주면 정당한 출력을 환각으로 죽인다.** 그리고 FAIL-LOUD 배지(검증 실패)를 성급히 억누르지 않은 덕에 이 입력 결함을 추적할 수 있었다(배지=진단 흔적).
 
 ## 환경 / 툴링
 - **로컬 Python 없음** — 호스트 `python`은 Windows Store 스텁. → **Docker 전용 개발**(개발 원칙 7). 모든 실행·테스트는 Docker.
