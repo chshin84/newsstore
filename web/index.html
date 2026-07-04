@@ -971,7 +971,7 @@
           <div class="seclbl">${txt(group)}</div>
           <div class="dt">${txt(report.headline) || "(제목 없음)"} ${hot}${badge}${stale}${frameStale}${skew}</div>
           <div class="dlead">${txt(report.lead)}</div>
-          ${frameChipsHtml(f)}${secs}
+          ${secs}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
       }).join("");
