@@ -7,28 +7,49 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+  <script>
+    // FOUC 방지: 스타일 적용 전에 저장된 테마·글자크기를 루트에 반영
+    document.documentElement.dataset.theme = localStorage.getItem("ns_theme")
+      || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.style.setProperty("--fs",
+      { s: ".92", m: "1", l: "1.15" }[localStorage.getItem("ns_fs") || "m"]);
+  </script>
   <style>
     :root {
       --bg:#fdfcf8; --card:#fffefc; --line:#ece6da; --fg:#2f2a23;
       --sub:#4a4236; --mut:#9c9385; --accent:#c0764a; --pill:#f0ebe0; --pill-fg:#6e6558;
       --imp:#bf8f3c; --risk:#c0606d; --green:#4f9e80; --off:#ddd6c9;
+      --btn:#fff; --hover:#f0f1f4; --card2:#faf9f6; --line2:#e0ddd5; --leadbg:#f3ede2;
+      --headerbg:rgba(241,240,236,.94); --shadow:rgba(40,40,40,.13);
+      --fs:1; --expand-max:min(45vh,380px);
+      color-scheme:light;
+    }
+    :root[data-theme="dark"] {
+      --bg:#191713; --card:#211e19; --line:#37322a; --fg:#ece7dd; --sub:#c9c1b2; --mut:#8a8172;
+      --accent:#d98d5f; --pill:#2c2820; --pill-fg:#b3a893; --imp:#d4a959; --risk:#d97f8b;
+      --green:#6cb89a; --off:#3d382e; --btn:#262219; --hover:#2e2a22; --card2:#1e1b16;
+      --line2:#3a352c; --leadbg:#2a2418; --headerbg:rgba(26,24,20,.92); --shadow:rgba(0,0,0,.5);
+      color-scheme:dark;
     }
     * { box-sizing: border-box; }
     body { margin:0; background:var(--bg); color:var(--fg);
       font-family:"Inter","Noto Sans KR",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-      font-size:14.5px; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
-    header { position:sticky; top:0; z-index:5; background:rgba(241,240,236,.94);
+      font-size:calc(14.5px*var(--fs)); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+    header { position:sticky; top:0; z-index:5; background:var(--headerbg);
       backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:13px 16px; }
     .wrap { max-width:760px; margin:0 auto; }
-    h1 { font-size:18px; margin:0 0 9px; letter-spacing:-.2px; }
-    h1 small { color:var(--mut); font-weight:400; font-size:13px; margin-left:6px; }
+    .hrow { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 9px; }
+    .hbtns { display:flex; gap:6px; }
+    .hbtns button { min-height:40px; min-width:40px; padding:6px 10px; line-height:1; }
+    h1 { font-size:calc(18px*var(--fs)); margin:0; letter-spacing:-.2px; }
+    h1 small { color:var(--mut); font-weight:400; font-size:calc(13px*var(--fs)); margin-left:6px; }
     .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-    .controls label { color:var(--mut); font-size:13px; }
-    select, button { background:#fff; color:var(--fg); border:1px solid var(--line);
-      border-radius:8px; padding:6px 11px; font-size:14px; font-family:inherit; }
+    .controls label { color:var(--mut); font-size:calc(13px*var(--fs)); }
+    select, button { background:var(--btn); color:var(--fg); border:1px solid var(--line);
+      border-radius:8px; padding:6px 11px; font-size:calc(14px*var(--fs)); font-family:inherit; }
     button { cursor:pointer; transition:background .12s; }
-    button:hover { background:#f0f1f4; }
-    #status { color:var(--mut); font-size:13px; margin-left:auto; }
+    @media (hover:hover) { button:hover { background:var(--hover); } }
+    #status { color:var(--mut); font-size:calc(13px*var(--fs)); margin-left:auto; }
     main { padding:13px 16px 28px; }
     .card { background:var(--card); border:1px solid var(--line); border-left-width:4px;
       border-radius:9px; padding:11px 14px; margin:0 0 6px; }
@@ -52,6 +73,13 @@
     .tab { font-weight:600; color:var(--mut); }
     .tab.active { color:var(--fg); border-color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent); }
     [hidden] { display:none !important; }
+
+    /* ===== 모바일 베이스 (토대) ===== */
+    @media (max-width:680px) {
+      header { padding:9px 12px; }
+      h1 small { display:none; }
+      main { padding:11px 12px 24px; }
+    }
 
     /* ===== 스토리 스트립 ===== */
     .stripwrap { position:relative; }
@@ -133,7 +161,13 @@
 <body>
   <header>
     <div class="wrap">
-      <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
+      <div class="hrow">
+        <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
+        <div class="hbtns">
+          <button id="fsBtn" title="글자 크기 (작게/중간/크게 순환)" aria-label="글자 크기">가</button>
+          <button id="themeBtn" title="배경 밝게/어둡게" aria-label="테마 전환">🌙</button>
+        </div>
+      </div>
       <div class="tabs">
         <button class="tab active" id="tabFeed">피드</button>
         <button class="tab" id="tabStories">스토리</button>
@@ -183,6 +217,9 @@
       let h, i = SRC_ORDER.indexOf(str);
       if (i >= 0) h = Math.round((i * 137.508) % 360);
       else { let x = 0; for (let j = 0; j < str.length; j++) x = (x * 31 + str.charCodeAt(j)) >>> 0; h = x % 360; }
+      // 테마 인지: 다크에선 어두운 배경·밝은 글자 (테마 토글 시 활성 탭 재렌더로 반영)
+      if (document.documentElement.dataset.theme === "dark")
+        return { bar:`hsl(${h} 55% 50%)`, bg:`hsl(${h} 35% 22%)`, fg:`hsl(${h} 65% 80%)` };
       return { bar:`hsl(${h} 62% 54%)`, bg:`hsl(${h} 64% 95%)`, fg:`hsl(${h} 46% 32%)` };
     }
     // 피드가 이중 인코딩한 &quot; &#39; 등을 실제 문자로 디코드
@@ -797,6 +834,45 @@
       else if (!reportView.hidden) loadReport();
       else load();
     }, AUTO_REFRESH_MS);
+
+    // ===== 토대: 테마·글자크기 토글 (헤더 우상단 버튼) =====
+    const themeBtn = document.getElementById("themeBtn");
+    const fsBtn = document.getElementById("fsBtn");
+
+    function syncThemeBtn() {
+      themeBtn.textContent = document.documentElement.dataset.theme === "dark" ? "☀️" : "🌙";
+    }
+    function rerenderActiveTab() {
+      // srcColors가 테마 의존 → 활성 탭만 재렌더 (글자크기는 CSS 변수라 불필요)
+      if (!storiesView.hidden) loadStories();
+      else if (!reportView.hidden) loadReport();
+      else load();
+    }
+    themeBtn.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      localStorage.setItem("ns_theme", next);
+      syncThemeBtn();
+      rerenderActiveTab();
+    });
+    syncThemeBtn();
+
+    // 글자크기: 작게(.92) → 중간(1) → 크게(1.15) 순환, 현재 상태를 라벨로 표시
+    const FS_PRESET = { s: ".92", m: "1", l: "1.15" };
+    const FS_LABEL = { s: "가⁻", m: "가", l: "가⁺" };
+    const FS_NEXT = { s: "m", m: "l", l: "s" };
+    let fsKey = localStorage.getItem("ns_fs");
+    if (!FS_PRESET[fsKey]) fsKey = "m";
+    function applyFs() {
+      document.documentElement.style.setProperty("--fs", FS_PRESET[fsKey]);
+      fsBtn.textContent = FS_LABEL[fsKey];
+    }
+    applyFs();
+    fsBtn.addEventListener("click", () => {
+      fsKey = FS_NEXT[fsKey];
+      localStorage.setItem("ns_fs", fsKey);
+      applyFs();
+    });
   </script>
 </body>
 </html>
