@@ -667,8 +667,7 @@
       const newb = isNew(s.first_seen, Date.now()) ? `<span class="newb">NEW</span>` : "";
       const sec = lensLabel ? `<div class="seclbl">${txt(lensLabel)}</div>` : "";
       // 우상단 링크: 이 스토리의 리포트 섹션으로 점프(#rep-{첫 렌즈}). 렌즈 없으면 생략(fail-soft).
-      const rep = (s.lenses && s.lenses.length)
-        ? `<a class="slink" href="#rep-${esc(s.lenses[0])}" title="이 스토리의 리포트로" aria-label="리포트로">↗</a>` : "";
+      const rep = `<a class="slink" href="#story-${esc(s.id)}" title="이 스토리 상세로" aria-label="스토리 상세로">↗</a>`;
       return `<div class="scard" data-id="${esc(s.id)}" style="--bar:${c.bar}">${rep}
         ${sec}<div class="st">${head}</div>${lensChipsHtml(s, 2)}
         <div class="sfoot"><span class="scnt">${Number(s.count) || 0}건</span>
@@ -735,6 +734,7 @@
       openStoryId = null; detailEl.innerHTML = "";
       [...stripEl.querySelectorAll(".scard")].forEach(c => c.classList.remove("sel"));
     }
+    let pendingStoryId = null;                                 // #story-{id} 딥링크: 로드 후 열 스토리
     async function openStory(id) {
       if (openStoryId === id) { closeDetail(); return; }       // 토글
       openStoryId = id;
@@ -776,6 +776,10 @@
         }
         const lensLabel = g => LENS_LABELS[g.lensId] || (g.lensId === "_etc" ? "기타" : g.lensId);
         stripEl.innerHTML = groups.map(g => storyCardHtml(g.main, lensLabel(g))).join("");   // 섹션별 메인 1개
+        if (pendingStoryId) {                                  // #story-{id} 딥링크 대기분 열기
+          const t = pendingStoryId; pendingStoryId = null;
+          if (storyById.has(t)) openStory(t);
+        }
       } catch (e) {
         if (/requires an index|currently building/i.test(e.message)) {
           stripEl.innerHTML = `<div class="sempty">스토리 인덱스를 만드는 중이에요(최초 1회, 보통 1~3분)…</div>`;
@@ -982,6 +986,13 @@
     function routeFromHash() {
       // #rep-* 는 리포트 문서 내 섹션 앵커 — 리포트 탭을 유지해야 브라우저 기본 스크롤이 동작(M1)
       const h = location.hash;
+      if (h.startsWith("#story-")) {                           // 스토리 딥링크 → 스토리 탭 + 상세 열기
+        const id = h.slice(7);
+        showTab("stories");
+        if (storiesLoaded && storyById.has(id)) { if (openStoryId !== id) openStory(id); }
+        else pendingStoryId = id;                              // 로드 전이면 loadStories 끝에서 연다
+        return;
+      }
       showTab(h === "#stories" ? "stories"
         : (h === "#report" || h.startsWith("#rep-")) ? "report" : "feed");
     }
