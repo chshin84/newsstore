@@ -53,20 +53,28 @@
     main { padding:13px 16px 28px; }
     .card { background:var(--card); border:1px solid var(--line); border-left-width:4px;
       border-radius:9px; padding:11px 14px; margin:0 0 6px; }
-    .card a.title { color:var(--fg); text-decoration:none; font-size:15px; font-weight:600;
+    .card.has-body { cursor:pointer; }
+    .card a.title { color:var(--fg); text-decoration:none; font-size:calc(15px*var(--fs)); font-weight:600;
       line-height:1.5; letter-spacing:-.1px; }
-    .card a.title:hover { color:var(--accent); }
-    .excerpt { color:var(--sub); font-size:13px; line-height:1.6; margin:5px 0 0;
-      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-    .card:hover { background:#fbfbf9; border-color:#d8d6cf; }
-    .card:hover .excerpt { -webkit-line-clamp:99; overflow:visible; }
-    .meta { color:var(--mut); font-size:12px; margin-top:8px; display:flex; gap:6px;
+    .excerpt { color:var(--sub); font-size:calc(13px*var(--fs)); line-height:1.6; margin:5px 0 0;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+      max-height:3.2em; transition:max-height .18s ease-out; }
+    .card.open .excerpt { -webkit-line-clamp:unset; max-height:var(--expand-max); overflow:auto; }
+    @media (hover:hover) {
+      .card a.title:hover { color:var(--accent); }
+      .card:hover { background:var(--hover); border-color:var(--line2); }
+    }
+    .meta { color:var(--mut); font-size:calc(12px*var(--fs)); margin-top:8px; display:flex; gap:6px;
       align-items:center; flex-wrap:wrap; }
     .pill { background:var(--pill); color:var(--pill-fg); border-radius:999px;
-      padding:2px 9px; font-size:11.5px; }
+      padding:2px 9px; font-size:calc(11.5px*var(--fs)); }
     .src { font-weight:600; }
     .empty, .error { color:var(--mut); text-align:center; padding:44px 16px; line-height:1.7; }
     .error code { color:var(--accent); }
+    @media (max-width:680px) {
+      .card { padding:10px 12px; }
+      .meta { row-gap:4px; }
+    }
 
     /* ===== 탭 ===== */
     .tabs { display:flex; gap:4px; margin-bottom:9px; }
@@ -230,7 +238,7 @@
         ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
     }
     function txt(s) { return esc(decode(s)); }
-    function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 호버 시 전체
+    function bodyHtml(s) { return esc(decode(s).trim()); }   // 전문; CSS가 2줄로 클램프, 카드 클릭 시 확장(.open)
 
     // === FEED-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
     // 노출 통제는 백엔드 kind 단일 권위(classify가 수집 시점에 박음 — story/spam/digest/sports).
@@ -270,7 +278,7 @@
         const body = bodyHtml(isTS ? (it.title || it.body) : it.body);
         const c = srcColors(it.source);
         const tags = (it.tags || []).map(t => `<span class="pill">${txt(t)}</span>`).join("");
-        return `<div class="card" style="border-left-color:${c.bar}">
+        return `<div class="card${body ? " has-body" : ""}" style="border-left-color:${c.bar}">
           <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${titleHtml}</a>
           ${body ? `<p class="excerpt">${body}</p>` : ""}
           <div class="meta">
@@ -339,6 +347,12 @@
     srcSel.addEventListener("change", load);
     tagSel.addEventListener("change", load);
     document.getElementById("refresh").addEventListener("click", load);
+    // 카드 클릭 확장(패턴 E): 링크/버튼 클릭은 토글하지 않음, 본문 있는 카드만
+    listEl.addEventListener("click", (e) => {
+      if (e.target.closest("a,button,select")) return;
+      const card = e.target.closest(".card.has-body");
+      if (card) card.classList.toggle("open");
+    });
 
     // ============================ 스토리 뷰 ============================
     const feedView = document.getElementById("feedView");
