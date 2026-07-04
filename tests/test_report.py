@@ -98,6 +98,8 @@ def test_section_prompt_contains_frame_stories_backdrop():
     assert "r1" in p and "빅테크 capex 감속" in p       # standing 프레임이 입력에
     assert "s1" in p and "백드롭 텍스트" in p
     assert "매수" in p                                  # 매수/매도 금지 지시 포함(§1)
+    # #1: 과인용(스토리에 없는 사실을 트리거 근거로 지어냄) 방지 — grounding 리뷰 기각의 주 원인
+    assert "과인용" in p and "watchpoints" in p
 
 
 def test_section_prompt_survives_real_frame_with_datetime():

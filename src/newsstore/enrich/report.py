@@ -150,7 +150,10 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
         f"프레임:\n{_json.dumps(axes_only, ensure_ascii=False)}\n"
         f"매크로 참고 맥락: {backdrop or '(없음)'}\n"
         "스토리(각 줄 맨 앞 [id]가 story_id):\n" + "\n".join(lines) + "\n"
-        "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용. "
+        "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용 — "
+        "인용 스토리에 실제로 담긴 사실만 근거로 삼아라. 스토리에 없는 수치·고유명사·협의/계약 "
+        "진전 등을 지어내 트리거 근거로 쓰지 마라(과인용 금지 — grounding 리뷰 기각의 주 원인). "
+        "근거가 약하거나 스토리로 뒷받침되지 않으면 그 극은 트리거로 올리지 말고 watchpoints로 내려라. "
         "미발생(not_triggered)은 프레임 극 중 72h 트리거 없는 것. watchpoints는 관찰 지점 재확인.\n"
         + (f"직전 시도가 다음 사유로 기각됨: {reject_notes}. 이를 반영해 기각 사유를 해소해 "
            "재작성하라.\n" if reject_notes else "") +
