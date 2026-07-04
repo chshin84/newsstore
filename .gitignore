@@ -33,3 +33,6 @@ Thumbs.db
 
 # Playwright MCP 세션 잔재(로컬 전용)
 .playwright-mcp/
+
+# git worktrees used by isolated subagents (machine-local)
+.claude/worktrees/
