@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from .gemini import LLMError
+from .model_config import model_for
 from .topics import valid_ids
 
 log = logging.getLogger("newsstore.enrich.lens_classify")
@@ -95,7 +96,7 @@ def classify_stage2(t: dict, client, *, story_text, candidates, timeout=30.0) ->
         f"Story:\n{story_text[:1500]}\n"
         'Return JSON {"lenses": ["id", ...]} only.')
     try:
-        resp = client.generate_json(prompt, timeout=timeout)
+        resp = client.generate_json(prompt, timeout=timeout, model=model_for("lenses"))
     except LLMError as e:                   # LLM 장애만 prior 폴백(로깅) — 코드 버그는 전파(FAIL-LOUD)
         log.warning("lens stage2 fallback to prior (LLM): %s", e)
         return list(candidates)[:MAX_LENSES]

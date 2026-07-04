@@ -13,7 +13,7 @@ class _Client:
     def embed(self, text, *, timeout=30.0):
         return [0.0, 0.0]
 
-    def complete(self, prompt, *, timeout=30.0):
+    def complete(self, prompt, *, timeout=30.0, model=None):
         return self.verdict
 
 

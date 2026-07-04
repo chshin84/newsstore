@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from .frames import AXES
 from .gemini import LLMError
+from .model_config import model_for
 
 log = logging.getLogger("newsstore.enrich.report")
 
@@ -171,7 +172,8 @@ def build_review_prompt(report: dict, stories: list[dict]) -> str:
 def _review(client, report: dict, stories: list[dict]) -> dict:
     """리뷰 콜 — 실패는 passed=false(통과 위장 금지, §5 표)."""
     try:
-        v = client.generate_json(build_review_prompt(report, stories), timeout=60.0)
+        v = client.generate_json(build_review_prompt(report, stories), timeout=60.0,
+                                 model=model_for("report_review"))
     except LLMError as e:
         return {"passed": False, "notes": f"리뷰 불가: {e}"}
     if not isinstance(v, dict) or not isinstance(v.get("passed"), bool):
@@ -193,7 +195,8 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> 
     excerpts = [f'{s.get("title", "")}' for s in all_top3]
     if excerpts:
         try:
-            raw = client.generate_json(build_backdrop_prompt(excerpts), timeout=60.0)
+            raw = client.generate_json(build_backdrop_prompt(excerpts), timeout=60.0,
+                                       model=model_for("report_backdrop"))
             text = (raw.get("text") or "").strip() if isinstance(raw, dict) else ""
             if text and len(text) <= MAX_BACKDROP:       # 결정론: 비어있지 않음·길이 상한
                 verdict = _review(client, {"text": text}, all_top3)
@@ -222,7 +225,7 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> 
     def _one(doc_id, lens_id, frame, top, criteria=None):
         try:
             raw = client.generate_json(build_section_prompt(lens_id, frame, top, backdrop),
-                                       timeout=90.0)
+                                       timeout=90.0, model=model_for("report_section"))
         except LLMError as e:
             log.warning("report %s: 생성 실패 — 기존 유지(§5b): %s", doc_id, e)
             totals["failed"] += 1

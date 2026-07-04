@@ -172,6 +172,7 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
   - **기본값 근거**: 운영 측정에서 스토리 최근접쌍 코사인이 중앙 0.657·p95 0.767이라, 이전 0.55/0.75(이란+코스피 차용값)는 거의 모든 비교가 LLM 판정 구간에 걸려 호출이 과도했다. 0.62/0.80으로 올려 결정론 구간을 넓혔다. 추가 조정은 위 env로.
 - dual score 게이트 튜닝(#7, env): `NEWSSTORE_SCORE_MIN_MEMBERS`(비금융자산/emergent를 채점하는 최소 멤버수, 기본 2). standing/watch 렌즈는 게이트 면제(상시 채점).
   - **측정(값 결정 전)**: `stories`의 `risk`/`impact` 분포·게이트 통과율을 떠서 임계를 정한다. 루브릭(0~3 의미)·REF_WINDOW·EVENT_SANITY_DAYS는 코드 상수(라이브 분포 보고 후속 조정).
+- **LLM 모델 변경**: usage별 모델은 `config/models.yaml`(SSOT — 워커=flash-lite, 추론·리뷰어=3.5-flash)이 정의. 변경 → **processor 재빌드+6잡 갱신**(§E, report 포함). 비상시 재빌드 없이: `gcloud run jobs update <job> --update-env-vars=GEMINI_MODEL=<model>`(전역 오버라이드 — 그 잡의 모든 usage에 적용).
 - 태그 어휘 범위 측정(#8): `enrich.tag_report.tag_coverage(items_tags, vocab)`로 태그 빈도·무태그율·어휘밖(out_of_vocab) 태그를 본 뒤 통제 어휘(`config/taxonomy.yaml`) 범위를 정한다. 라이브 집계 예:
   ```python
   from newsstore.store.factory import make_store

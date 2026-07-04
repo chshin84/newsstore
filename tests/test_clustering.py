@@ -6,7 +6,7 @@ class _LLM:
     def __init__(self, verdict="DIFFERENT", boom=False):
         self.verdict, self.boom, self.calls = verdict, boom, 0
 
-    def complete(self, prompt, *, timeout=30.0):
+    def complete(self, prompt, *, timeout=30.0, model=None):
         self.calls += 1
         if self.boom:
             raise RuntimeError("down")

@@ -45,7 +45,7 @@ class _LLM:
     def __init__(self, frame_resp, review_resp=None):
         self.frame_resp, self.review_resp = frame_resp, review_resp
         self.calls = []
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         self.calls.append(prompt)
         if isinstance(self.frame_resp, Exception):
             raise self.frame_resp

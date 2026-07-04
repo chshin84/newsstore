@@ -34,7 +34,7 @@ class FakeLLM:
         self.resp = resp
         self.calls = []
 
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         self.calls.append(prompt)
         if isinstance(self.resp, Exception):
             raise self.resp

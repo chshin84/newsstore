@@ -9,6 +9,7 @@ import logging
 from datetime import timedelta
 
 from .gemini import LLMError
+from .model_config import model_for
 
 log = logging.getLogger("newsstore.enrich.article")
 
@@ -92,7 +93,7 @@ def article_story(story: dict, members: list | None, client, *, now,
     try:
         raw = client.generate_json(
             build_article_prompt(story.get("title", ""), story.get("impact"), body),
-            timeout=timeout)
+            timeout=timeout, model=model_for("article"))
     except LLMError as e:                   # LLM 장애만 fail-soft(로깅) — 코드 버그는 전파(FAIL-LOUD)
         log.warning("article skip story %s (LLM): %s", story.get("id"), e)
         return None

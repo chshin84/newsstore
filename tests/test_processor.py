@@ -26,7 +26,7 @@ class _FakeClient:
     """generate_json: 모든 항목에 동일 태그. embed: 제목 키워드로 벡터 매핑(클러스터 제어)."""
     def __init__(self, embed_map):
         self.embed_map = embed_map
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         return {"results": [{"tickers": [], "entities": ["Fed"], "topics": ["rates"]}
                             for _ in range(10)]}
     def embed(self, text, *, timeout=30.0):
@@ -34,7 +34,7 @@ class _FakeClient:
             if key in text:
                 return list(vec)
         return [0.0] * EMBED_DIM
-    def complete(self, prompt, *, timeout=30.0):
+    def complete(self, prompt, *, timeout=30.0, model=None):
         return "DIFFERENT"        # gray-band 기본: 미합류(직교 벡터 테스트는 호출 안 됨)
 
 
@@ -145,7 +145,7 @@ def test_same_batch_second_article_joins_first(store):
 def test_gray_band_same_merges(store):
     # gray-band(lo<cos<hi)에서 LLM=SAME → 합류. 벡터를 cos≈0.64로 구성.
     class _Gray(_FakeClient):
-        def complete(self, prompt, *, timeout=30.0):
+        def complete(self, prompt, *, timeout=30.0, model=None):
             return "SAME"
     def _vec(a, b):
         v = [0.0] * EMBED_DIM; v[0] = a; v[1] = b; return v

@@ -76,25 +76,30 @@ class GeminiClient:
             return code in (408, 429)
         return True
 
-    def complete(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT) -> str:
-        """평문 생성(JSON mime 없이). gray-band LLM(llm.complete)용. None 가드 재사용."""
+    def complete(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT,
+                 model: str | None = None) -> str:
+        """평문 생성(JSON mime 없이). gray-band LLM(llm.complete)용. None 가드 재사용.
+
+        model: usage별 오버라이드(config/models.yaml → model_config.model_for).
+        미지정 시 클라이언트 기본(self._model)."""
         from google.genai import types
 
         def _call():
             r = self._client.models.generate_content(
-                model=self._model, contents=prompt,
+                model=model or self._model, contents=prompt,
                 config=types.GenerateContentConfig(
                     http_options=types.HttpOptions(timeout=int(timeout * 1000))))
             return getattr(r, "text", None)
 
         return call_with_retry(_call, is_transient=self._is_transient)
 
-    def generate_json(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT) -> dict:
+    def generate_json(self, prompt: str, *, timeout: float = DEFAULT_TIMEOUT,
+                      model: str | None = None) -> dict:
         from google.genai import types
 
         def _call():
             r = self._client.models.generate_content(
-                model=self._model, contents=prompt,
+                model=model or self._model, contents=prompt,
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     http_options=types.HttpOptions(timeout=int(timeout * 1000))))

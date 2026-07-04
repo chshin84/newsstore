@@ -4,6 +4,7 @@ import re
 
 from ..contracts.ports import LLMClient
 from .gemini import LLMError
+from .model_config import model_for
 
 log = logging.getLogger("newsstore.enrich.tagger")
 
@@ -51,7 +52,8 @@ def tag_items(items: list, client: LLMClient, taxonomy: dict, *, batch: int = 10
     for s in range(0, len(items), batch):
         chunk = items[s:s + batch]
         try:
-            resp = client.generate_json(build_prompt(chunk, taxonomy), timeout=30.0)
+            resp = client.generate_json(build_prompt(chunk, taxonomy), timeout=30.0,
+                                        model=model_for("tag"))
         except LLMError as e:        # 한 배치 실패가 전체를 죽이지 않게 fail-soft(빈 태그)
             log.warning("tagging batch failed, continuing with empty tags: %s", e)
             resp = {}

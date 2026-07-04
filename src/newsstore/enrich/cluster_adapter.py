@@ -4,14 +4,26 @@ from __future__ import annotations
 
 from .clustering import EventClusterer
 from .clustering_types import Article, Story
+from .model_config import model_for
 from ..contracts.models import RawItem
 from ..contracts.ports import LLMClient
+
+
+class _JudgeLLM:
+    """gray-band 판정용 LLM 래퍼 — usage별 모델(config/models.yaml: cluster_judge)을
+    콜에 주입. clustering.py(알고리즘)는 모델 선택을 모른 채 llm.complete만 쓴다."""
+
+    def __init__(self, client: LLMClient):
+        self._client = client
+
+    def complete(self, prompt: str) -> str:
+        return self._client.complete(prompt, model=model_for("cluster_judge"))
 
 
 def build_clusterer(client: LLMClient) -> EventClusterer:
     def embed(texts: list[str]) -> list[list[float]]:
         return [client.embed(t) for t in texts]
-    return EventClusterer(embed=embed, llm=client)
+    return EventClusterer(embed=embed, llm=_JudgeLLM(client))
 
 
 def to_article(item: RawItem, vec) -> Article:

@@ -8,6 +8,7 @@ import json
 import logging
 
 from .gemini import LLMError
+from .model_config import model_for
 
 log = logging.getLogger("newsstore.enrich.frames")
 
@@ -52,14 +53,20 @@ def build_frame_prompt(lens_id: str, old: dict, stories: list[dict]) -> str:
     lines = [f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
              for i, s in enumerate(stories[:FRAME_MAX_INPUT_STORIES])]
     return (
-        f"당신은 '{lens_id}' 자산군의 standing 프레임을 유지하는 애널리스트다.\n"
-        "프레임 3축: risks(아킬레스건/실질 리스크), premiums(기대/컨센서스), "
-        "watchpoints(극을 트리거할 수 있는 예정된 관찰 지점 — 판단/조언 금지).\n"
+        f"당신은 '{lens_id}' 자산군의 standing 프레임을 유지하는 시니어 애널리스트다.\n"
+        "프레임 3축:\n"
+        "- risks(아킬레스건): '지금 터진다면 시장이 가장 두려워할' 소수·고강도 시나리오만. "
+        "표면적 변동성 요인의 장황한 나열이 아니라 구조적 급소를 과감하고 깊게 짚어라 — "
+        "예컨대 지배적 투자 사이클의 철회, 핵심 수요처의 이탈처럼 내러티브 전체를 뒤집는 급. "
+        "사소한 것은 버려라.\n"
+        "- premiums(기대/컨센서스): 현재 가격·내러티브를 지탱하는 핵심 믿음 — 이것이 꺾이면 "
+        "상방 논리가 무너지는 것.\n"
+        "- watchpoints: 위 극을 트리거할 수 있는 예정된 관찰 지점(판단/조언 금지).\n"
         f"어제의 프레임(재검토 대상):\n{json.dumps(axes_only, ensure_ascii=False)}\n"
         "최근 스토리:\n" + "\n".join(lines) + "\n"
         "임무: 어제 극을 하나씩 재검토하라 — 여전히 유효하면 id 유지(근거 스토리가 최근에 없어도 "
         "구조적으로 유효하면 유지 가능하되 그 이유를 스스로 검토), 낡았으면 탈락, 새 위험/기대/"
-        f"관찰 지점은 추가(신규 id). 축당 최대 {FRAME_MAX_POLES}개.\n"
+        f"관찰 지점은 추가(신규 id). 축당 최대 {FRAME_MAX_POLES}개 — 수를 채우지 말고 강도로 골라라.\n"
         '아래 JSON만 출력: {"risks":[{"id":"...","text":"..."}],"premiums":[...],"watchpoints":[...]}')
 
 
@@ -84,7 +91,8 @@ def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> i
         old = store.get_frame(lens_id)
         stories = store.get_stories_for_report(lens_id, cutoff=cutoff)
         try:
-            raw = client.generate_json(build_frame_prompt(lens_id, old, stories), timeout=60.0)
+            raw = client.generate_json(build_frame_prompt(lens_id, old, stories), timeout=60.0,
+                                       model=model_for("frame_gen"))
         except LLMError as e:
             log.warning("frame pass %s: LLM 실패 — 어제 판 유지: %s", lens_id, e)
             continue
@@ -96,7 +104,8 @@ def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> i
         if diff:
             try:
                 verdict = client.generate_json(
-                    build_frame_review_prompt(diff, stories), timeout=60.0)
+                    build_frame_review_prompt(diff, stories), timeout=60.0,
+                    model=model_for("frame_review"))
             except LLMError as e:
                 log.warning("frame pass %s: 리뷰 콜 실패 — 어제 판 유지: %s", lens_id, e)
                 continue

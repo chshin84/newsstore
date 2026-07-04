@@ -134,7 +134,7 @@ class _LLM:
         self.section, self.review = section, review
         self.backdrop = json.loads(backdrop)
         self.n_review = 0
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         if "심사자" in prompt:
             self.n_review += 1
             return dict(self.review)
@@ -169,7 +169,7 @@ def test_run_report_pass_saves_passed_report_and_backdrop():
 def test_run_report_pass_backdrop_review_reject_degrades():
     # 백드롭 리뷰 기각 → 서두 미저장 + 섹션 콜에 미주입(degrade — §5 표). 섹션은 계속 진행.
     class _RejBackdrop(_LLM):
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             if "심사자" in prompt:
                 self.n_review += 1
                 # 첫 심사 콜 = 백드롭 grounding(파이프라인상 섹션보다 선행) → 기각, 이후 통과
@@ -206,7 +206,7 @@ def test_run_report_pass_generation_failure_keeps_existing():
     store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
     store.reports["kr_equity"] = {"headline": "옛것"}
     class _Boom:
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             if "심사자" in prompt:
                 return {"passed": True, "notes": ""}
             if "데스크 에디터" in prompt:

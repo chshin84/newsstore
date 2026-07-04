@@ -43,7 +43,7 @@ class _FakeLLM:
     def __init__(self, lenses, boom=False):
         self.lenses, self.boom = lenses, boom
 
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         if self.boom:
             from newsstore.enrich.gemini import LLMError
             raise LLMError("down")          # LLM 장애만 prior 폴백
@@ -77,7 +77,7 @@ def test_stage2_non_dict_response_falls_back_to_prior():
     from newsstore.enrich.lens_classify import classify_stage2
 
     class _Arr:                              # top-level JSON 배열(형태 위반)
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             return ["kr_rates"]
     assert classify_stage2(T, _Arr(), story_text="x", candidates=["crypto"]) == ["crypto"]
 
@@ -113,7 +113,7 @@ def test_stage2_propagates_non_llm_bug():
     from newsstore.enrich.lens_classify import classify_stage2
 
     class _Bug:                          # 코드 버그(비-LLMError)는 폴백으로 위장 말고 전파(FAIL-LOUD)
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             raise ValueError("programming bug")
     with pytest.raises(ValueError):
         classify_stage2(T, _Bug(), story_text="x", candidates=["kr_rates"])
