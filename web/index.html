@@ -173,6 +173,43 @@
     .htoggle { margin-left:8px; }
     .times { display:flex; flex-wrap:wrap; gap:4px 8px; }
     .tp { font-size:calc(10px*var(--fs)); color:var(--mut); } .tp b { color:var(--sub); } .tp.ev b { color:var(--green); }
+
+    /* ===== 리포트 ===== */
+    /* 프레임 칩(.fchip) — 요구 9: 빨강/주황/초록 텍스트를 크고 굵게, 틴트 배경으로 가독성 확보 */
+    .fchips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 12px; }
+    .fchip { font-size:calc(12.5px*var(--fs)); font-weight:700; padding:3px 10px;
+      border-radius:999px; line-height:1.4; }
+    .fchip.risk { color:var(--risk); background:color-mix(in srgb, var(--risk) 14%, transparent);
+      border:1px solid color-mix(in srgb, var(--risk), transparent 70%); }
+    .fchip.imp { color:var(--imp); background:color-mix(in srgb, var(--imp) 14%, transparent);
+      border:1px solid color-mix(in srgb, var(--imp), transparent 70%); }
+    .fchip.green { color:var(--green); background:color-mix(in srgb, var(--green) 14%, transparent);
+      border:1px solid color-mix(in srgb, var(--green), transparent 70%); }
+    /* 섹션 h4 색 액센트(.rsec-h) — 왼쪽 색 바 + 색 글자 */
+    .rsec-h { font-size:calc(14px*var(--fs)); margin:18px 0 8px; padding-left:9px;
+      border-left:3px solid var(--mut); color:var(--mut); }
+    .rsec-h.risk_triggered { border-left-color:var(--risk); color:var(--risk); }
+    .rsec-h.premium_triggered { border-left-color:var(--imp); color:var(--imp); }
+    .rsec-h.not_triggered { border-left-color:var(--mut); color:var(--mut); }
+    .rsec-h.watchpoints { border-left-color:var(--green); color:var(--green); }
+    /* 리포트 인용 카드 1열 + 폭 상한(전역 .darts 1열은 Agent C — 여기선 리포트 쪽 보장만) */
+    .darts.rcards { grid-template-columns:1fr; max-width:560px; }
+    /* 스토리 카드 클릭 확장(.scx) — 패턴 E: .open 토글, max-height .18s ease-out */
+    .scx { max-height:0; overflow:hidden; transition:max-height .18s ease-out; }
+    .scard.open .scx { max-height:var(--expand-max); overflow:auto; }
+    .scx-lead { font-size:calc(12px*var(--fs)); color:var(--fg); background:var(--leadbg);
+      border-left:3px solid var(--accent); padding:7px 9px; border-radius:0 6px 6px 0;
+      margin:8px 0 4px; line-height:1.55; }
+    .scx .abul { margin:6px 0 2px; }
+    .scx .abul li { font-size:calc(11.5px*var(--fs)); line-height:1.5; padding:2px 0 2px 14px; }
+    .scx .abul li::before { top:9px; }
+    /* 앵커 pill 행(리포트 목차) */
+    .ranchors { margin:0 0 12px; gap:5px 6px; }
+    @media (max-width:680px) {
+      #reportDoc .sdetail { padding:12px; }
+      .ranchors .pill { padding:4px 10px; font-size:calc(11.5px*var(--fs)); }
+      .fchips { gap:5px; }
+    }
   </style>
 </head>
 <body>
@@ -729,6 +766,7 @@
     const reportDocEl = document.getElementById("reportDoc");
     const tabReport = document.getElementById("tabReport");
     let reportLoaded = false;
+    const reportCited = new Map();   // 인용 스토리 id→doc — 카드 클릭 확장(.scx)이 조회, loadReport가 채움
 
     async function loadReport() {
       reportDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
@@ -752,7 +790,8 @@
         // 인용 스토리 카드용 스토리 문서 일괄 로드(documentId in ≤30 청크)
         const citedIds = [...new Set(docm.sections.flatMap(({ report }) =>
           (report.sections || []).flatMap(s => (s.items || []).flatMap(i => i.story_ids || []))))];
-        const cited = new Map();
+        reportCited.clear();
+        const cited = reportCited;                     // 모듈 Map 공유 — 클릭 확장(.scx)이 스토리 조회
         for (let k = 0; k < citedIds.length; k += 30) {
           const chunk = citedIds.slice(k, k + 30);
           const qs = await getDocs(query(collection(db, "stories"),
@@ -770,8 +809,8 @@
     function frameChipsHtml(f) {
       if (!f) return "";
       const ax = (arr, cls) => (arr || []).map(p =>
-        `<span class="lchip" title="${esc(p.id)}" style="color:var(--${cls})">${txt(p.text)}</span>`).join("");
-      return `<div class="lchips">${ax(f.risks, "risk")}${ax(f.premiums, "imp")}${ax(f.watchpoints, "green")}</div>`;
+        `<span class="fchip ${cls}" title="${esc(p.id)}">${txt(p.text)}</span>`).join("");
+      return `<div class="fchips">${ax(f.risks, "risk")}${ax(f.premiums, "imp")}${ax(f.watchpoints, "green")}</div>`;
     }
     function tsToMs(v) {
       if (!v) return null;
@@ -811,23 +850,44 @@
               seenCards.add(sid);
               return storyCardHtml(s);                   // 기존 스토리 카드 재사용(§7)
             }).join("");
-            return `<li>${txt(it.text)}<div class="darts">${cards}</div></li>`;
+            return `<li>${txt(it.text)}<div class="darts rcards">${cards}</div></li>`;
           }).join("");
-          return items ? `<h4>${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
+          return items ? `<h4 class="rsec-h ${esc(sec.name || "")}">${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
         }).join("");
         const gen = tsToMs(report.generated_at);
         return `<section class="sdetail" id="rep-${esc(lensId)}">
           <div class="seclbl">${txt(group)}</div>
           <div class="dt">${txt(report.headline) || "(제목 없음)"} ${badge}${stale}${frameStale}${skew}</div>
-          ${frameChipsHtml(f)}
-          <div class="dlead">${txt(report.lead)}</div>${secs}
+          <div class="dlead">${txt(report.lead)}</div>
+          ${frameChipsHtml(f)}${secs}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
       }).join("");
       reportDocEl.innerHTML =
         (docm.backdrop ? `<div class="sdetail"><div class="dlead">${txt(docm.backdrop)}</div></div>` : "") +
-        `<div class="lchips">${anchors}</div>` + body;
+        `<div class="lchips ranchors">${anchors}</div>` + body;
     }
+
+    // 리포트 내 스토리 카드 클릭 확장(요구 7) — 패턴 E: .open 토글, 링크/버튼 가드.
+    // 확장 내용 = displayLead + bulletsHtml(기존 전역 헬퍼 재사용), 스토리는 reportCited에서 조회.
+    reportDocEl.addEventListener("click", e => {
+      if (e.target.closest("a,button,select")) return;
+      const card = e.target.closest(".scard");
+      if (!card) return;
+      if (!card.querySelector(".scx")) {               // 최초 클릭 시 1회 생성(지연 생성)
+        const s = reportCited.get(card.dataset.id);
+        if (!s) return;
+        const lead = displayLead(s);
+        const inner = (lead ? `<div class="scx-lead">${txt(lead)}</div>` : "") + bulletsHtml(s.article);
+        if (!inner) return;                            // 펼칠 내용 없음 → 토글 생략
+        const scx = document.createElement("div");
+        scx.className = "scx";
+        scx.innerHTML = inner;
+        card.appendChild(scx);
+        void scx.offsetHeight;                         // 강제 리플로우 — 첫 열림에도 트랜지션 재생
+      }
+      card.classList.toggle("open");
+    });
 
     function showTab(which) {
       const stories = which === "stories", report = which === "report";
