@@ -186,8 +186,14 @@
     .fchip.green { color:var(--green); background:color-mix(in srgb, var(--green) 14%, transparent);
       border:1px solid color-mix(in srgb, var(--green), transparent 70%); }
     /* 섹션 h4 색 액센트(.rsec-h) — 왼쪽 색 바 + 색 글자 */
-    .rsec-h { font-size:calc(14px*var(--fs)); margin:18px 0 8px; padding-left:9px;
+    .rsec-h { font-size:calc(14px*var(--fs)); margin:14px 0 5px; padding-left:9px;
       border-left:3px solid var(--mut); color:var(--mut); }
+    /* 같은 섹션 내 단락 간격 축소(2026-07-04) — 항목은 촘촘히, 섹션(h4) 사이만 벌림 */
+    #reportDoc .abul { margin:0 0 8px; }
+    #reportDoc .abul li { padding:2px 0 2px 14px; line-height:1.5; }
+    #reportDoc .abul li::before { top:9px; }
+    #reportDoc .abul li .darts { margin:3px 0 2px; gap:5px; }
+    #reportDoc .dlead { margin:4px 0 8px; }
     .rsec-h.risk_triggered { border-left-color:var(--risk); color:var(--risk); }
     .rsec-h.premium_triggered { border-left-color:var(--imp); color:var(--imp); }
     .rsec-h.not_triggered { border-left-color:var(--mut); color:var(--mut); }
@@ -535,15 +541,21 @@
     // === REPORT-LOGIC-START (node test가 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
     const REPORT_STALE_MS = 24 * 3600 * 1000;           // §5(b) 기대 주기 1일
     function assembleReportDoc(groups, reports) {
-      // 단일 데일리 문서 결정론 조립(§4): 백드롭 서두 → report_group 순 섹션 → rising 말미.
+      // 단일 데일리 문서 결정론 조립(§4): 백드롭 서두 → 첫 그룹(리스크) → 급부상 → 나머지 그룹.
+      // 그룹 순서 SSOT = topics.yaml 렌즈 등장 순서(meta/report_groups로 발행), rising 위치만 UI 규칙.
       // groups는 순서 보존 배열([{name, lens_ids}]) — Firestore map 키 정렬로 순서가 깨지지 않게(m1).
       // 리포트 없는 렌즈는 생략(fail-soft — 상태는 reportStatus가 별도 판정).
       const sections = [];
       for (const g of (groups || []))
         for (const lid of (g.lens_ids || []))
           if (reports && reports[lid]) sections.push({ lensId: lid, group: g.name, report: reports[lid] });
-      if (reports && reports.rising)
-        sections.push({ lensId: "rising", group: "급부상", report: reports.rising });
+      if (reports && reports.rising) {
+        // 사용자 확정 순서(2026-07-04): rising은 첫 그룹 바로 뒤(첫 그룹 스킵 시 맨 앞)
+        const firstGroup = (groups && groups.length) ? groups[0].name : null;
+        let at = 0;
+        while (at < sections.length && sections[at].group === firstGroup) at++;
+        sections.splice(at, 0, { lensId: "rising", group: "급부상", report: reports.rising });
+      }
       return { backdrop: (reports && reports._backdrop && reports._backdrop.text) || "",
                sections };
     }
@@ -573,7 +585,8 @@
       return out;
     }
     function dedupCards(storyIdOrder) {
-      // 문서 전체 등장 순서에서 첫 인용만 카드(first:true), 재인용은 참조 배지(§7 dedup)
+      // 한 리포트(렌즈) 내 등장 순서에서 첫 인용만 카드(first:true), 재인용은 참조 배지.
+      // 스코프=단일 리포트 — "위 카드 참조"가 다른 리포트를 가리키면 안 됨(2026-07-04 사용자 지적).
       const seen = new Set();
       return (storyIdOrder || []).map(id => {
         const first = !seen.has(id);
@@ -819,13 +832,13 @@
       return Number.isFinite(n) ? n : null;
     }
     function renderReportDoc(docm, frames, links, cited, now, skips) {
-      const seenCards = new Set();
       const anchors = docm.sections.map(({ lensId, group }) =>
         `<a href="#rep-${esc(lensId)}" class="pill">${txt(group)} · ${txt(LENS_LABELS[lensId] || lensId)}</a>`).join(" ");
       const body = docm.sections.map(({ lensId, group, report }) => {
+        const seenCards = new Set();                     // dedup 스코프 = 이 리포트 안(참조가 리포트를 벗어나지 않게)
         const st = reportStatus(report, now, (skips || []).includes(lensId));
         const badge = report.review && report.review.passed === false
-          ? `<span class="newb" style="background:var(--risk)">검증 실패</span>` : "";
+          ? `<span class="newb" style="background:var(--risk)" title="${esc((report.review.notes || "").slice(0, 300))}">검증 실패</span>` : "";
         // "오늘 스토리 부족"(오늘 런이 스킵) vs "갱신 지연"(런 자체가 늦음)을 구분(M5 — §4)
         const stale = st === "stale" ? `<span class="newb" style="background:var(--mut)">갱신 지연</span>`
           : st === "skipped_today" ? `<span class="newb" style="background:var(--mut)">오늘 스토리 부족</span>` : "";

@@ -17,16 +17,25 @@ const rep = (topic, over = {}) => ({ topic, headline: "h", lead: "l",
   sections: [{ name: "risk_triggered", items: [{ text: "x", story_ids: ["s1"], pole_id: "r1" }] }],
   generated_at: new Date(NOW - 3600e3), review: { passed: true }, ...over });
 
-test("assembleReportDoc: 그룹 순서 + 백드롭 서두 + rising 말미", () => {
+test("assembleReportDoc: 그룹 순서 + 백드롭 서두 + rising은 첫 그룹 바로 뒤", () => {
   // m1: groups는 순서 보존 배열([{name, lens_ids}]) — Firestore map 키 정렬 회피
-  const groups = [{ name: "주식", lens_ids: ["kr_equity", "us_equity"] },
-                  { name: "코인", lens_ids: ["crypto"] }];
-  const reports = { kr_equity: rep("kr_equity"), crypto: rep("crypto"),
+  const groups = [{ name: "리스크", lens_ids: ["risk"] },
+                  { name: "주식", lens_ids: ["kr_equity", "us_equity"] }];
+  const reports = { risk: rep("risk"), kr_equity: rep("kr_equity"),
                     rising: rep("rising"), _backdrop: { text: "bd" } };
   const doc = assembleReportDoc(groups, reports);
   assert.equal(doc.backdrop, "bd");
-  assert.deepEqual(doc.sections.map(s => s.lensId), ["kr_equity", "crypto", "rising"]);
-  assert.equal(doc.sections[0].group, "주식");          // us_equity 리포트 없음 → 생략(fail-soft)
+  // 사용자 확정 순서(2026-07-04): 첫 그룹(리스크) → 급부상 → 나머지
+  assert.deepEqual(doc.sections.map(s => s.lensId), ["risk", "rising", "kr_equity"]);
+  assert.equal(doc.sections[0].group, "리스크");        // us_equity 리포트 없음 → 생략(fail-soft)
+});
+
+test("assembleReportDoc: 첫 그룹 리포트가 스킵된 날은 rising이 맨 앞", () => {
+  const groups = [{ name: "리스크", lens_ids: ["risk"] },
+                  { name: "주식", lens_ids: ["kr_equity"] }];
+  const reports = { kr_equity: rep("kr_equity"), rising: rep("rising") };
+  const doc = assembleReportDoc(groups, reports);
+  assert.deepEqual(doc.sections.map(s => s.lensId), ["rising", "kr_equity"]);
 });
 
 test("reportStatus: 정상/생성전/갱신지연/오늘스킵 4구분", () => {
@@ -47,7 +56,7 @@ test("crossLinks: 같은 스토리 다중 섹션 인용 → 상호 링크", () =
   assert.deepEqual(links["s1"].sort(), ["kr_equity", "us_policy"]);
 });
 
-test("dedupCards: 문서 전체에서 카드 1회, 재인용은 참조 배지", () => {
+test("dedupCards: 한 리포트 내 카드 1회, 재인용은 참조 배지 (스코프=단일 리포트 — 참조가 리포트를 벗어나면 안 됨)", () => {
   const order = ["s1", "s2", "s1"];
   const d = dedupCards(order);
   assert.deepEqual(d, [{ id: "s1", first: true }, { id: "s2", first: true },
