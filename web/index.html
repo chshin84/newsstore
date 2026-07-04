@@ -256,7 +256,7 @@
       text-transform:uppercase; margin-bottom:6px; }
     .reprisk { display:block; color:var(--fg); text-decoration:none; font-size:calc(13px*var(--fs));
       line-height:1.5; padding:2px 0; border-bottom:1px solid color-mix(in srgb, var(--risk) 12%, transparent); }
-    .reprisk:last-of-type { border-bottom:0; } .reprisk b { color:var(--risk); margin-right:5px; }
+    .reprisk:last-of-type { border-bottom:0; }
     @media (hover:hover) { .reprisk:hover { color:var(--risk); } }
     .reprisk-more { font-size:calc(11px*var(--fs)); color:var(--mut); margin-top:4px; }
     /* #44 글로벌 시장 프레임(리포트 최상단) */
@@ -1028,7 +1028,7 @@
       const digest = tr.length
         ? `<div class="reprisks"><div class="reprisks-h">지금 시장이 두려워하는 것</div>` +
           tr.slice(0, 7).map(r =>
-            `<a href="#rep-${esc(r.lensId)}" class="reprisk"><b>${txt(r.group)}</b> ${txt(r.text)}</a>`).join("") +
+            `<a href="#rep-${esc(r.lensId)}" class="reprisk">${txt(r.text)}</a>`).join("") +
           (tr.length > 7 ? `<div class="reprisk-more">+${tr.length - 7}개 더 (아래 섹션)</div>` : "") +
           `</div>` : "";
       // #44: 글로벌 시장 프레임(frames/_market) — 전 자산군 공통 공포를 리포트 최상단에.
