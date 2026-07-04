@@ -8,8 +8,7 @@
 #   한 콜로 현재값 + 등락 + 30일 시계열(차트). User-Agent 필요. 심볼 추가는 여기만(SSOT).
 # 갭: 국고채 3/10년(한국 국채)은 Yahoo에 없음 → 한국은행 ECOS(별도, 키 필요) 도입 시 추가.
 symbols:
-  # ── 지수 ──
-  - {key: kospi200, symbol: "^KS200", label: 코스피200}
+  # ── 지수 ── (코스피200 ^KS200은 Yahoo 데이터 불량[stale·±10% 스윙]이라 제외 — 별도 KR 소스 필요)
   - {key: kosdaq,   symbol: "^KQ11",  label: 코스닥}
   - {key: nasdaq,   symbol: "^IXIC",  label: 나스닥}
   - {key: sp500,    symbol: "^GSPC",  label: "S&P500"}

@@ -71,9 +71,6 @@ def parse_yahoo_chart(raw, *, max_points: int = SERIES_MAX_POINTS) -> dict | Non
         return None
     r0 = res[0]
     meta = r0.get("meta") or {}
-    close = _fnum(meta.get("regularMarketPrice"))
-    if close is None:
-        return None
     ts = r0.get("timestamp") or []
     quotes = (((r0.get("indicators") or {}).get("quote") or [{}])[0] or {}).get("close") or []
     series = []
@@ -82,8 +79,12 @@ def parse_yahoo_chart(raw, *, max_points: int = SERIES_MAX_POINTS) -> dict | Non
         if cv is not None and dt is not None:
             series.append({"t": dt, "c": cv})
     series = series[-max_points:]                    # 최근 N일(오래된→최신 유지)
-    # 전일 대비 등락 = 시계열의 직전 종가(series[-2]) 기준.
-    # ⚠️ meta.chartPreviousClose는 range=1mo에선 '한 달 전' 종가라 일간 등락에 쓰면 오답.
+    # 값·등락 모두 시계열에서 도출 — 값=series[-1](차트 끝점과 일치), 전일=series[-2].
+    # ⚠️ regularMarketPrice(라이브)를 close로 쓰면 시계열이 stale일 때 다일간 등락이 되고
+    #    (^KS200 사례 -10%), meta.chartPreviousClose는 range=1mo에선 '한 달 전'이라 둘 다 안 씀.
+    close = series[-1]["c"] if series else _fnum(meta.get("regularMarketPrice"))
+    if close is None:
+        return None
     prev = series[-2]["c"] if len(series) >= 2 else None
     change = (close - prev) if prev is not None else None
     pct = ((close - prev) / prev * 100.0) if prev not in (None, 0) else None

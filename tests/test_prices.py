@@ -15,7 +15,7 @@ def test_load_real_prices_yaml():
     syms = load_price_symbols(str(REPO / "config" / "prices.yaml"))
     keys = {s.key for s in syms}
     # Yahoo 실측 확정 키: 실제 지수·수익률·환율·원자재
-    assert {"kospi200", "kosdaq", "nasdaq", "sp500", "us2y", "us10y", "us30y",
+    assert {"kosdaq", "nasdaq", "sp500", "us2y", "us10y", "us30y",
             "usdkrw", "usdjpy", "wti", "gold"} <= keys
     assert all(isinstance(s, PriceSymbol) and s.symbol for s in syms)
 
@@ -58,6 +58,14 @@ def test_parse_yahoo_daychange_ignores_month_ago_chartprevclose():
     q = parse_yahoo_chart(_yc([900.0, 1000.0, 1010.0], chart_prev=900.0, price=1010.0))
     assert abs(q["percent_change"] - ((1010.0 - 1000.0) / 1000.0 * 100)) < 1e-9   # 전일=1000, +1%
     assert abs(q["percent_change"]) < 2                                # 월간(+12%) 아님
+
+
+def test_parse_yahoo_close_from_series_not_live_price():
+    # ^KS200 회귀: 시계열이 stale이고 라이브 regularMarketPrice가 달라도 값·등락은 시계열에서
+    # (라이브 vs stale 시계열 비교가 -10% 같은 다일간 오답을 냈던 사고).
+    q = parse_yahoo_chart(_yc([1454.0, 1366.0], price=1299.0))    # 라이브=1299, 시계열 끝=1366
+    assert q["close"] == 1366.0                                   # 값=series[-1](라이브 아님)
+    assert abs(q["percent_change"] - ((1366.0 - 1454.0) / 1454.0 * 100)) < 1e-9  # 전일=series[-2]
 
 
 def test_parse_yahoo_no_prior_day_no_change():
