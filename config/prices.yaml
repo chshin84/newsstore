@@ -1,0 +1,24 @@
+# 가격 데이터 수집 대상 (SSOT) — Twelve Data(/quote). 소비자: collect/prices.py
+#
+# 목적: exogenous 비-LLM 앵커 — 뉴스 센티먼트(프레임) vs 실제 가격 반응으로 over/under-reaction
+# 판정 + 모델 순환 차단. 우리 렌즈(자산군)에 대응하는 지수·환율·원자재·크립토.
+#
+# 계약: 각 항목 {key(내부 id·prices/{key} 문서), td_symbol(Twelve Data 심볼), label, lens(대응 렌즈 힌트)}.
+# td_symbol은 키 발급 후 /quote로 실측 확정한다(지수 심볼 규약이 문서에 불명 — KS11 vs ^KS11 등).
+# 비밀: TWELVEDATA_API_KEY는 Secret Manager(백엔드 전용). 무료 800콜/일 → 심볼 ~10개면 여유.
+#
+# 반영: 이 파일은 이미지에 COPY → 변경 시 재빌드. 심볼 추가는 여기만(코드 하드코딩 금지, SSOT).
+symbols:
+  # ── 지수(주식 렌즈) ── (KOSPI/KOSDAQ 심볼은 키로 실측 확정)
+  - {key: kospi,   td_symbol: KS11,     label: 코스피,     lens: kr_equity}
+  - {key: kosdaq,  td_symbol: KQ11,     label: 코스닥,     lens: kr_equity}
+  - {key: sp500,   td_symbol: GSPC,     label: S&P500,     lens: us_equity}
+  - {key: nasdaq,  td_symbol: IXIC,     label: 나스닥,     lens: us_equity}
+  # ── 환율 ──
+  - {key: usdkrw,  td_symbol: USD/KRW,  label: 원/달러,    lens: fx}
+  # ── 원자재 ──
+  - {key: wti,     td_symbol: WTI/USD,  label: WTI유가,    lens: oil_energy}
+  - {key: gold,    td_symbol: XAU/USD,  label: 금,         lens: precious_metals}
+  # ── 크립토 ──
+  - {key: btc,     td_symbol: BTC/USD,  label: 비트코인,   lens: crypto}
+  - {key: eth,     td_symbol: ETH/USD,  label: 이더리움,   lens: crypto}

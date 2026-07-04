@@ -33,6 +33,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    // 가격 스냅샷(뉴스 vs 가격 반응) — 공개 read, write 금지(수집 잡은 Admin SDK 우회)
+    match /prices/{key} {
+      allow read: if true;
+      allow write: if false;
+    }
 
     // 내부 상태(조건부 GET 등)는 비공개
     match /feed_state/{id} {

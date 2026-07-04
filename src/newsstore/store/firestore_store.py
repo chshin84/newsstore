@@ -259,6 +259,14 @@ class FirestoreStore:
         snap = self.db.collection("reports").document(doc_id).get()
         return (snap.to_dict() or {}) if snap.exists else {}
 
+    def save_price(self, key: str, data: dict) -> None:
+        """prices/{key} 최신 스냅샷 set(가격 앵커 — 뉴스 vs 가격 반응). 통째 덮어쓰기."""
+        self.db.collection("prices").document(key).set(dict(data))
+
+    def get_price(self, key: str) -> dict:
+        snap = self.db.collection("prices").document(key).get()
+        return (snap.to_dict() or {}) if snap.exists else {}
+
     def get_stories_for_report(self, lens_id: str, cutoff) -> list[dict]:
         # 전수 스캔(open)+클라 필터 — lensing/scoring/article과 동일 패턴(신규 인덱스 불요).
         out = []

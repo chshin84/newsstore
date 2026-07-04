@@ -226,6 +226,12 @@ class Store(Protocol):
     def get_report(self, doc_id: str) -> dict:
         """reports/{doc_id}. 없으면 {}."""
         ...
+    def save_price(self, key: str, data: dict) -> None:
+        """prices/{key} 최신 가격 스냅샷 set(뉴스 vs 가격 반응 앵커)."""
+        ...
+    def get_price(self, key: str) -> dict:
+        """prices/{key}. 없으면 {}."""
+        ...
 
 
 class LLMClient(Protocol):
