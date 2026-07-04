@@ -80,10 +80,12 @@ def build_market_prompt(stories: list[dict]) -> str:
         '"evidence_dev_ids":["..."]}],"premiums":[...],"watchpoints":[...]}')
 
 
-def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dict | None = None) -> str:
+def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dict | None = None,
+                       reject_notes: str | None = None) -> str:
     """이월 재심 프롬프트 — 어제 극 전부 + 최근 스토리(캡). 유지 판단에도 근거 검토 요구(§3 재심 계약).
 
-    market: 글로벌 시장 프레임(#44) — 주어지면 시장급 공포를 컨텍스트로 주입(interconnectivity 입구)."""
+    market: 글로벌 시장 프레임(#44) — 주어지면 시장급 공포를 컨텍스트로 주입(interconnectivity 입구).
+    reject_notes: 직전 시도의 diff-grounding 기각 사유 — 있으면 재작성 지시를 임무 뒤에 덧붙인다(1회 재시도)."""
     # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
     axes_only = {a: (old or {}).get(a) or [] for a in AXES}
     lines = [f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
@@ -116,6 +118,8 @@ def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dic
         "각 극에 achilles_kind와 evidence_dev_ids를 붙여라: achilles_kind는 말-행동 괴리(RAS)로 "
         "잡은 극이면 'words_deeds', 근거 이벤트 없이 구조적으로 유지하는 이월 극이면 'structural'. "
         "evidence_dev_ids는 그 극의 근거가 된 story_id 배열(위 목록에 실재하는 것만; 구조극은 [] 허용).\n"
+        + (f"직전 시도가 다음 사유로 기각됨: {reject_notes}. 이를 반영해 기각 사유를 해소한 극으로 "
+           "재작성하라.\n" if reject_notes else "") +
         '아래 JSON만 출력: {"risks":[{"id":"...","text":"...","achilles_kind":"words_deeds|structural",'
         '"evidence_dev_ids":["..."]}],"premiums":[...],"watchpoints":[...]}')
 
@@ -156,6 +160,36 @@ def _ensure_market_frame(store, client, per_lens: dict, *, now, min_age) -> dict
     return frame
 
 
+def _attempt_frame(client, lens_id, old, stories, market, *, reject_notes=None):
+    """1회 생성→결정론 검증→diff→diff-grounding 리뷰. 반환 (frame|None, verdict|None).
+
+    frame None = LLM 콜 실패 또는 결정론 검증 실패(어제 판 유지 대상, fail-soft).
+    verdict None = diff 없음(리뷰 불요 — frame 그대로 저장 가능).
+    verdict dict = 리뷰 결과(호출부가 passed 확인). reject_notes는 재시도 프롬프트에 실린다."""
+    try:
+        raw = client.generate_json(
+            build_frame_prompt(lens_id, old, stories, market=market, reject_notes=reject_notes),
+            timeout=60.0, model=model_for("frame_gen"))
+    except LLMError as e:
+        log.warning("frame pass %s: LLM 실패 — 어제 판 유지: %s", lens_id, e)
+        return None, None
+    frame = validate_frame(raw, input_story_ids={s["id"] for s in stories if s.get("id")})
+    if frame is None:
+        log.warning("frame pass %s: 결정론 검증 실패 — 어제 판 유지", lens_id)
+        return None, None
+    diff = frame_diff(old, frame)
+    if not diff:
+        return frame, None                              # 유지 극뿐 → 리뷰 0콜
+    try:
+        verdict = client.generate_json(
+            build_frame_review_prompt(diff, stories), timeout=60.0,
+            model=model_for("frame_review"))
+    except LLMError as e:
+        log.warning("frame pass %s: 리뷰 콜 실패 — 어제 판 유지: %s", lens_id, e)
+        return None, None
+    return frame, verdict
+
+
 def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> int:
     """렌즈별 프레임 재심. 실패(콜·검증·리뷰 기각)는 어제 판 유지(fail-soft, §5(c)). 반환=갱신 수.
 
@@ -174,28 +208,18 @@ def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> i
         if ua is not None and (now - ua) < min_age:    # 신선 → 스킵(콜 0)
             continue
         stories = per_lens[lens_id]
-        try:
-            raw = client.generate_json(build_frame_prompt(lens_id, old, stories, market=market),
-                                       timeout=60.0, model=model_for("frame_gen"))
-        except LLMError as e:
-            log.warning("frame pass %s: LLM 실패 — 어제 판 유지: %s", lens_id, e)
-            continue
-        frame = validate_frame(raw, input_story_ids={s["id"] for s in stories if s.get("id")})
+        frame, verdict = _attempt_frame(client, lens_id, old, stories, market)
         if frame is None:
-            log.warning("frame pass %s: 결정론 검증 실패 — 어제 판 유지", lens_id)
-            continue
-        diff = frame_diff(old, frame)
-        if diff:
-            try:
-                verdict = client.generate_json(
-                    build_frame_review_prompt(diff, stories), timeout=60.0,
-                    model=model_for("frame_review"))
-            except LLMError as e:
-                log.warning("frame pass %s: 리뷰 콜 실패 — 어제 판 유지: %s", lens_id, e)
-                continue
-            if not (isinstance(verdict, dict) and verdict.get("passed") is True):
-                log.warning("frame pass %s: diff-grounding 기각(%s) — 어제 판 유지",
-                            lens_id, (verdict or {}).get("notes"))
+            continue                                    # 콜·검증 실패 → 어제 판 유지(fail-soft)
+        if verdict is not None and not (isinstance(verdict, dict) and verdict.get("passed") is True):
+            # diff-grounding 기각 → 실패 사유(notes)를 넣어 워커가 1회만 재작성·재검증·재리뷰(루프 금지)
+            notes = (verdict or {}).get("notes")
+            log.info("frame pass %s: diff-grounding 기각(%s) — 1회 재생성", lens_id, notes)
+            frame, verdict = _attempt_frame(client, lens_id, old, stories, market, reject_notes=notes)
+            if frame is None:
+                continue                                # 재생성 콜·검증 실패 → 어제 판 유지
+            if verdict is not None and not (isinstance(verdict, dict) and verdict.get("passed") is True):
+                log.warning("frame pass %s: 재시도도 diff-grounding 기각 — 어제 판 유지", lens_id)
                 continue
         store.save_frame(lens_id, frame, now=now)
         n += 1

@@ -217,6 +217,98 @@ def test_run_report_pass_generation_failure_keeps_existing():
     assert store.reports["kr_equity"]["headline"] == "옛것"    # §5(b) 기존 유지
 
 
+def test_section_prompt_includes_reject_notes():
+    # 재시도: 직전 리뷰 실패 사유(reject_notes)를 섹션 프롬프트에 실어 재작성하게 한다.
+    p = build_section_prompt("kr_equity", FRAME,
+                             [{"id": "s1", "title": "t", "summary": "s"}], "bd",
+                             reject_notes="조언 포함")
+    assert "조언 포함" in p
+    p0 = build_section_prompt("kr_equity", FRAME,
+                              [{"id": "s1", "title": "t", "summary": "s"}], "bd")  # 기본값 None
+    assert "조언 포함" not in p0
+
+
+# 재시도 fake — 리뷰 순서: 백드롭 grounding(1) → 섹션 리뷰1 → 섹션 리뷰2.
+# 재생성 섹션은 기각 사유(NOTES)를 담은 프롬프트로 호출되므로 그걸로 분기.
+_RETRY_NOTES = "과인용-ABC"
+SECTION_IMPROVED = {"headline": "개선h", "lead": "개선l", "sections": [
+    {"name": "risk_triggered", "items": [{"text": "보강", "story_ids": ["s0"], "pole_id": None}]}]}
+
+
+def test_run_report_pass_retries_once_and_saves_improved():
+    class _RetryLLM:
+        def __init__(self):
+            self.n_review, self.n_section = 0, 0
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사자" in prompt:
+                self.n_review += 1
+                # 백드롭 리뷰(1) 통과 · 섹션 리뷰1(2) 기각 · 섹션 리뷰2(3) 통과
+                return ({"passed": False, "notes": _RETRY_NOTES} if self.n_review == 2
+                        else {"passed": True, "notes": ""})
+            if "데스크 에디터" in prompt:
+                return {"text": "bd"}
+            self.n_section += 1
+            return SECTION_IMPROVED if _RETRY_NOTES in prompt else SECTION_OK
+
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _RetryLLM()
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    r = store.reports["kr_equity"]
+    assert r["headline"] == "개선h" and r["review"]["passed"] is True   # 재생성분으로 교체
+    assert llm.n_section == 2                            # 상한=1: 생성+재생성, 3번째 없음
+
+
+def test_run_report_pass_retry_still_rejected_keeps_first_with_badge():
+    SECTION_REGEN = {"headline": "regen-h", "lead": "l", "sections": [
+        {"name": "risk_triggered", "items": [{"text": "x", "story_ids": ["s0"], "pole_id": None}]}]}
+
+    class _AlwaysRejectSection:
+        def __init__(self):
+            self.n_review, self.n_section = 0, 0
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사자" in prompt:
+                self.n_review += 1
+                return ({"passed": True, "notes": ""} if self.n_review == 1     # 백드롭만 통과
+                        else {"passed": False, "notes": "과인용"})
+            if "데스크 에디터" in prompt:
+                return {"text": "bd"}
+            self.n_section += 1
+            return SECTION_OK if self.n_section == 1 else SECTION_REGEN
+
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _AlwaysRejectSection()
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    r = store.reports["kr_equity"]
+    assert r["review"]["passed"] is False and "과인용" in r["review"]["notes"]  # 배지 계약 유지
+    assert r["headline"] == SECTION_OK["headline"]      # 기존(1차) v 저장 — 재생성분 아님
+    assert llm.n_section == 2                            # 상한=1: 3번째 생성 없음
+
+
+def test_run_report_pass_retry_llm_error_keeps_first():
+    from newsstore.enrich.gemini import LLMError
+
+    class _RetryBoom:
+        def __init__(self):
+            self.n_review, self.n_section = 0, 0
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사자" in prompt:
+                self.n_review += 1
+                return {"passed": True, "notes": ""} if self.n_review == 1 else {"passed": False, "notes": "기각"}
+            if "데스크 에디터" in prompt:
+                return {"text": "bd"}
+            self.n_section += 1
+            if self.n_section == 1:
+                return SECTION_OK
+            raise LLMError("regen down")                # 재생성 콜 실패 → 폴백(기존 v 유지)
+
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _RetryBoom()
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)   # 예외 전파 없이 완료
+    r = store.reports["kr_equity"]
+    assert r["review"]["passed"] is False and r["headline"] == SECTION_OK["headline"]  # 기존 유지
+    assert llm.n_section == 2                            # 재시도 1회 시도(3번째 없음)
+
+
 def test_run_report_pass_generates_rising():
     # m8: 결정적 구성 — impact=3 fresh 15개가 top-K(=REPORT_MAX_STORIES)를 점유하고,
     # hot1·hot2(impact=1, 24h 델타 5건)는 top-K 밖 + 밀도 상위 → rising 무조건 생성.

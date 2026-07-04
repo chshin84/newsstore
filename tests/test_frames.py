@@ -58,7 +58,7 @@ def test_frame_diff_new_and_changed_only():
     assert {p["id"] for p in d} == {"r1", "r9"}          # 유지 극(p1)은 diff 아님 → 리뷰 0대상
 
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from newsstore.enrich.frames import (build_frame_prompt, build_frame_review_prompt,
                                      run_frame_pass)
 
@@ -190,3 +190,90 @@ def test_run_frame_pass_no_diff_skips_review():
     run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)
     assert "fx" in store.saved                          # diff 없음 → 리뷰 0콜 → 저장(updated_at 갱신)
     assert sum("심사" in c for c in llm.calls) == 0
+
+
+def test_frame_prompt_includes_reject_notes():
+    # 재시도: 직전 기각 사유(reject_notes)를 프롬프트에 실어 워커가 재작성하게 한다.
+    p = build_frame_prompt("kr_equity", OLD, STORIES, reject_notes="근거 부족")
+    assert "근거 부족" in p
+    p0 = build_frame_prompt("kr_equity", OLD, STORIES)   # 기본값 None → 재작성 지시 없음
+    assert "근거 부족" not in p0
+
+
+# 재시도 fake — 프롬프트 마커로 분기: 리뷰='심사', 재생성 프롬프트는 기각 사유(NOTES)를 담는다.
+_FRESH_MARKET = {"risks": [], "premiums": [], "watchpoints": [],
+                 "updated_at": NOW - timedelta(hours=1)}   # age-gate로 시장 프레임 재생성 스킵
+
+
+def test_run_frame_pass_retries_once_on_review_reject_then_saves():
+    from newsstore.enrich.frames import MARKET_ID
+    NOTES = "무근거단정-XYZ"
+    gen1 = {"risks": [{"id": "r9", "text": "1차 무근거"}], "premiums": [], "watchpoints": []}
+    gen2 = {"risks": [{"id": "r9", "text": "2차 근거보강"}], "premiums": [], "watchpoints": []}
+
+    class _RetryLLM:
+        def __init__(self):
+            self.gen_calls, self.review_calls = [], []
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사" in prompt:
+                self.review_calls.append(prompt)
+                return ({"passed": False, "notes": NOTES} if len(self.review_calls) == 1
+                        else {"passed": True, "notes": ""})
+            self.gen_calls.append(prompt)
+            return gen2 if NOTES in prompt else gen1   # 재생성 프롬프트=기각 사유 포함
+
+    llm = _RetryLLM()
+    old = {"risks": [{"id": "r1", "text": "어제"}], "premiums": [], "watchpoints": []}
+    store = _Store({"fx": old, MARKET_ID: _FRESH_MARKET})
+    n = run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)
+    # 재시도 성공 → 재생성분(gen2)이 저장(어제 판 아님, 1차 무근거 아님)
+    assert n == 1 and store.saved["fx"]["risks"][0]["text"] == "2차 근거보강"
+    # 불변식: 생성 2회(gen+regen)·리뷰 2회. 상한=1 → 3번째 생성 없음.
+    assert len(llm.gen_calls) == 2 and len(llm.review_calls) == 2
+    assert NOTES in llm.gen_calls[1]                     # 재생성 프롬프트에 기각 사유 실림
+
+
+def test_run_frame_pass_retry_still_rejected_keeps_yesterday_no_third_gen():
+    from newsstore.enrich.frames import MARKET_ID
+
+    class _AlwaysReject:
+        def __init__(self):
+            self.gen_calls, self.review_calls = [], []
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사" in prompt:
+                self.review_calls.append(prompt)
+                return {"passed": False, "notes": "여전히 무근거"}
+            self.gen_calls.append(prompt)
+            return {"risks": [{"id": "r9", "text": "무근거"}], "premiums": [], "watchpoints": []}
+
+    llm = _AlwaysReject()
+    old = {"risks": [{"id": "r1", "text": "어제"}], "premiums": [], "watchpoints": []}
+    store = _Store({"fx": old, MARKET_ID: _FRESH_MARKET})
+    n = run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)
+    assert n == 0 and "fx" not in store.saved           # 재시도도 기각 → 어제 판 유지
+    # 상한=1: 생성 2회(gen+regen)에서 멈춤(3번째 없음), 리뷰 2회
+    assert len(llm.gen_calls) == 2 and len(llm.review_calls) == 2
+
+
+def test_run_frame_pass_retry_llm_error_falls_back():
+    from newsstore.enrich.frames import MARKET_ID, LLMError
+    gen1 = {"risks": [{"id": "r9", "text": "1차"}], "premiums": [], "watchpoints": []}
+
+    class _RetryBoom:
+        def __init__(self):
+            self.gen_calls, self.review_calls = [], []
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사" in prompt:
+                self.review_calls.append(prompt)
+                return {"passed": False, "notes": "기각"}
+            self.gen_calls.append(prompt)
+            if len(self.gen_calls) == 1:
+                return gen1
+            raise LLMError("regen down")                # 재생성 콜 실패 → 폴백(전파 금지)
+
+    llm = _RetryBoom()
+    old = {"risks": [{"id": "r1", "text": "어제"}], "premiums": [], "watchpoints": []}
+    store = _Store({"fx": old, MARKET_ID: _FRESH_MARKET})
+    n = run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)   # 예외 전파 없이 완료
+    assert n == 0 and "fx" not in store.saved           # 재시도 콜 실패 → 어제 판 유지(fail-soft)
+    assert len(llm.gen_calls) == 2                       # 재시도 1회 시도(3번째 없음)
