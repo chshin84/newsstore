@@ -1054,7 +1054,7 @@
           ? `<svg class="pspark ${cls}" viewBox="0 0 220 46" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}"/></svg>`
           : `<div class="pspark-empty">차트 준비 중</div>`;
         return `<div class="pcard">
-          <div class="pc-h"><span class="pc-name">${txt(p.label || key)}</span><span class="pc-sym">${esc(p.td_symbol || "")}</span></div>
+          <div class="pc-h"><span class="pc-name">${txt(p.label || key)}</span><span class="pc-sym">${esc(p.symbol || "")}</span></div>
           <div class="pc-val">${fmtClose(p.close, p.currency)}</div>
           <div class="pc-pct ${cls}">${pctStr(p.percent_change)}</div>
           ${chart}

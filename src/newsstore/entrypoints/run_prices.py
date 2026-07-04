@@ -1,11 +1,12 @@
-"""가격 수집 엔트리포인트 — Twelve Data /quote로 config/prices.yaml 심볼을 prices/{key}에 저장.
+"""가격 수집 엔트리포인트 — Yahoo Finance chart API로 config/prices.yaml 심볼을 prices/{key}에 저장.
 
-비밀: TWELVEDATA_API_KEY(env, Secret Manager 주입 — 커밋/로그 비노출). 무료 800콜/일.
+Yahoo chart API는 무키(User-Agent만 필요). 한 콜로 현재값 + 등락 + 30일 시계열(차트).
 """
 from __future__ import annotations
 import argparse
 import logging
 import os
+from urllib.parse import quote
 
 import httpx
 
@@ -13,32 +14,30 @@ from ..collect.prices import load_price_symbols, run_price_pass
 from ..store.factory import make_store
 
 log = logging.getLogger("newsstore.entrypoints.run_prices")
-BASE = "https://api.twelvedata.com/time_series"   # 값+차트 겸용(일봉 시계열 1콜)
+BASE = "https://query1.finance.yahoo.com/v8/finance/chart/"
+# Yahoo는 기본 UA를 차단 — 브라우저 UA 필요(뉴스 fetcher와 동일 관행).
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="newsstore price collector (Twelve Data)")
+    ap = argparse.ArgumentParser(description="newsstore price collector (Yahoo Finance)")
     ap.add_argument("--symbols", default="config/prices.yaml")
     args = ap.parse_args(argv)
     logging.basicConfig(level=os.environ.get("NEWSSTORE_LOG_LEVEL", "INFO"),
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    api_key = os.environ.get("TWELVEDATA_API_KEY")
-    if not api_key:                                  # 비밀 분리: 없으면 fail-loud(키 로그 비노출)
-        log.error("TWELVEDATA_API_KEY not set — required for price collector")
-        return 2
-
     symbols = load_price_symbols(args.symbols)
-    client = httpx.Client(timeout=15.0)
+    client = httpx.Client(timeout=15.0, headers={"User-Agent": UA})
 
-    def fetch(td_symbol: str) -> dict:               # 주입 HTTP — 모듈은 파싱만
-        r = client.get(BASE, params={"symbol": td_symbol, "interval": "1day",
-                                     "outputsize": "30", "apikey": api_key})
+    def fetch(symbol: str) -> dict:                  # 주입 HTTP — 모듈은 파싱만
+        r = client.get(f"{BASE}{quote(symbol)}",
+                       params={"range": "1mo", "interval": "1d"})
         r.raise_for_status()
         return r.json()
 
-    # 무료 tier 8콜/분 rate limit 대응 — 콜 간 지연(env, 기본 8s → 8심볼 ~1분)
-    delay_s = float(os.environ.get("NEWSSTORE_PRICE_DELAY_S", "8"))
+    # Yahoo throttle 대응 — 콜 간 지연(env, 기본 1s). 심볼 수 적어 하한만.
+    delay_s = float(os.environ.get("NEWSSTORE_PRICE_DELAY_S", "1"))
     try:
         with make_store() as store:
             n = run_price_pass(store, fetch, symbols, delay_s=delay_s)

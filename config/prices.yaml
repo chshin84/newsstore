@@ -1,26 +1,25 @@
-# 가격 데이터 수집 대상 (SSOT) — Twelve Data(/quote). 소비자: collect/prices.py
+# 가격 데이터 수집 대상 (SSOT) — Yahoo Finance chart API. 소비자: collect/prices.py
 #
-# 목적: exogenous 비-LLM 앵커 — 뉴스 센티먼트(프레임) vs 실제 가격 반응으로 over/under-reaction
-# 판정 + 모델 순환 차단. 우리 렌즈(자산군)에 대응.
+# 목적: 가격 탭(값+차트). 실제 지수·수익률·환율·원자재를 무키로 수집(2026-07-05 전환).
+# Twelve Data(프록시·유료 필요) → Yahoo Finance(실제 지수, 무키, 개별종목·한국지수 커버).
 #
-# 심볼 확정(2026-07-04 무료 tier 실측): 순수 지수(KS11/GSPC)·WTI는 유료 tier 필요 →
-# **무료 tier로 되는 미국 상장 ETF 프록시**로 지수/유가 방향을 잡는다(인트라데이 촘촘 추종).
-# FX/금/크립토는 무료로 직접. 순수 지수·인트라데이가 필요하면 유료 전환(Grow ~$29) 후 심볼 교체.
-# ⚠️ 프록시 주의: ETF는 USD 표시·미국장 시간대라 원지수와 통화/시차 오차 있음(방향 신호엔 충분).
-#
-# 계약: {key(prices/{key} 문서), td_symbol, label, lens(대응 렌즈)}.
-# rate limit: 무료 8콜/분·800/일 → run_prices가 콜 간 delay(NEWSSTORE_PRICE_DELAY_S).
-# 비밀: TWELVEDATA_API_KEY(Secret Manager). 반영: 재빌드(이미지 COPY). 심볼 추가는 여기만(SSOT).
+# 계약: {key(prices/{key} 문서), symbol(Yahoo 심볼), label}.
+# 수집: run_prices가 query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1mo&interval=1d.
+#   한 콜로 현재값 + 등락 + 30일 시계열(차트). User-Agent 필요. 심볼 추가는 여기만(SSOT).
+# 갭: 국고채 3/10년(한국 국채)은 Yahoo에 없음 → 한국은행 ECOS(별도, 키 필요) 도입 시 추가.
 symbols:
-  # ── 지수 프록시(주식 렌즈) ──
-  - {key: kr_equity, td_symbol: EWY, label: "한국 주식(EWY)",  lens: kr_equity}
-  - {key: sp500,     td_symbol: SPY, label: "S&P500(SPY)",     lens: us_equity}
-  - {key: nasdaq,    td_symbol: QQQ, label: "나스닥(QQQ)",     lens: us_equity}
+  # ── 지수 ──
+  - {key: kospi200, symbol: "^KS200", label: 코스피200}
+  - {key: kosdaq,   symbol: "^KQ11",  label: 코스닥}
+  - {key: nasdaq,   symbol: "^IXIC",  label: 나스닥}
+  - {key: sp500,    symbol: "^GSPC",  label: "S&P500"}
+  # ── 금리(미국채 수익률 %) ──
+  - {key: us2y,     symbol: "2YY=F",  label: "미국채 2년"}
+  - {key: us10y,    symbol: "^TNX",   label: "미국채 10년"}
+  - {key: us30y,    symbol: "^TYX",   label: "미국채 30년"}
   # ── 환율 ──
-  - {key: usdkrw,    td_symbol: USD/KRW, label: 원/달러,       lens: fx}
+  - {key: usdkrw,   symbol: "KRW=X",  label: 원/달러}
+  - {key: usdjpy,   symbol: "JPY=X",  label: 엔/달러}
   # ── 원자재 ──
-  - {key: wti,       td_symbol: USO, label: "WTI유가(USO)",    lens: oil_energy}
-  - {key: gold,      td_symbol: XAU/USD, label: 금,            lens: precious_metals}
-  # ── 크립토 ──
-  - {key: btc,       td_symbol: BTC/USD, label: 비트코인,      lens: crypto}
-  - {key: eth,       td_symbol: ETH/USD, label: 이더리움,      lens: crypto}
+  - {key: wti,      symbol: "CL=F",   label: WTI유가}
+  - {key: gold,     symbol: "GC=F",   label: 금}
