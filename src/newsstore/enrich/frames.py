@@ -64,11 +64,16 @@ def frame_diff(old: dict, new: dict) -> list[dict]:
 def build_market_prompt(stories: list[dict]) -> str:
     """글로벌 시장 프레임(#44) — 전 자산군 스토리로 '시장 전체가 가장 두려워할 것'을 RAS로 도출.
     개별 렌즈가 아니라 자산군을 가로지르는(interconnectivity) 구조적 급소 우선."""
-    lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
-             for s in stories[:MARKET_MAX_STORIES]]
+    lines = []
+    for s in stories[:MARKET_MAX_STORIES]:
+        latest = _latest_dev_text(s)                     # #4: 타임라인상 최신 전개
+        tail = f" :: 최신전개: {latest[:120]}" if latest else ""
+        lines.append(f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}{tail}')
     return (
         "당신은 전 자산군을 가로지르는 매크로/시스템 리스크 데스크 총괄이다.\n"
         "센티먼트 근사 준거 — 말이 아니라 '비용을 치른 행동(RAS)'. 아래는 오늘 전 자산군 주요 스토리다.\n"
+        "타임라인 원칙: 상충하는 전개(긍정 vs 부정)가 공존하면 타임라인상 확실히 더 최신인 전개를 "
+        "우선한다 — 최신 사실이 이전 내러티브를 갱신한다(각 스토리 '최신전개' 참조).\n"
         "임무: 개별 자산군이 아니라 '시장 전체'가 지금 터지면 가장 두려워할 소수·고강도 시나리오를 뽑아라 — "
         "여러 자산군을 하나로 꿰는 구조적 급소(예: 하이퍼스케일러 capex 철회가 반도체·주식·전력을 동시에 "
         "흔드는 급). 자산군 교차로 연결되는(interconnectivity) 것을 우선. 장황 나열 금지, 강도로 골라라.\n"
@@ -80,6 +85,16 @@ def build_market_prompt(stories: list[dict]) -> str:
         '"evidence_dev_ids":["..."]}],"premiums":[...],"watchpoints":[...]}')
 
 
+def _latest_dev_text(story: dict) -> str:
+    """가장 최신 전개(delta_time|time 최대)의 텍스트 — 타임라인 '앞선' 신호(#4 상충 해소용)."""
+    best_t, best_txt = None, ""
+    for d in (story.get("developments") or []):
+        t = d.get("delta_time") or d.get("time")
+        if t is not None and (best_t is None or t > best_t):
+            best_t, best_txt = t, (d.get("text") or "")
+    return best_txt
+
+
 def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dict | None = None,
                        reject_notes: str | None = None) -> str:
     """이월 재심 프롬프트 — 어제 극 전부 + 최근 스토리(캡). 유지 판단에도 근거 검토 요구(§3 재심 계약).
@@ -88,8 +103,11 @@ def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dic
     reject_notes: 직전 시도의 diff-grounding 기각 사유 — 있으면 재작성 지시를 임무 뒤에 덧붙인다(1회 재시도)."""
     # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
     axes_only = {a: (old or {}).get(a) or [] for a in AXES}
-    lines = [f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
-             for i, s in enumerate(stories[:FRAME_MAX_INPUT_STORIES])]
+    lines = []
+    for i, s in enumerate(stories[:FRAME_MAX_INPUT_STORIES]):
+        latest = _latest_dev_text(s)                     # #4: 타임라인상 가장 앞선(최신) 전개
+        tail = f" :: 최신전개: {latest[:120]}" if latest else ""
+        lines.append(f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}{tail}')
     market_block = ""
     if market:
         mr = [p["text"] for p in (market.get("risks") or []) if p.get("text")][:5]
@@ -103,6 +121,10 @@ def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dic
         "낙관 논평(말)이 아니라, 스토리 전개(developments)에 담긴 비가역 행동 — capex 감축·"
         "잉여자원 매도·감원·정점 증자·비중 축소 — 을 근거로 삼아라. 서술 톤과 행동의 부호가 "
         "어긋나는 곳(톤↑·행동↓ 또는 그 반대)이 숨은 공포의 시그니처다.\n"
+        "타임라인 원칙(상충 해소): 같은 이슈에 상충하는 전개(긍정 vs 부정)가 공존하면, "
+        "타임라인상 확실히 더 최신인(뒤에 온) 전개를 우선해 그 방향으로 극을 세워라 — 최신 "
+        "사실이 이전 내러티브를 갱신한다(각 스토리의 '최신전개'가 그 신호). 시차가 미세하면 "
+        "한쪽으로 강행하지 말고 양쪽을 병존 처리.\n"
         "프레임 3축:\n"
         "- risks(아킬레스건): '지금 터진다면 시장이 가장 두려워할' 소수·고강도 시나리오만. "
         "구조적 급소를 과감·깊게 — 지배적 투자 사이클의 철회, 핵심 수요처의 이탈처럼 내러티브 "

@@ -108,6 +108,20 @@ def test_frame_prompt_has_ras_and_structured_output():
     assert "s1" in p                                     # 스토리 id 노출(evidence 인용 근거)
 
 
+def test_frame_prompt_recency_conflict_rule_and_latest_dev():
+    # #4: 상충 내러티브(트럼프 전쟁 긍/부)면 타임라인상 확실히 앞선(최신) 전개 쪽으로 민다.
+    # 프롬프트에 최신 전개 텍스트가 실리고(근거), 최신-우선 규칙이 명시돼야 한다.
+    from datetime import timedelta
+    t0 = NOW - timedelta(days=3)
+    story = {"id": "war1", "title": "트럼프 전쟁", "summary": "긴장 고조",
+             "developments": [
+                 {"text": "낙관: 협상 타결 임박", "delta_time": t0},
+                 {"text": "비관: 추가 관세 전격 발표", "delta_time": t0 + timedelta(days=2)}]}
+    p = build_frame_prompt("us_policy", OLD, [story])
+    assert "추가 관세 전격 발표" in p                    # 최신 전개(타임라인상 앞선 것) 노출
+    assert "최신" in p and ("상충" in p or "타임라인" in p)  # 최신-우선 해소 규칙 명시
+
+
 def test_frame_prompt_carries_yesterday_and_caps_input():
     old = {"risks": [{"id": "r1", "text": "관세 리스크"}], "premiums": [], "watchpoints": []}
     p = build_frame_prompt("kr_equity", old, [{"id": f"s{i}", "title": f"t{i}", "summary": "x"}
