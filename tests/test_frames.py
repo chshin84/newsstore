@@ -140,16 +140,41 @@ def test_run_frame_pass_keeps_yesterday_on_review_reject_and_llm_error():
     assert "fx" not in store2.saved                     # 콜 실패 → 폴백(전파 금지, fail-soft)
 
 
+def test_build_market_prompt_and_injection():
+    from newsstore.enrich.frames import build_market_prompt, MARKET_ID
+    # 시장 프레임 프롬프트: 전 렌즈 스토리로 '시장 전체가 가장 두려워할 것'을 RAS로.
+    mp = build_market_prompt([{"id": "s1", "title": "메타 capex 감축", "summary": "반도체 투매"}])
+    assert MARKET_ID == "_market"
+    assert "시장" in mp and "s1" in mp and ("행동" in mp or "RAS" in mp)
+    # 렌즈 프롬프트에 시장 프레임 주입 시 그 내용이 실린다(interconnectivity 입구)
+    market = {"risks": [{"id": "m1", "text": "하이퍼스케일러 capex 철회"}], "premiums": [], "watchpoints": []}
+    p = build_frame_prompt("kr_equity", OLD, STORIES, market=market)
+    assert "하이퍼스케일러 capex 철회" in p            # 시장 공포가 렌즈 프롬프트에 컨텍스트로
+
+
+def test_run_frame_pass_generates_market_frame(monkeypatch):
+    from newsstore.enrich.frames import MARKET_ID
+    monkeypatch.delenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", raising=False)
+    # _market 프레임이 렌즈 프레임보다 먼저 생성·저장된다(전 렌즈 스토리 기반, 1콜).
+    llm = _LLM(frame_resp={"risks": [{"id": "m1", "text": "시장 공포"}], "premiums": [], "watchpoints": []},
+               review_resp={"passed": True})
+    store = _Store()
+    run_frame_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert MARKET_ID in store.saved                    # 시장 프레임 저장됨
+    assert store.saved[MARKET_ID]["risks"][0]["text"] == "시장 공포"
+
+
 def test_run_frame_pass_age_gate_skips_fresh(monkeypatch):
     # 6a age-gate: updated_at이 신선하면(min_age 이내) generate_json 0콜로 스킵 — #45 완화.
     monkeypatch.setenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", "20")
+    from newsstore.enrich.frames import MARKET_ID
     fresh = {"risks": [{"id": "r1", "text": "신선"}], "premiums": [], "watchpoints": [],
              "updated_at": NOW - __import__("datetime").timedelta(hours=1)}
     llm = _LLM(frame_resp={"risks": [], "premiums": [], "watchpoints": []},
                review_resp={"passed": True})
-    store = _Store({"fx": fresh})
+    store = _Store({"fx": fresh, MARKET_ID: fresh})   # 렌즈·시장 프레임 모두 신선
     n = run_frame_pass(store, llm, lens_ids=["fx"], now=NOW)
-    assert n == 0 and len(llm.calls) == 0            # 신선 → 콜 0(불변식, 매직넘버 없음)
+    assert n == 0 and len(llm.calls) == 0            # 전부 신선 → 콜 0(불변식, 매직넘버 없음)
     assert "fx" not in store.saved
     # 낡은(updated_at 없음) 프레임은 정상 재심
     llm2 = _LLM(frame_resp={"risks": [{"id": "r1", "text": "새"}], "premiums": [], "watchpoints": []},

@@ -18,6 +18,9 @@ FRAME_MAX_POLES = 5           # 축당 극 상한(결정⑧ — 무상한이면 
 FRAME_MAX_INPUT_STORIES = 30  # 프레임 패스 입력 캡(§3 — 프레임 패스가 새 토큰 폭탄 금지)
 MAX_POLE_TEXT = 120
 AXES = ("risks", "premiums", "watchpoints")
+MARKET_ID = "_market"            # 글로벌 시장 프레임(#44) 문서 id — 렌즈 아님, 별도 생성
+MARKET_SAMPLE_PER_LENS = 2       # 시장 프레임 입력: 렌즈당 top-N 스토리
+MARKET_MAX_STORIES = 24          # 시장 프레임 입력 캡(토큰 폭탄 차단)
 ACHILLES_KINDS = ("words_deeds", "structural")   # v1 enum(나머지 kind는 v2). 그 외는 null.
 
 
@@ -58,14 +61,42 @@ def frame_diff(old: dict, new: dict) -> list[dict]:
             if p["id"] not in prev or prev[p["id"]] != p["text"]]
 
 
-def build_frame_prompt(lens_id: str, old: dict, stories: list[dict]) -> str:
-    """이월 재심 프롬프트 — 어제 극 전부 + 최근 스토리(캡). 유지 판단에도 근거 검토 요구(§3 재심 계약)."""
+def build_market_prompt(stories: list[dict]) -> str:
+    """글로벌 시장 프레임(#44) — 전 자산군 스토리로 '시장 전체가 가장 두려워할 것'을 RAS로 도출.
+    개별 렌즈가 아니라 자산군을 가로지르는(interconnectivity) 구조적 급소 우선."""
+    lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
+             for s in stories[:MARKET_MAX_STORIES]]
+    return (
+        "당신은 전 자산군을 가로지르는 매크로/시스템 리스크 데스크 총괄이다.\n"
+        "센티먼트 근사 준거 — 말이 아니라 '비용을 치른 행동(RAS)'. 아래는 오늘 전 자산군 주요 스토리다.\n"
+        "임무: 개별 자산군이 아니라 '시장 전체'가 지금 터지면 가장 두려워할 소수·고강도 시나리오를 뽑아라 — "
+        "여러 자산군을 하나로 꿰는 구조적 급소(예: 하이퍼스케일러 capex 철회가 반도체·주식·전력을 동시에 "
+        "흔드는 급). 자산군 교차로 연결되는(interconnectivity) 것을 우선. 장황 나열 금지, 강도로 골라라.\n"
+        "3축: risks(시장급 아킬레스건), premiums(시장 전체를 떠받치는 컨센서스), watchpoints(트리거 관찰점).\n"
+        "스토리(맨 앞 [id]가 story_id):\n" + "\n".join(lines) + "\n"
+        f"축당 최대 {FRAME_MAX_POLES}개. 각 극에 achilles_kind('words_deeds'|'structural')·"
+        "evidence_dev_ids(위 목록 실재 id).\n"
+        '아래 JSON만: {"risks":[{"id":"...","text":"...","achilles_kind":"words_deeds|structural",'
+        '"evidence_dev_ids":["..."]}],"premiums":[...],"watchpoints":[...]}')
+
+
+def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dict | None = None) -> str:
+    """이월 재심 프롬프트 — 어제 극 전부 + 최근 스토리(캡). 유지 판단에도 근거 검토 요구(§3 재심 계약).
+
+    market: 글로벌 시장 프레임(#44) — 주어지면 시장급 공포를 컨텍스트로 주입(interconnectivity 입구)."""
     # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
     axes_only = {a: (old or {}).get(a) or [] for a in AXES}
     lines = [f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
              for i, s in enumerate(stories[:FRAME_MAX_INPUT_STORIES])]
+    market_block = ""
+    if market:
+        mr = [p["text"] for p in (market.get("risks") or []) if p.get("text")][:5]
+        if mr:
+            market_block = ("오늘의 글로벌 시장 프레임(전 자산군 공통 공포 — 이 자산군에 어떻게 사영되는지 "
+                            "고려하되 중복 나열 말고 이 렌즈 고유 급소에 집중):\n- " + "\n- ".join(mr) + "\n")
     return (
         f"당신은 '{lens_id}' 자산군의 standing 프레임을 유지하는 시니어 애널리스트다.\n"
+        + market_block +
         "센티먼트 근사 준거 — 말이 아니라 '비용을 치른 행동(RAS)'을 본다: 브로커 목표가 상향·"
         "낙관 논평(말)이 아니라, 스토리 전개(developments)에 담긴 비가역 행동 — capex 감축·"
         "잉여자원 매도·감원·정점 증자·비중 축소 — 을 근거로 삼아라. 서술 톤과 행동의 부호가 "
@@ -101,23 +132,51 @@ def build_frame_review_prompt(diff: list[dict], stories: list[dict]) -> str:
         '아래 JSON만 출력: {"passed": true|false, "notes": "기각 사유 또는 빈 문자열"}')
 
 
+def _ensure_market_frame(store, client, per_lens: dict, *, now, min_age) -> dict:
+    """글로벌 시장 프레임(#44) 생성·저장. age-gate(신선하면 재사용). 전 렌즈 top 스토리 샘플로 1콜.
+    실패(콜·검증)는 어제 판 유지(fail-soft). 반환=시장 프레임(렌즈 프롬프트 주입용)."""
+    old = store.get_frame(MARKET_ID)
+    ua = (old or {}).get("updated_at")
+    if ua is not None and (now - ua) < min_age:
+        return old                                      # 신선 → 재사용(콜 0)
+    sample = [s for ss in per_lens.values() for s in ss[:MARKET_SAMPLE_PER_LENS]][:MARKET_MAX_STORIES]
+    if not sample:
+        return old or {}
+    try:
+        raw = client.generate_json(build_market_prompt(sample), timeout=60.0,
+                                   model=model_for("frame_gen"))
+    except LLMError as e:
+        log.warning("market frame: LLM 실패 — 어제 판 유지: %s", e)
+        return old or {}
+    frame = validate_frame(raw, input_story_ids={s["id"] for s in sample if s.get("id")})
+    if frame is None:
+        log.warning("market frame: 결정론 검증 실패 — 어제 판 유지")
+        return old or {}
+    store.save_frame(MARKET_ID, frame, now=now)
+    return frame
+
+
 def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> int:
     """렌즈별 프레임 재심. 실패(콜·검증·리뷰 기각)는 어제 판 유지(fail-soft, §5(c)). 반환=갱신 수.
 
+    #44: 시작에 글로벌 시장 프레임을 먼저 생성해 각 렌즈 프롬프트에 주입(interconnectivity).
     6a age-gate: updated_at이 min_age(env NEWSSTORE_FRAME_MIN_AGE_HOURS, 기본 20h) 이내로
     신선하면 재심 스킵(#45 완화 — 프레임은 준정적, 리포트 4×/일마다 재생성할 필요 없음)."""
     cutoff = now - (window or timedelta(hours=72))
     min_age = timedelta(hours=float(os.environ.get("NEWSSTORE_FRAME_MIN_AGE_HOURS", "20")))
+    # 사전수집(전 렌즈 1회) — 시장 프레임 + 렌즈 프레임이 공유(중복 read 방지, 리뷰 consistency 반영)
+    per_lens = {lid: store.get_stories_for_report(lid, cutoff=cutoff) for lid in lens_ids}
+    market = _ensure_market_frame(store, client, per_lens, now=now, min_age=min_age)
     n = 0
     for lens_id in lens_ids:
         old = store.get_frame(lens_id)
         ua = (old or {}).get("updated_at")
         if ua is not None and (now - ua) < min_age:    # 신선 → 스킵(콜 0)
             continue
-        stories = store.get_stories_for_report(lens_id, cutoff=cutoff)
+        stories = per_lens[lens_id]
         try:
-            raw = client.generate_json(build_frame_prompt(lens_id, old, stories), timeout=60.0,
-                                       model=model_for("frame_gen"))
+            raw = client.generate_json(build_frame_prompt(lens_id, old, stories, market=market),
+                                       timeout=60.0, model=model_for("frame_gen"))
         except LLMError as e:
             log.warning("frame pass %s: LLM 실패 — 어제 판 유지: %s", lens_id, e)
             continue

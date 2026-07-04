@@ -226,6 +226,11 @@
     .reprisk:last-of-type { border-bottom:0; } .reprisk b { color:var(--risk); margin-right:5px; }
     @media (hover:hover) { .reprisk:hover { color:var(--risk); } }
     .reprisk-more { font-size:calc(11px*var(--fs)); color:var(--mut); margin-top:4px; }
+    /* #44 글로벌 시장 프레임(리포트 최상단) */
+    .mktframe { background:var(--card2); border:1px solid var(--line2); border-radius:10px;
+      padding:11px 14px; margin:0 0 14px; }
+    .mktframe-h { font-size:calc(11px*var(--fs)); font-weight:800; letter-spacing:.02em;
+      color:var(--accent); text-transform:uppercase; margin-bottom:7px; }
     /* 1c 위험 렌즈 accent(세로 스캔) */
     #reportDoc .sdetail.hot { border-left:4px solid var(--risk); }
     /* 3a achilles_kind 이중부호화(프레임 칩) */
@@ -933,9 +938,14 @@
             `<a href="#rep-${esc(r.lensId)}" class="reprisk"><b>${txt(r.group)}</b> ${txt(r.text)}</a>`).join("") +
           (tr.length > 7 ? `<div class="reprisk-more">+${tr.length - 7}개 더 (아래 섹션)</div>` : "") +
           `</div>` : "";
+      // #44: 글로벌 시장 프레임(frames/_market) — 전 자산군 공통 공포를 리포트 최상단에.
+      const mkt = frames["_market"];
+      const mktBlock = (mkt && ((mkt.risks || []).length || (mkt.premiums || []).length))
+        ? `<div class="mktframe"><div class="mktframe-h">글로벌 시장 프레임 — 전 자산군을 꿰는 공포·기대</div>${frameChipsHtml(mkt)}</div>`
+        : "";
       reportDocEl.innerHTML =
         (docm.backdrop ? `<div class="sdetail"><div class="dlead">${txt(docm.backdrop)}</div></div>` : "") +
-        digest + `<div class="lchips ranchors">${anchors}</div>` + body;
+        mktBlock + digest + `<div class="lchips ranchors">${anchors}</div>` + body;
     }
 
     // 리포트 내 스토리 카드 클릭 확장(요구 7) — 패턴 E: .open 토글, 링크/버튼 가드.
