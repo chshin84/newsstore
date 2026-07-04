@@ -118,9 +118,12 @@ def main(argv=None) -> int:
                 store.set_meta("report_groups",
                                {"groups": [{"name": g, "lens_ids": ids}
                                            for g, ids in _topics.report_groups(t).items()]})
-                lens_ids = _topics.report_lens_ids(t)
-                _frames.run_frame_pass(store, client, lens_ids=lens_ids, now=now)   # 선행(§4)
-                totals = _report.run_report_pass(store, client, lens_ids=lens_ids, now=now)
+                lens_ids = _topics.report_lens_ids(t)             # 리포트=자산(standing)만
+                context_ids = _topics.context_lens_ids(t)         # 시장프레임·백드롭 입력(비자산 포함)
+                _frames.run_frame_pass(store, client, lens_ids=lens_ids, now=now,   # 선행(§4)
+                                       context_lens_ids=context_ids)
+                totals = _report.run_report_pass(store, client, lens_ids=lens_ids, now=now,
+                                                 context_lens_ids=context_ids)
         except LLMError as e:
             log.error("enrichment aborted: %s", e)
             return 1

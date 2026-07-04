@@ -56,24 +56,39 @@ def test_lens_labels():
     assert set(labels) == topics.valid_ids(t)          # 모든 렌즈 포함(누락 없음)
 
 
-def test_report_lenses_derived_excludes_watch_and_sector():
-    # 리포트 대상 = watch·sector 외 렌즈 전부(스펙 §3.5 — 손 목록 금지, 도출이 SSOT)
+def test_report_lenses_are_assets_only():
+    # 리포트 대상 = 금융 자산(type=standing)만 — 리스크·경제·정치·정책 리포트 제외(사용자 결정).
+    # 비자산 뉴스는 리포트로 만들지 않고 context로 자산 리포트에 녹인다(context_lens_ids).
     t = topics.load_topics()
     ids = topics.report_lens_ids(t)
-    assert "kr_equity" in ids and "fx" in ids and "risk" in ids
-    assert not any(i.startswith("watch_") for i in ids)
-    assert not any(i.startswith("sector_") for i in ids)
+    assert "kr_equity" in ids and "fx" in ids and "crypto" in ids and "kr_realestate" in ids
+    assert "risk" not in ids                               # 리스크 제외
+    assert "kr_econ" not in ids and "us_econ" not in ids   # 경제 제외
+    assert "kr_policy" not in ids and "us_policy" not in ids  # 정치·정책 제외
+    assert all(topics.lens_type(t, i) == "standing" for i in ids)  # 전부 자산(standing)
+    assert not any(i.startswith(("watch_", "sector_")) for i in ids)
     # 불변식: 대상 렌즈는 전부 report_group을 가진다(fail-loud — 누락 시 여기서 터짐)
-    for lens in t["lenses"]:
-        if lens["id"] in ids:
-            assert lens.get("report_group"), f"{lens['id']}: report_group 누락"
+    for lid in ids:
+        assert topics.load_topics() and any(
+            l["id"] == lid and l.get("report_group") for l in t["lenses"]), f"{lid}: report_group 누락"
 
 
-def test_report_groups_ordered_mapping():
-    # 그룹 → 렌즈 목록(yaml 등장 순서 보존). UI 앵커 도출용.
+def test_context_lens_ids_includes_nonasset_for_foldin():
+    # context = 시장프레임·백드롭 입력 풀 — 비자산(리스크·경제·정치·정책) 스토리를 자산 리포트로
+    # 녹이려면(#2) 이 풀에 남아야 한다. watch·sector만 제외.
+    t = topics.load_topics()
+    ctx = topics.context_lens_ids(t)
+    assert {"risk", "kr_econ", "us_econ", "kr_policy", "us_policy"} <= set(ctx)  # 비자산 포함
+    assert set(topics.report_lens_ids(t)) <= set(ctx)     # 리포트 대상 ⊆ context
+    assert not any(i.startswith(("watch_", "sector_")) for i in ctx)
+
+
+def test_report_groups_assets_only():
+    # 그룹 → 렌즈 목록(yaml 등장 순서 보존). UI 앵커 도출용. 자산 그룹만(비자산 그룹 제외).
     t = topics.load_topics()
     groups = topics.report_groups(t)
     assert groups["주식"] == ["kr_equity", "us_equity"]
     assert set(groups["원자재"]) == {"oil_energy", "precious_metals", "commodities"}
+    assert "리스크" not in groups and "경제" not in groups and "정치·정책" not in groups
     flat = [lid for lids in groups.values() for lid in lids]
-    assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 전 대상 렌즈가 정확히 1그룹
+    assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 자산 렌즈가 정확히 1그룹

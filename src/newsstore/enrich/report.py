@@ -186,17 +186,26 @@ def _review(client, report: dict, stories: list[dict]) -> dict:
     return {"passed": v["passed"], "notes": str(v.get("notes") or "")}
 
 
-def run_report_pass(store, client, *, lens_ids: list[str], now, window=None) -> dict:
-    """§4 파이프라인: 백드롭 → 섹션(렌즈별) → 급부상 → 저장. 프레임은 입력(frames.py 선행)."""
+def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
+                    context_lens_ids: list[str] | None = None) -> dict:
+    """§4 파이프라인: 백드롭 → 섹션(렌즈별) → 급부상 → 저장. 프레임은 입력(frames.py 선행).
+    리포트는 lens_ids(=자산)만 생성. context_lens_ids(비자산 포함)가 주어지면 백드롭 입력을
+    그 넓은 풀에서 뽑아 정치·정책·경제 뉴스를 자산 리포트로 녹인다(#2 fold-in)."""
     cutoff = now - (window or timedelta(hours=72))
     totals = {"reported": 0, "skipped_empty": 0, "failed": 0}
 
-    per_lens: dict[str, list[dict]] = {l: store.get_stories_for_report(l, cutoff=cutoff)
-                                       for l in lens_ids}
+    ctx_ids = context_lens_ids or lens_ids
+    ctx_per_lens: dict[str, list[dict]] = {l: store.get_stories_for_report(l, cutoff=cutoff)
+                                           for l in ctx_ids}
+    for l in lens_ids:                                    # 방어: 리포트 렌즈가 context에 없으면 보충
+        if l not in ctx_per_lens:
+            ctx_per_lens[l] = store.get_stories_for_report(l, cutoff=cutoff)
+    per_lens: dict[str, list[dict]] = {l: ctx_per_lens[l] for l in lens_ids}   # 리포트=자산만
     # 백드롭(생성 1콜 + grounding 리뷰 1콜 — §5 표: 16개 섹션 공통 입력이라 오염 전파 지점).
     # 생성·검증·리뷰 어느 것이든 실패 → 서두 생략 + 섹션 미주입(degrade), _backdrop 미저장(기존 유지).
+    # 입력=context 풀(비자산 top3 포함) → 매크로/정치/정책이 백드롭 통해 자산 섹션에 녹음(#2).
     backdrop = ""
-    all_top3 = [s for ss in per_lens.values() for s in ss[:3]]
+    all_top3 = [s for lid in ctx_ids for s in ctx_per_lens[lid][:3]]
     excerpts = [f'{s.get("title", "")}' for s in all_top3]
     if excerpts:
         try:

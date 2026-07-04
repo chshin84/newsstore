@@ -166,6 +166,29 @@ def test_run_report_pass_saves_passed_report_and_backdrop():
     assert llm.n_review >= 2                            # 섹션 리뷰 + 백드롭 grounding 리뷰(§5 표)
 
 
+def test_run_report_pass_folds_context_stories_into_backdrop_only():
+    # #2 fold-in: 비자산(us_policy) 스토리는 백드롭 입력엔 들어가되(자산 리포트로 녹음),
+    # 리포트 문서는 자산(kr_equity)만 저장 — 정치·정책 리포트는 안 생긴다(#5/#6).
+    store = _Store({"kr_equity": _stories(),
+                    "us_policy": [_s("트럼프관세", lenses=("us_policy",)),
+                                  _s("연준긴축", lenses=("us_policy",))]},
+                   {"kr_equity": FRAME})
+    seen = {}
+
+    class _Cap(_LLM):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "데스크 에디터" in prompt:
+                seen["backdrop"] = prompt
+            return super().generate_json(prompt, timeout=timeout, model=model)
+
+    run_report_pass(store, _Cap(SECTION_OK, {"passed": True, "notes": ""}),
+                    lens_ids=["kr_equity"], now=NOW,
+                    context_lens_ids=["kr_equity", "us_policy"])
+    assert "트럼프관세" in seen["backdrop"]         # 정치 스토리가 백드롭(자산 리포트 입력)에 녹음
+    assert "kr_equity" in store.reports              # 자산 리포트 저장
+    assert "us_policy" not in store.reports          # 정치·정책 리포트는 안 생김
+
+
 def test_run_report_pass_backdrop_review_reject_degrades():
     # 백드롭 리뷰 기각 → 서두 미저장 + 섹션 콜에 미주입(degrade — §5 표). 섹션은 계속 진행.
     class _RejBackdrop(_LLM):

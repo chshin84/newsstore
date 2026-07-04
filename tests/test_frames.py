@@ -164,6 +164,30 @@ def test_run_frame_pass_generates_market_frame(monkeypatch):
     assert store.saved[MARKET_ID]["risks"][0]["text"] == "시장 공포"
 
 
+def test_run_frame_pass_market_folds_context_stories(monkeypatch):
+    # #2 fold-in: 비자산(us_policy) 스토리가 시장 프레임 생성 입력에 녹되(자산 프레임으로 흐름),
+    # 개별 프레임은 자산(kr_equity)만 생성. 정치·정책 렌즈 개별 프레임은 안 만든다.
+    from newsstore.enrich.frames import MARKET_ID
+    monkeypatch.delenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", raising=False)
+
+    class _PerLens:
+        def __init__(self): self.saved = {}
+        def get_frame(self, lens_id): return {}
+        def save_frame(self, lens_id, frame, *, now): self.saved[lens_id] = frame
+        def get_stories_for_report(self, lens_id, cutoff):
+            return {"kr_equity": [{"id": "eq1", "title": "삼성", "summary": "x"}],
+                    "us_policy": [{"id": "pol1", "title": "트럼프 관세", "summary": "x"}]}.get(lens_id, [])
+
+    llm = _LLM(frame_resp={"risks": [{"id": "m1", "text": "공포"}], "premiums": [], "watchpoints": []},
+               review_resp={"passed": True})
+    store = _PerLens()
+    run_frame_pass(store, llm, lens_ids=["kr_equity"], now=NOW,
+                   context_lens_ids=["kr_equity", "us_policy"])
+    assert any("pol1" in c for c in llm.calls)         # 정치 스토리가 시장 프레임 입력에 녹음
+    assert MARKET_ID in store.saved and "kr_equity" in store.saved
+    assert "us_policy" not in store.saved              # 정치 렌즈 개별 프레임은 안 만듦
+
+
 def test_run_frame_pass_age_gate_skips_fresh(monkeypatch):
     # 6a age-gate: updated_at이 신선하면(min_age 이내) generate_json 0콜로 스킵 — #45 완화.
     monkeypatch.setenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", "20")

@@ -190,16 +190,23 @@ def _attempt_frame(client, lens_id, old, stories, market, *, reject_notes=None):
     return frame, verdict
 
 
-def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None) -> int:
+def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None,
+                   context_lens_ids: list[str] | None = None) -> int:
     """렌즈별 프레임 재심. 실패(콜·검증·리뷰 기각)는 어제 판 유지(fail-soft, §5(c)). 반환=갱신 수.
 
     #44: 시작에 글로벌 시장 프레임을 먼저 생성해 각 렌즈 프롬프트에 주입(interconnectivity).
+    개별 프레임은 lens_ids(=자산)만 생성하되, context_lens_ids(비자산 포함)가 주어지면 시장
+    프레임 샘플을 그 넓은 풀에서 뽑아 정치·정책·경제 공포를 자산 프레임으로 녹인다(#2 fold-in).
     6a age-gate: updated_at이 min_age(env NEWSSTORE_FRAME_MIN_AGE_HOURS, 기본 20h) 이내로
     신선하면 재심 스킵(#45 완화 — 프레임은 준정적, 리포트 4×/일마다 재생성할 필요 없음)."""
     cutoff = now - (window or timedelta(hours=72))
     min_age = timedelta(hours=float(os.environ.get("NEWSSTORE_FRAME_MIN_AGE_HOURS", "20")))
-    # 사전수집(전 렌즈 1회) — 시장 프레임 + 렌즈 프레임이 공유(중복 read 방지, 리뷰 consistency 반영)
-    per_lens = {lid: store.get_stories_for_report(lid, cutoff=cutoff) for lid in lens_ids}
+    # 사전수집 — 시장 프레임은 context 풀(비자산 포함), 개별 프레임은 lens_ids만. read 공유(중복 방지).
+    ctx_ids = context_lens_ids or lens_ids
+    per_lens = {lid: store.get_stories_for_report(lid, cutoff=cutoff) for lid in ctx_ids}
+    for lid in lens_ids:                                 # 방어: 자산 렌즈가 context에 없으면 보충
+        if lid not in per_lens:
+            per_lens[lid] = store.get_stories_for_report(lid, cutoff=cutoff)
     market = _ensure_market_frame(store, client, per_lens, now=now, min_age=min_age)
     n = 0
     for lens_id in lens_ids:
