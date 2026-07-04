@@ -137,13 +137,27 @@ def build_backdrop_prompt(excerpts: list[str]) -> str:
         '\n아래 JSON만 출력: {"text": "..."}')
 
 
+STORY_DEV_MAX = 4             # 프롬프트에 실을 스토리당 최신 전개 수(근거는 전개에 있음 — #1)
+
+
+def _story_line(s: dict) -> str:
+    """프롬프트용 스토리 한 줄 — 제목 + 요약 + 최신 전개 몇 개. 구체 사실(수치·고유명사)은
+    요약이 아니라 developments 타임라인에 있으므로 생성기·리뷰어가 같은 근거를 보게 한다(#1)."""
+    base = f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:200]}'
+    devs = [d for d in (s.get("developments") or []) if d.get("text")]
+    devs.sort(key=lambda d: (d.get("delta_time") or d.get("time") or datetime.min.replace(tzinfo=timezone.utc)),
+              reverse=True)                            # 최신 우선
+    if devs:
+        base += " :: 전개: " + " | ".join((d["text"] or "")[:100] for d in devs[:STORY_DEV_MAX])
+    return base
+
+
 def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str,
                          reject_notes: str | None = None) -> str:
     import json as _json
     # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
     axes_only = {a: frame.get(a) or [] for a in AXES}
-    lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:200]}'
-             for s in stories]
+    lines = [_story_line(s) for s in stories]
     return (
         f"당신은 '{lens_id}' 자산군 데일리 리포트 에디터다. standing 프레임(주어진 것 — "
         "새 프레임을 만들지 마라)에 오늘 스토리를 대조하라.\n"
@@ -166,21 +180,32 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
 MAX_BACKDROP = 1200
 
 
-def build_review_prompt(report: dict, stories: list[dict]) -> str:
+def build_review_prompt(report: dict, stories: list[dict], frame: dict | None = None) -> str:
     import json as _json
-    lines = [f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}'
-             for s in stories]
+    # 리뷰어는 생성기와 '같은' 근거(전개 포함)를 봐야 한다 — 덜 보면 정당한 항목을 오탐(#1).
+    lines = [_story_line(s) for s in stories]
+    # 출처는 둘: ① 인용 스토리(+전개) ② standing 프레임 극. watchpoints·트리거는 프레임 극을
+    # 오늘 스토리에 대조한 것이라, 프레임 극을 restate하는 것은 '프레임이 출처'다(날조 아님).
+    frame_block = ""
+    if frame:
+        axes_only = {a: frame.get(a) or [] for a in AXES}
+        frame_block = ("standing 프레임(출처② — 리포트가 이 극을 restate/관찰하는 것은 근거 있음):\n"
+                       f"{_json.dumps(axes_only, ensure_ascii=False)}\n")
     return (
-        "당신은 리포트 심사자다(grounding+fit). 기각 기준: (1) 항목 주장이 인용 story와 "
-        "실제로 무관(과인용), (2) 매수/매도/비중 조언 포함, (3) 출처에 없는 수치 단정.\n"
+        "당신은 리포트 심사자다(grounding+fit). 출처는 둘: ① 인용 스토리(제목·요약·전개) ② 아래 "
+        "standing 프레임 극. 기각 기준: (1) 항목 주장이 인용 스토리·프레임 극 **어디에도 없는** "
+        "새 사실·수치를 날조(둘 중 하나에 있으면 근거 있음 — 특히 프레임 극의 내용을 watchpoints/"
+        "트리거로 옮긴 것은 정상), (2) 매수/매도/비중 조언 포함, (3) 인용 story와 실제로 무관한 "
+        "억지 연결(과인용). 단순히 요약 앞부분에 없다고 날조로 속단 말고 전개·프레임까지 확인하라.\n"
+        + frame_block +
         f"리포트:\n{_json.dumps(report, ensure_ascii=False)}\n스토리:\n" + "\n".join(lines) + "\n"
         '아래 JSON만 출력: {"passed": true|false, "notes": "기각 사유 또는 빈 문자열"}')
 
 
-def _review(client, report: dict, stories: list[dict]) -> dict:
-    """리뷰 콜 — 실패는 passed=false(통과 위장 금지, §5 표)."""
+def _review(client, report: dict, stories: list[dict], frame: dict | None = None) -> dict:
+    """리뷰 콜 — 실패는 passed=false(통과 위장 금지, §5 표). frame=섹션 리뷰 시 극 출처(#1)."""
     try:
-        v = client.generate_json(build_review_prompt(report, stories), timeout=60.0,
+        v = client.generate_json(build_review_prompt(report, stories, frame), timeout=60.0,
                                  model=model_for("report_review"))
     except LLMError as e:
         return {"passed": False, "notes": f"리뷰 불가: {e}"}
@@ -252,7 +277,7 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
         if v is None:
             log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
             return "failed"
-        review = _review(client, v, top)                # 기각이어도 저장+배지(결정③)
+        review = _review(client, v, top, frame)         # 기각이어도 저장+배지(결정③). frame=극 출처(#1)
         if not review["passed"]:
             # 리뷰 실패 → 실패 사유(notes)를 넣어 1회만 재생성·재검증·재리뷰(루프 금지, 개선 기회).
             # 재리뷰 통과 시 개선분으로 교체; 실패해도 기존 v를 그대로 저장(배지 계약 불변).
@@ -262,7 +287,7 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
                     timeout=90.0, model=model_for("report_section"))
                 v2 = validate_report(raw2, frame=frame, input_story_ids={s["id"] for s in top})
                 if v2 is not None:
-                    review2 = _review(client, v2, top)
+                    review2 = _review(client, v2, top, frame)
                     if review2["passed"]:
                         v, review = v2, review2         # 개선분 채택
             except LLMError as e:                       # 재시도 콜 실패 → 기존 v 유지(전파 금지)

@@ -53,7 +53,8 @@ def test_min_stories_constant():
     assert REPORT_MIN_STORIES >= 2                      # 사이트 표시 기준(count>=2)과 동일 발상
 
 
-from newsstore.enrich.report import validate_report, build_section_prompt, build_backdrop_prompt
+from newsstore.enrich.report import (validate_report, build_section_prompt, build_backdrop_prompt,
+                                     build_review_prompt)
 
 FRAME = {"risks": [{"id": "r1", "text": "빅테크 capex 감속"}],
          "premiums": [{"id": "p1", "text": "HBM 수요"}],
@@ -100,6 +101,34 @@ def test_section_prompt_contains_frame_stories_backdrop():
     assert "매수" in p                                  # 매수/매도 금지 지시 포함(§1)
     # #1: 과인용(스토리에 없는 사실을 트리거 근거로 지어냄) 방지 — grounding 리뷰 기각의 주 원인
     assert "과인용" in p and "watchpoints" in p
+
+
+def test_section_prompt_includes_developments():
+    # #1 근본수정: 구체 사실은 스토리 developments(타임라인)에 있다 — 요약만 보면 근거를 못 본다.
+    story = {"id": "s1", "title": "비트코인", "summary": "정부 매각",
+             "developments": [{"text": "아일랜드 당국 누적 1,500 BTC 압수", "delta_time": NOW}]}
+    p = build_section_prompt("crypto", FRAME, [story], "")
+    assert "아일랜드 당국 누적 1,500 BTC 압수" in p   # 전개가 생성기 입력에 실림
+
+
+def test_review_prompt_includes_frame_and_developments():
+    # #1 근본수정: 리뷰어가 프레임(극 출처)과 스토리 전개를 받아야, 프레임 극을 restate한 항목을
+    # '출처 없는 날조'로 오판하지 않는다(아일랜드 1,500 BTC = 프레임 watchpoint 극, 실제 사실).
+    story = {"id": "s1", "title": "비트코인", "summary": "정부 매각",
+             "developments": [{"text": "아일랜드 당국 누적 1,500 BTC 압수", "delta_time": NOW}]}
+    rep = {"headline": "h", "lead": "l", "sections": []}
+    p = build_review_prompt(rep, [story], frame=FRAME)
+    assert "빅테크 capex 감속" in p                   # 프레임 극이 리뷰어 입력(출처로 인정)
+    assert "HBM 수요" in p
+    assert "아일랜드 당국 누적 1,500 BTC 압수" in p    # 스토리 전개가 리뷰어 입력
+    assert "프레임" in p                              # 프레임을 출처로 인정하라는 지시
+
+
+def test_review_prompt_backward_compat_no_frame():
+    # 프레임 없이(백드롭 리뷰 등) 호출해도 동작(하위호환).
+    p = build_review_prompt({"headline": "h", "lead": "l", "sections": []},
+                            [{"id": "s1", "title": "t", "summary": "x"}])
+    assert "심사자" in p
 
 
 def test_section_prompt_survives_real_frame_with_datetime():
