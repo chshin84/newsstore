@@ -607,6 +607,133 @@ def test_run_report_pass_omits_divergence_without_price():
     assert "divergence" not in store.reports["kr_equity"]
 
 
+# ── WB1: 문장 경계 컷(산문 항목 text·lead 중간 절단 제거) ──
+from newsstore.enrich.report import _sentence_cut, MAX_ITEM_TEXT, MAX_LEAD, MAX_LEAD_BULLETS
+
+
+def test_sentence_cut_preserves_complete_short_text():
+    s = "단기 FX 스와프가 확대됐다."
+    assert _sentence_cut(s, MAX_ITEM_TEXT) == s          # cap 이하 완결문은 그대로 보존
+
+
+def test_sentence_cut_never_exceeds_cap_and_cuts_at_sentence_boundary():
+    a = "코스피가 상승했다. " * 40                        # cap 초과 산문
+    out = _sentence_cut(a, 50)
+    assert len(out) <= 50                                # cap 상한 유지(토큰폭탄 방어)
+    assert out.endswith(".")                             # 문장 종결부호에서 컷(중간 절단 아님)
+    assert "코스피가 상승했다." in out
+
+
+def test_sentence_cut_middot_is_not_a_boundary():
+    # 가운뎃점 ·은 병렬 구분자 — 경계로 쓰면 "반도체·"처럼 절단된다. 경계 아님.
+    s = "반도체·전력·자동차 업종이 동반 강세를 보이며 지수를 끌어올렸다는 평가가 나온다"
+    out = _sentence_cut(s, 12)
+    assert out and out[-1] != "·"                        # 구분자로 끝나지 않음
+
+
+def test_sentence_cut_falls_back_to_word_boundary_not_mid_token():
+    # 문장 경계가 cap 안에 없으면 마지막 공백(단어 경계)에서 — 조사·단어 중간 절단 금지.
+    s = "최근 5일간 코스피 지수가 큰 폭으로 하락하면서 투자심리가 급격히 위축되었다"
+    out = _sentence_cut(s, 15)
+    assert " " in s and not out.endswith(" ")            # 열린 채로 끝나지 않음
+    assert out == out.strip() and out
+    assert s.startswith(out)                             # 원문의 접두(마지막 어절 온전)
+
+
+def test_sentence_cut_does_not_end_with_open_bracket_or_separator():
+    s = "지수는 강세를 보였고 (특히 반도체 " * 5
+    out = _sentence_cut(s, 20)
+    assert out[-1] not in "([{（·,;:"                    # 열린 괄호·구분자로 끝나지 않음
+
+
+def test_sentence_cut_decimal_point_is_not_a_boundary():
+    # ASCII 마침표가 숫자 사이(소수점·버전)면 경계 아님 — '3.5%'가 '3.'로 손상되면 안 된다.
+    s = "매출은 3.5% 늘었지만 비용도 크게 증가하여 수익성은 오히려 악화되었다는 분석이다"
+    out = _sentence_cut(s, 9)
+    assert "3.5" in out and not out.endswith("3.")        # 소수점에서 자르지 않음
+    assert out and out[-1] != "."                         # 숫자 소수점을 종결로 오인하지 않음
+
+
+def test_sentence_cut_newline_boundary_does_not_expose_trailing_separator():
+    # 종결 경계가 줄바꿈이라도 결과가 구분자·열린 괄호로 끝나지 않는다(폴백 트림을 모든 경로에).
+    assert _sentence_cut("가·\n나 다 라 마 바 사", 5)[-1] != "·"
+    assert _sentence_cut("(\n반도체 전력 자동차 산업", 4)[-1] not in "([{（"
+
+
+def test_sentence_cut_hardcut_when_no_boundary_no_space():
+    # 무경계·무공백 초장문 → cap 하드컷(예외 경로). 여전히 구분자로 끝나지 않고 cap 이내.
+    s = "가나다라마바사아자차카타파하" * 5                 # 공백·종결부호 없음
+    out = _sentence_cut(s, 7)
+    assert len(out) <= 7 and out and out[-1] != "·"
+
+
+def test_sentence_cut_empty_and_nonstring_defensive():
+    assert _sentence_cut("", MAX_ITEM_TEXT) == ""
+    assert _sentence_cut(None, MAX_ITEM_TEXT) == ""      # 실 SDK None 방어
+
+
+def test_headline_is_not_boundary_cut_but_hard_sliced():
+    # WB1 스코프: headline(명사구 제목)은 경계 컷 제외 — 종결부호 없어 경계룰이 오히려 잘못 자른다.
+    # 긴 명사구 제목은 하드 슬라이스(MAX_HEADLINE)로 유지된다(경계 컷으로 빈/절단 제목 방지).
+    from newsstore.enrich.report import MAX_HEADLINE
+    long_head = "삼성·SK·마이크론 반도체 훈풍 " * 20            # 종결부호 없는 긴 명사구
+    v = validate_report({**GOOD, "headline": long_head}, frame=FRAME, input_story_ids={"s1"})
+    assert v["headline"] == long_head.strip()[:MAX_HEADLINE]   # 하드 슬라이스(경계 컷 아님)
+
+
+def test_validate_report_item_text_gets_sentence_cut():
+    long_text = "MS가 capex 재검토를 시사했다. " * 40    # cap 초과 산문 항목
+    raw = {**GOOD, "sections": [
+        {"name": "risk_triggered", "items": [
+            {"text": long_text, "story_ids": ["s1"], "pole_id": "r1"}]}]}
+    v = validate_report(raw, frame=FRAME, input_story_ids={"s1"})
+    txt = v["sections"][0]["items"][0]["text"]
+    assert len(txt) <= MAX_ITEM_TEXT and txt.endswith(".")   # 경계 컷(중간 절단 아님)
+
+
+# ── WB2: 리드 = 핵심 합성 불릿 문자열 배열(≤3) ──
+def test_validate_report_lead_is_bounded_string_array():
+    raw = {**GOOD, "lead": ["현재 원화 약세가 이어진다.", "다만 당국 개입 경계가 반전 요인이다.",
+                            "3분기 수급이 관건이다.", "넷째 불릿은 상한 초과."]}
+    v = validate_report(raw, frame=FRAME, input_story_ids={"s1"})
+    assert isinstance(v["lead"], list)
+    assert 1 <= len(v["lead"]) <= MAX_LEAD_BULLETS       # 상한 불변식(매직넘버 아님)
+    assert all(isinstance(x, str) and x.strip() for x in v["lead"])
+
+
+def test_validate_report_lead_string_backward_compat_coerced_to_array():
+    # 구형(문자열) 리드도 graceful 코어스 — 배포 순서 무관.
+    v = validate_report({**GOOD, "lead": "핵심 요약 문장이다."}, frame=FRAME, input_story_ids={"s1"})
+    assert v["lead"] == ["핵심 요약 문장이다."]
+
+
+def test_validate_report_rejects_empty_lead_array():
+    assert validate_report({**GOOD, "lead": []}, frame=FRAME, input_story_ids={"s1"}) is None
+    assert validate_report({**GOOD, "lead": ["", "  "]}, frame=FRAME, input_story_ids={"s1"}) is None
+    assert validate_report({**GOOD, "lead": None}, frame=FRAME, input_story_ids={"s1"}) is None
+
+
+def test_validate_report_lead_list_skips_non_string_elements():
+    # 리드 배열에 비문자열(None·숫자·dict)이 섞여도 안전하게 드롭하고 문자열만 남긴다.
+    raw = {**GOOD, "lead": [None, 123, {"x": 1}, "유효한 불릿이다."]}
+    v = validate_report(raw, frame=FRAME, input_story_ids={"s1"})
+    assert v["lead"] == ["유효한 불릿이다."]
+
+
+def test_validate_report_lead_bullets_get_sentence_cut():
+    long_bullet = "코스피가 상승했다. " * 40
+    v = validate_report({**GOOD, "lead": [long_bullet]}, frame=FRAME, input_story_ids={"s1"})
+    assert len(v["lead"][0]) <= MAX_LEAD and v["lead"][0].endswith(".")   # 문장 경계 컷
+
+
+def test_section_prompt_asks_lead_as_synthesis_bullets():
+    p = build_section_prompt("kr_equity", FRAME,
+                             [{"id": "s1", "title": "t", "summary": "s"}], "bd")
+    assert "재요약" in p                                 # 섹션 항목 재요약 금지 지시
+    assert "완결된 문장" in p                            # WB1 예산 내 완결 문장 지시
+    assert '"lead":[' in p                               # JSON 템플릿이 배열
+
+
 def test_run_report_pass_generates_rising():
     # m8: 결정적 구성 — impact=3 fresh 15개가 top-K(=REPORT_MAX_STORIES)를 점유하고,
     # hot1·hot2(impact=1, 24h 델타 5건)는 top-K 밖 + 밀도 상위 → rising 무조건 생성.

@@ -118,3 +118,11 @@ def test_report_groups_assets_only():
     assert "리스크" not in groups and "경제" not in groups and "정치·정책" not in groups
     flat = [lid for lids in groups.values() for lid in lids]
     assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 자산 렌즈가 정확히 1그룹
+
+
+def test_report_group_order_equities_then_rates_then_rest():
+    # WB4: 조립 순서 = 주식(한국·미국) → 금리·채권(한국·미국) → 나머지. SSOT=topics.yaml 등장 순서.
+    # 순서 pin(회귀 가드) — 계약 shape(정확히 1그룹·누락 없음)은 test_report_groups_assets_only가 지킴.
+    t = topics.load_topics()
+    order = list(topics.report_groups(t).keys())
+    assert order[:2] == ["주식", "금리·채권"]                 # 앞 두 그룹 고정, 나머지는 뒤

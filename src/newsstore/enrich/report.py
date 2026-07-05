@@ -138,10 +138,76 @@ def select_rising(stories: list[dict], *, top_k_ids: set[str], now) -> list[dict
 
 
 MAX_HEADLINE = 100
-MAX_LEAD = 300
+MAX_LEAD = 300                # 리드 불릿 1개당 상한(토큰폭탄 방어 cap — 실제 종료는 문장경계 컷)
+MAX_LEAD_BULLETS = 3         # 리드 = 합성 불릿 최대 개수(WB2 frozen 계약: 문자열 배열 ≤3)
 MAX_ITEM_TEXT = 240
 SECTION_NAMES = ("risk_triggered", "premium_triggered", "not_triggered", "watchpoints")
 _TRIGGER_SECTIONS = ("risk_triggered", "premium_triggered")
+
+# ── 문장 경계 컷(WB1) — 산문 필드(항목 text·lead 불릿)가 문자수 하드컷으로 문장 중간에서
+# 잘리지 않게 한다. cap은 토큰폭탄 방어 상한으로 유지하되(제거 아님), cap 초과 시 cap 이내
+# '완결 경계'에서 자른다. 완전 결정론·LLM 0콜. headline(명사구 제목)엔 적용하지 않는다.
+# 종결 경계 문자셋: 한국어 종결은 ASCII 마침표 . ! ? + 전각 。！？ + 줄바꿈 + 말줄임 ….
+# 가운뎃점 ·(병렬 구분자)은 경계가 아니다("반도체·전력" 중간 절단 금지 — 리뷰 교정).
+_SENTENCE_END = ".!?。！？…\n"
+# 폴백 컷이 끝에 남기면 안 되는 것(구분자·열린 괄호·공백) — 이런 문자로 끝나면 트림.
+_DANGLING = " \t\r\n·,;:、，；：([{（〔【「『《〈<"
+
+
+def _is_sentence_end(s: str, i: int) -> bool:
+    """s[i]가 문장 종결 경계인가. ASCII 마침표 `.`는 앞뒤가 모두 숫자면 소수점·버전 표기
+    ('3.5%'·'v1.2')라 경계가 아니다(숫자 중간 절단·값 손상 방지 — 리뷰 지적). 그 외 종결부호는 경계."""
+    ch = s[i]
+    if ch not in _SENTENCE_END:
+        return False
+    if ch == "." and 0 < i and i + 1 < len(s) and s[i - 1].isdigit() and s[i + 1].isdigit():
+        return False
+    return True
+
+
+def _sentence_cut(text, cap: int) -> str:
+    """산문을 cap 이내 '완결 경계'에서 자른다(하드컷 대신). 결정론 순수함수.
+    cap 이하면 그대로 보존. 초과 시: ① cap 이내 마지막 문장 종결부호(포함해 유지) →
+    ② 없으면 마지막 공백(단어 경계) → ③ 그래도 없으면(공백 없는 초장문) cap 하드컷+로그.
+    모든 컷은 구분자·열린 괄호로 끝나지 않게 트림. ·(가운뎃점)·소수점은 경계 아님. None 방어."""
+    if not isinstance(text, str):
+        return ""
+    s = text.strip()
+    if len(s) <= cap:
+        return s
+    window = s[:cap]
+    for i in range(len(window) - 1, -1, -1):              # cap 이내 가장 오른쪽 종결 경계
+        if _is_sentence_end(s, i):                        # 소수점 판정은 원문 s 기준(경계 걸침 방어)
+            cut = window[:i + 1].rstrip(_DANGLING).strip()   # 종결부호는 _DANGLING 아님 → 유지
+            if cut:
+                return cut
+            break
+    sp = window.rfind(" ")                                 # 단어 경계(마지막 공백)
+    if sp > 0:
+        trimmed = window[:sp].rstrip(_DANGLING).strip()
+        if trimmed:
+            return trimmed
+    log.warning("sentence_cut: 경계 없는 초장문 하드컷(len=%d cap=%d)", len(s), cap)
+    return window.rstrip(_DANGLING).strip() or window.strip()
+
+
+def _lead_bullets(raw_lead, cap: int) -> list[str]:
+    """리드를 짧은 합성 불릿 문자열 배열(≤MAX_LEAD_BULLETS)로 정규화한다(WB2 frozen 계약).
+    입력이 배열이면 각 문자열 항목을, 문자열(구형)이면 단일 항목으로 코어스(하위호환·배포순서 무관).
+    각 불릿에 WB1 문장경계 컷 적용, 빈 항목 드롭. 실 SDK None 방어(x or [])."""
+    if isinstance(raw_lead, list):
+        source = raw_lead
+    elif isinstance(raw_lead, str):
+        source = [raw_lead]
+    else:
+        source = []
+    out = []
+    for x in source:
+        if isinstance(x, str):
+            cut = _sentence_cut(x, cap)
+            if cut:
+                out.append(cut)
+    return out[:MAX_LEAD_BULLETS]
 
 
 def _frame_pole_ids(frame: dict) -> set[str]:
@@ -154,9 +220,8 @@ def validate_report(raw, *, frame: dict, input_story_ids: set[str]) -> dict | No
     if not isinstance(raw, dict):
         return None
     headline = raw.get("headline")
-    lead = raw.get("lead")
-    if not (isinstance(headline, str) and headline.strip()
-            and isinstance(lead, str) and lead.strip()):
+    lead = _lead_bullets(raw.get("lead"), MAX_LEAD)       # WB2: 합성 불릿 배열(≤3), 각 문장경계 컷
+    if not (isinstance(headline, str) and headline.strip() and lead):
         return None
     pole_ids = _frame_pole_ids(frame)
     sections_in = raw.get("sections")
@@ -178,10 +243,12 @@ def validate_report(raw, *, frame: dict, input_story_ids: set[str]) -> dict | No
                 continue                                              # 환각 극 드롭
             if sec["name"] in _TRIGGER_SECTIONS and not ids:
                 continue                                              # 트리거 = 인용 필수(B)
-            items.append({"text": it["text"].strip()[:MAX_ITEM_TEXT],
-                          "story_ids": ids, "pole_id": pid})
+            text = _sentence_cut(it["text"], MAX_ITEM_TEXT)   # WB1: 문장경계 컷
+            if not text:                                      # 컷 결과가 비면 드롭(공백 prefix 방어)
+                continue
+            items.append({"text": text, "story_ids": ids, "pole_id": pid})
         sections.append({"name": sec["name"], "items": items})
-    return {"headline": headline.strip()[:MAX_HEADLINE], "lead": lead.strip()[:MAX_LEAD],
+    return {"headline": headline.strip()[:MAX_HEADLINE], "lead": lead,
             "sections": sections}
 
 
@@ -375,9 +442,16 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
         "진전 등을 지어내 트리거 근거로 쓰지 마라(과인용 금지 — grounding 리뷰 기각의 주 원인). "
         "근거가 약하거나 스토리로 뒷받침되지 않으면 그 극은 트리거로 올리지 말고 watchpoints로 내려라. "
         "미발생(not_triggered)은 프레임 극 중 72h 트리거 없는 것. watchpoints는 관찰 지점 재확인.\n"
+        # WB2: 리드는 섹션 재요약이 아니라 한 단계 위 합성 불릿 배열.
+        "리드(lead) 지시: 섹션 항목을 재요약하지 마라(같은 층위 복붙은 중복). 현재-상태 + 핵심 반전을 "
+        "한 단계 위에서 합성한 2~3개의 짧은 불릿(문자열 배열)으로 써라 — '딴 걸 안 읽어도 이 2~3줄'인 "
+        "큐레이션 TL;DR. 섹션 목록이 못 주는 엮인 서사(반전·인과)만 담아라.\n"
+        # WB1: 산문 필드는 예산 내에서 완결된 문장으로 — 문장 중간 절단 금지.
+        "길이 규칙(중요): 각 항목 text와 리드 불릿은 예산 안에서 **완결된 문장**으로 끝내라 "
+        "(문장·단어 중간에서 끊지 마라).\n"
         + (f"직전 시도가 다음 사유로 기각됨: {reject_notes}. 이를 반영해 기각 사유를 해소해 "
            "재작성하라.\n" if reject_notes else "") +
-        '아래 JSON만 출력: {"headline":"...","lead":"...","sections":['
+        '아래 JSON만 출력: {"headline":"...","lead":["...","..."],"sections":['
         '{"name":"risk_triggered","items":[{"text":"...","story_ids":["..."],"pole_id":"..."}]},'
         '{"name":"premium_triggered","items":[...]},{"name":"not_triggered","items":[...]},'
         '{"name":"watchpoints","items":[...]}]}')
