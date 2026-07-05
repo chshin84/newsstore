@@ -417,6 +417,149 @@ def test_run_report_pass_retry_llm_error_keeps_first():
     assert llm.n_section == 2                            # 재시도 1회 시도(3번째 없음)
 
 
+# ── divergence 배지(A1) ──
+from newsstore.enrich.report import (frame_lean, divergence, conviction,
+                                     _triggered_signals, DIVERGENCE_DEADBAND_DEFAULT)
+
+
+def _price(pts, pct=None):
+    d = {"series": [{"t": f"d{i}", "c": c} for i, c in enumerate(pts)]}
+    if pct is not None:
+        d["percent_change"] = pct
+    return d
+
+
+def test_frame_lean_is_premium_minus_risk_count():
+    assert frame_lean({"premiums": [1, 2], "risks": [1]}) == 1
+    assert frame_lean({"premiums": [], "risks": [1, 2]}) == -2
+    assert frame_lean({}) == 0                       # 빈 프레임 → 0(중립)
+
+
+def test_divergence_over_fear_when_fear_but_price_not_falling():
+    # lean<0(공포 우세) + 최근 추세 상승/무반응(≥ −ε) → over_fear(뉴스 공포인데 가격 미반영)
+    frame = {"risks": [{"id": "r1"}, {"id": "r2"}], "premiums": []}
+    d = divergence(frame, _price([100, 101, 102]), "usdkrw", deadband=0.3)
+    assert d["kind"] == "over_fear" and d["price_key"] == "usdkrw"
+    assert "단정 아님" in d["note"]                  # 재료 어투(판정 금지)
+
+
+def test_divergence_aligned_when_fear_and_price_falls():
+    frame = {"risks": [{"id": "r1"}, {"id": "r2"}], "premiums": []}
+    d = divergence(frame, _price([102, 100, 98]), "usdkrw", deadband=0.3)
+    assert d["kind"] == "aligned"
+
+
+def test_divergence_over_hope_when_hope_but_price_not_rising():
+    frame = {"premiums": [{"id": "p1"}, {"id": "p2"}], "risks": []}
+    d = divergence(frame, _price([100, 99, 100]), "sp500", deadband=0.3)
+    assert d["kind"] == "over_hope"
+
+
+def test_divergence_deadband_boundary_is_inclusive():
+    # direction=(last-first)/|first|*100. 정확히 −ε는 over_fear(경계 포함), ε 밖 하락은 aligned.
+    frame = {"risks": [{"id": "r1"}], "premiums": []}
+    assert divergence(frame, _price([100, 99.7]), "x", deadband=0.3)["kind"] == "over_fear"  # −0.3 ≥ −0.3
+    assert divergence(frame, _price([100, 99.6]), "x", deadband=0.3)["kind"] == "aligned"    # −0.4 < −0.3
+
+
+def test_divergence_none_when_lean_zero_or_no_price():
+    lean0 = {"risks": [{"id": "r1"}], "premiums": [{"id": "p1"}]}
+    assert divergence(lean0, _price([100, 101]), "x", deadband=0.3) is None
+    fear = {"risks": [{"id": "r1"}], "premiums": []}
+    assert divergence(fear, None, "x", deadband=0.3) is None                # 가격 없음
+    assert divergence(fear, _price([100, 101]), None, deadband=0.3) is None  # 가격키 없음
+
+
+def test_divergence_series_trend_preferred_over_percent_change():
+    # series 추세(상승)가 단일일 percent_change(하락)보다 우선 — 누적 센티먼트 시점 스케일 정합.
+    fear = {"risks": [{"id": "r1"}], "premiums": []}
+    d = divergence(fear, _price([100, 101, 103], pct=-0.5), "x", deadband=0.3)
+    assert d["kind"] == "over_fear"                  # 추세 상승 → 안 빠짐
+
+
+def test_divergence_percent_change_fallback_when_no_series():
+    fear = {"risks": [{"id": "r1"}], "premiums": []}
+    d = divergence(fear, {"percent_change": 0.5}, "x", deadband=0.3)   # series 없음 → pct 폴백
+    assert d["kind"] == "over_fear" and d["price_pct"] == 0.5
+
+
+def test_divergence_price_pct_is_prior_day_change_per_schema():
+    fear = {"risks": [{"id": "r1"}], "premiums": []}
+    d = divergence(fear, _price([100, 102], pct=-0.78), "usdkrw", deadband=0.3)
+    assert d["price_pct"] == -0.78                    # 스키마: price_pct = 전일 등락%
+    assert "전일 등락" in d["note"]                   # 추세로 분류하되 전일 등락도 노출(투명성)
+
+
+# ── conviction 등급(A2) ──
+def test_triggered_signals_count_unique_citations_and_poles():
+    report = {"sections": [
+        {"name": "risk_triggered", "items": [
+            {"text": "a", "story_ids": ["s1", "s2"], "pole_id": "r1"},
+            {"text": "b", "story_ids": ["s1"], "pole_id": None}]},
+        {"name": "premium_triggered", "items": [
+            {"text": "c", "story_ids": ["s3"], "pole_id": "p1"}]},
+        {"name": "not_triggered", "items": [
+            {"text": "d", "story_ids": ["s9"], "pole_id": "w1"}]}]}
+    c, p = _triggered_signals(report)
+    assert c == 3                                    # s1,s2,s3 (not_triggered s9 제외)
+    assert p == 2                                    # r1, p1 (pole None 제외)
+
+
+def test_conviction_c_zero_forces_low():
+    assert conviction(0, 5, 2)["level"] == "low"     # 인용 없으면 강제 low
+
+
+def test_conviction_high_needs_first_pass_pole_and_two_citations():
+    assert conviction(2, 1, 2)["level"] == "high"
+    assert conviction(1, 1, 2)["level"] == "medium"  # c<2
+    assert conviction(2, 0, 2)["level"] == "medium"  # p<1
+    assert conviction(2, 1, 1)["level"] == "medium"  # 재작업 통과(r<2)
+
+
+def test_conviction_is_monotonic_in_each_signal():
+    # 계약=단조성: c/p/r 어느 것이 늘어도 등급이 낮아지지 않는다(정확한 컷 아님).
+    order = {"low": 0, "medium": 1, "high": 2}
+    for c in range(4):
+        for p in range(4):
+            for r in range(3):
+                base = order[conviction(c, p, r)["level"]]
+                assert order[conviction(c + 1, p, r)["level"]] >= base
+                assert order[conviction(c, p + 1, r)["level"]] >= base
+                if r < 2:
+                    assert order[conviction(c, p, r + 1)["level"]] >= base
+
+
+def test_conviction_basis_flags_coarse_signal():
+    b = conviction(2, 1, 1)["basis"]
+    assert "재작업" in b and ("거친" in b or "단조" in b)   # 프록시임을 basis에 노출
+
+
+def test_run_report_pass_attaches_conviction():
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    conv = store.reports["kr_equity"]["conviction"]
+    assert conv["level"] in ("high", "medium", "low") and conv["basis"]
+
+
+def test_run_report_pass_attaches_divergence_when_price_maps():
+    fear = {"risks": [{"id": "r1"}, {"id": "r2"}], "premiums": []}   # lean<0
+    store = _Store({"fx": _stories()}, {"fx": fear})
+    llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
+    run_report_pass(store, llm, lens_ids=["fx"], now=NOW,
+                    price_by_lens={"fx": {"key": "usdkrw",
+                                          "doc": {"series": [{"c": 100}, {"c": 102}]}}})
+    d = store.reports["fx"]["divergence"]
+    assert d["kind"] == "over_fear" and d["price_key"] == "usdkrw"
+
+
+def test_run_report_pass_omits_divergence_without_price():
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})   # price_by_lens 미전달
+    llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert "divergence" not in store.reports["kr_equity"]
+
+
 def test_run_report_pass_generates_rising():
     # m8: 결정적 구성 — impact=3 fresh 15개가 top-K(=REPORT_MAX_STORIES)를 점유하고,
     # hot1·hot2(impact=1, 24h 델타 5건)는 top-K 밖 + 밀도 상위 → rising 무조건 생성.
