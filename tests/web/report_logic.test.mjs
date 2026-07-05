@@ -6,11 +6,11 @@ const html = readFileSync(new URL("../../web/index.html", import.meta.url), "utf
 const START = "// === REPORT-LOGIC-START", END = "// === REPORT-LOGIC-END";
 const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "REPORT-LOGIC 마커 필요(드리프트 가드)");
-const { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks,
-        divergenceChip, convictionPill } =
+const { assembleReportDoc, reportStatus, crossLinks, dedupCards,
+        divergenceChip, convictionPill, normalizeHeadline, dedupEvidence } =
   new Function(html.slice(i, j) +
-    "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks," +
-    " divergenceChip, convictionPill };")();
+    "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards," +
+    " divergenceChip, convictionPill, normalizeHeadline, dedupEvidence };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -58,19 +58,6 @@ test("crossLinks: 같은 스토리 다중 섹션 인용 → 상호 링크", () =
   assert.deepEqual(links["s1"].sort(), ["kr_equity", "us_policy"]);
 });
 
-test("topRisks: 전 렌즈 risk_triggered item을 문서 순서대로 수집(다이제스트)", () => {
-  const docm = { backdrop: "", sections: [
-    { lensId: "risk", group: "리스크", report: { sections: [
-      { name: "risk_triggered", items: [{ text: "연준 독립성 훼손" }, { text: "지정학" }] },
-      { name: "premium_triggered", items: [{ text: "무시됨(리스크 아님)" }] }] } },
-    { lensId: "kr_equity", group: "주식", report: { sections: [
-      { name: "risk_triggered", items: [{ text: "메타 capex 피크아웃" }] }] } }] };
-  const tr = topRisks(docm);
-  assert.deepEqual(tr.map(r => r.text), ["연준 독립성 훼손", "지정학", "메타 capex 피크아웃"]);
-  assert.deepEqual(tr.map(r => r.lensId), ["risk", "risk", "kr_equity"]);   // 순서·렌즈 보존
-  assert.equal(topRisks({ sections: [] }).length, 0);                       // 빈 문서 → []
-});
-
 test("dedupCards: 한 리포트 내 카드 1회, 재인용은 참조 배지 (스코프=단일 리포트 — 참조가 리포트를 벗어나면 안 됨)", () => {
   const order = ["s1", "s2", "s1"];
   const d = dedupCards(order);
@@ -102,6 +89,43 @@ test("convictionPill: high/medium/low만 등급, 부재/미지 레벨은 생략(
   assert.equal(convictionPill(null), null);                    // A 미발행 → 생략
   assert.equal(convictionPill({ level: "bogus" }), null);      // 미지 레벨 → 생략(계약 밖 값 방어)
   assert.equal(convictionPill({}), null);
+});
+
+test("normalizeHeadline: 대소문자·공백·문장부호 무시 정규화(내용 dedup 키)", () => {
+  assert.equal(normalizeHeadline("Fed  Cuts   Rates!"), normalizeHeadline("fed cuts rates"));
+  assert.equal(normalizeHeadline("  A, B: C  "), "a b c");   // 문장부호→공백→collapse→trim
+  assert.equal(normalizeHeadline("한국 <b>금리</b> 인하"), "한국 금리 인하");   // 태그 제거, 한글 보존
+  assert.equal(normalizeHeadline(null), "");
+});
+
+test("dedupEvidence: 근접중복 헤드라인 병합 + 출처 다양성 보존 · 빈도컷 없음(특종 생존)", () => {
+  const items = [
+    { title: "Fed cuts rates", source: "Bloomberg", url: "u1" },
+    { title: "FED CUTS RATES!", source: "Reuters", url: "u2" },   // 정규화 동일 → 병합
+    { title: "Fed cuts rates", source: "Bloomberg", url: "u3" },  // 또 병합(count 누적)
+    { title: "Rare BOK scoop", source: "Bloomberg", url: "u4" },  // 저빈도 특종 — 묻히면 안 됨
+  ];
+  const { reps, total, unique } = dedupEvidence(items);
+  assert.equal(total, 4);
+  assert.equal(unique, 2);
+  assert.equal(reps.length, 2);
+  // 불변식: 고유 정규화 헤드라인이 정확히 1회씩(빈도컷으로 드롭 없음 — 매직넘버 없음)
+  const keys = new Set(reps.map(r => normalizeHeadline(r.title)));
+  assert.equal(keys.size, 2);
+  assert.ok(keys.has(normalizeHeadline("Rare BOK scoop")));       // 블룸버그 전례: 특종 생존
+  const fed = reps.find(r => normalizeHeadline(r.title) === normalizeHeadline("fed cuts rates"));
+  assert.equal(fed.count, 3);                                     // 3건 병합됐음을 표기
+  assert.deepEqual(fed.sources.slice().sort(), ["Bloomberg", "Reuters"]);  // 출처 다양성 보존
+  assert.equal(reps[0].title, "Fed cuts rates");                 // 첫 등장 순서 보존
+});
+
+test("dedupEvidence: 빈 제목은 병합 금지(정보 손실 방지) · 빈 입력 방어", () => {
+  const { reps, unique } = dedupEvidence([
+    { title: "", source: "A", url: "a" }, { title: "", source: "B", url: "b" }]);
+  assert.equal(unique, 2);                                        // 빈 제목끼리 병합 안 함
+  assert.equal(reps.length, 2);
+  assert.deepEqual(dedupEvidence(null), { reps: [], total: 0, unique: 0 });
+  assert.deepEqual(dedupEvidence([]), { reps: [], total: 0, unique: 0 });
 });
 
 console.log(`\nreport_logic: ${pass} passed, ${fail} failed`);
