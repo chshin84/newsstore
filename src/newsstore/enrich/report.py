@@ -43,10 +43,66 @@ def story_rank(story: dict, now) -> float:
     return impact * (1.0 / (1.0 + age_h / FRESH_TAU_H))
 
 
+SAGA_ENTITY_JACCARD = 0.5     # 사가 조각 판정 — 개체 Jaccard 임계(제네릭 단일개체 과연결 방지, 보수적)
+SAGA_PROXIMITY_H = 48.0       # 사가 조각 시간 근접(사가 전개는 대개 며칠 내)
+
+
+def _story_entities(s: dict) -> set:
+    return {e for e in (s.get("entities") or []) if e}
+
+
+def _same_saga(a: dict, b: dict) -> bool:
+    """두 스토리가 같은 사가 조각인가 — 개체 다수 공유(Jaccard≥임계) + 시간 근접. 결정론·LLM 0.
+    제네릭 단일 개체 공유(예 '미국')로는 안 묶이게 Jaccard 임계로 보수적."""
+    ea, eb = _story_entities(a), _story_entities(b)
+    if not (ea and eb):
+        return False
+    inter = ea & eb
+    if not inter or len(inter) / len(ea | eb) < SAGA_ENTITY_JACCARD:
+        return False
+    ta = _latest_delta(a) or a.get("last_seen")
+    tb = _latest_delta(b) or b.get("last_seen")
+    if ta is not None and tb is not None:
+        return abs((ta - tb).total_seconds()) <= SAGA_PROXIMITY_H * 3600
+    return True
+
+
+def saga_impact(stories: list[dict], now) -> dict:
+    """스토리 id → 사가-인지 impact(같은 사가 조각의 최대 impact). **과소병합 만회**:
+    한 사가가 여러 스토리로 갈리면 각 조각의 impact가 작아 top-K에서 밀린다 — 조각의 impact를
+    같은 사가 그룹의 최대로 lift해 갈린 사가가 조각이라 불이익받지 않게 한다(결정론·LLM 0·표시 무변경)."""
+    def _imp(s):
+        v = s.get("impact")
+        return IMPACT_PRIOR if v is None else float(v)
+    eff = {}
+    for s in stories:
+        best = _imp(s)
+        for o in stories:
+            if o is not s and _same_saga(s, o) and _imp(o) > best:
+                best = _imp(o)
+        eff[s.get("id")] = best
+    return eff
+
+
+def _saga_rank(story: dict, now, eff: dict) -> float:
+    """story_rank과 같은 정의지만 impact를 사가-인지 값(eff)으로 — top-K 선정 전용(UI storyRank 불변)."""
+    ms = _latest_delta(story)
+    if ms is None:
+        return 0.0
+    imp = eff.get(story.get("id"))
+    if imp is None:
+        v = story.get("impact")
+        imp = IMPACT_PRIOR if v is None else float(v)
+    age_h = max(0.0, (now - ms).total_seconds() / 3600.0)
+    return imp * (1.0 / (1.0 + age_h / FRESH_TAU_H))
+
+
 def select_top_k(stories: list[dict], now, *, stratify: bool) -> list[dict]:
-    """랭킹 상위 K. stratify=True(주식 렌즈)면 같은 sector_* 라벨 최대 SECTOR_STRATIFY_CAP —
-    한 테마 독식 방지(cap). sector 라벨 없는 스토리는 cap 미적용."""
-    ranked = sorted(stories, key=lambda s: (-story_rank(s, now), s.get("id", "")))
+    """랭킹 상위 K. **사가-인지**: 갈린 사가 조각의 impact를 그룹 최대로 lift해 과소병합 만회
+    (story_rank 대신 _saga_rank). stratify=True(주식 렌즈)면 같은 sector_* 라벨 최대
+    SECTOR_STRATIFY_CAP — 한 테마 독식 방지(cap). sector 라벨 없는 스토리는 cap 미적용."""
+    eff = saga_impact(stories, now)
+    ranked = sorted(stories, key=lambda s: (-_saga_rank(s, now, eff), s.get("id", "")))
     if not stratify:
         return ranked[:REPORT_MAX_STORIES]
     out, per_sector = [], {}

@@ -53,6 +53,35 @@ def test_min_stories_constant():
     assert REPORT_MIN_STORIES >= 2                      # 사이트 표시 기준(count>=2)과 동일 발상
 
 
+def test_saga_aware_ranking_lifts_split_fragment():
+    # 과소병합 만회: 같은 사가 조각(개체 다수 공유+시간 근접)의 impact를 그룹 최대로 lift해
+    # 갈린 사가가 조각이라 top-K에서 밀리지 않게. LLM 0·결정론·표시 무변경.
+    from newsstore.enrich.report import saga_impact, _same_saga, select_top_k
+    A = {"id": "a", "impact": 1, "entities": ["FOMC", "연준", "금리"],
+         "developments": [{"delta_time": NOW}], "lenses": ["us_rates"]}
+    B = {"id": "b", "impact": 5, "entities": ["FOMC", "연준", "의사록"],
+         "developments": [{"delta_time": NOW}], "lenses": ["us_rates"]}
+    U = {"id": "u", "impact": 2, "entities": ["엔비디아", "실적"],
+         "developments": [{"delta_time": NOW}], "lenses": ["us_rates"]}
+    assert _same_saga(A, B)                             # FOMC·연준 공유(Jaccard 2/4=0.5)+동시간 → 사가
+    assert not _same_saga(A, U)                         # 개체 무공유 → 아님
+    eff = saga_impact([A, B, U], NOW)
+    assert eff["a"] == 5.0 and eff["b"] == 5.0          # 조각 A가 그룹 최대(5)로 lift
+    assert eff["u"] == 2.0                              # 무관은 자기 impact
+    top_ids = [s["id"] for s in select_top_k([A, B, U], NOW, stratify=False)]
+    assert "a" in top_ids and "b" in top_ids           # 갈린 사가 둘 다 top-K
+
+
+def test_same_saga_conservative_no_generic_overlink():
+    # 제네릭 단일 개체 공유(예 '미국')로는 안 묶여야 한다(과연결 방지 — Jaccard 임계).
+    from newsstore.enrich.report import _same_saga
+    C = {"id": "c", "impact": 9, "entities": ["미국", "호르무즈", "이란", "유가"],
+         "developments": [{"delta_time": NOW}]}
+    D = {"id": "d", "impact": 1, "entities": ["미국", "반도체", "삼성"],
+         "developments": [{"delta_time": NOW}]}
+    assert not _same_saga(C, D)                         # '미국'만 공유 Jaccard 1/6 < 0.5 → 안 묶임
+
+
 from newsstore.enrich.report import (validate_report, build_section_prompt, build_backdrop_prompt,
                                      build_review_prompt, price_context)
 

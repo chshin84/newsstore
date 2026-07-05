@@ -280,6 +280,7 @@ class FirestoreStore:
                         "summary": d.get("summary", ""), "lenses": d.get("lenses") or [],
                         "risk": d.get("risk"), "impact": d.get("impact"),
                         "count": d.get("count", 0),
+                        "entities": d.get("entities") or [],   # 사가-인지 랭킹(과소병합 만회)용
                         "developments": d.get("developments") or [],
                         "last_seen": d.get("last_seen")})   # 랭킹 폴백(developments 없을 때)
         return out
