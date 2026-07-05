@@ -61,6 +61,21 @@ def _window_dates(first_seen, now) -> tuple[str, str]:
     return start, now.date().isoformat()
 
 
+def _resolve_story_tickers(s: dict, watch: list[dict]) -> list[dict]:
+    """스토리 → watch 티커 [{ticker,label}]. **watch_* 렌즈(렌즈 패스가 이미 산출한 연결) ∪ 제목 키워드**,
+    dedup. 렌즈가 더 신뢰성 높다(제목만 보던 entity_resolve가 놓치던 연결을 회수)."""
+    by_id = {w["id"]: w for w in watch}
+    out, seen = [], set()
+    for lid in (s.get("lenses") or []):                       # 렌즈 패스가 이미 한 연결(1차)
+        w = by_id.get(lid)
+        if w and w["ticker"] not in seen:
+            out.append({"ticker": w["ticker"], "label": w["label"]}); seen.add(w["ticker"])
+    for m in _sig.entity_resolve([s.get("title") or "", *(s.get("entities") or [])], watch):  # 제목 보강
+        if m["ticker"] not in seen:
+            out.append(m); seen.add(m["ticker"])
+    return out
+
+
 def run_signals_pass(store, *, stock_series: dict, price_series: dict,
                      price_label: dict | None = None, now,
                      topics_path: str = "config/topics.yaml") -> dict:
@@ -81,7 +96,7 @@ def run_signals_pass(store, *, stock_series: dict, price_series: dict,
     # 서사 커버리지 집합(WB4용) — 최근 스토리가 손댄 티커/가격키.
     covered_tickers, covered_keys = set(), set()
     for s in stories:
-        for m in _sig.entity_resolve([s["title"], *s["entities"]], watch):
+        for m in _resolve_story_tickers(s, watch):
             covered_tickers.add(m["ticker"])
         for lid in s["lenses"]:
             if lens_type.get(lid) == "standing":
@@ -141,18 +156,21 @@ def run_signals_pass(store, *, stock_series: dict, price_series: dict,
     for s in stories:
         start, end = _window_dates(s["first_seen"], now)
 
-        # WB3 landing — resolve → 티커별 지수 대비 초과수익(베타제거).
+        # WB3 landing — resolve(렌즈∪제목) → 티커별 지수 대비 초과수익(베타제거).
+        # 종목 연결(1차 가치)은 항상 표시. excess %는 창이 충분(≥2 거래일·min_sample)할 때만 —
+        # 짧은 창은 window_return이 None이라 예전엔 티커째 드롭됐다(landing 빈 폴백의 주범). 거짓정밀도 억제.
         landing_tickers = []
-        for m in _sig.entity_resolve([s["title"], *s["entities"]], watch):
+        for m in _resolve_story_tickers(s, watch):
             ser = stock_series.get(m["ticker"]) or []
             bench = price_series.get(_benchmark_key_for_ticker(m["ticker"])) or []
             stats = _sig.baseline_stats(ser)
             ex = _sig.excess_return(ser, bench, start, end)
-            if ex is not None and stats["min_sample_ok"]:
-                landing_tickers.append({
-                    "ticker": m["ticker"], "label": m["label"],
-                    "excess_pct": round(ex["excess"] * 100.0, 3),
-                    "window_days": ex["window_days"], "resolved": True})
+            has_ex = ex is not None and stats["min_sample_ok"]
+            row = {"ticker": m["ticker"], "label": m["label"], "resolved": True}
+            if has_ex:   # 창 충분할 때만 excess/window 필드 포함(부재=web이 undefined로 graceful — null=0 함정 회피)
+                row["excess_pct"] = round(ex["excess"] * 100.0, 3)
+                row["window_days"] = ex["window_days"]
+            landing_tickers.append(row)
         landing = {"tickers": landing_tickers,
                    "asset_class_fallback": not landing_tickers, "unverified": True}
         store.db.collection("stories").document(s["id"]).set({"landing": landing}, merge=True)

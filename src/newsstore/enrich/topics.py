@@ -61,7 +61,7 @@ def watch_lenses(t: dict) -> list[dict]:
             continue
         sym = f"{tk}.KS" if tk.isdigit() else tk
         lab = (l.get("label") or {}).get("ko") if isinstance(l.get("label"), dict) else None
-        out.append({"ticker": tk, "symbol": sym, "label": lab or l["id"],
+        out.append({"id": l["id"], "ticker": tk, "symbol": sym, "label": lab or l["id"],
                     "keywords": [str(k) for k in (l.get("keywords") or []) if str(k).strip()]})
     return out
 

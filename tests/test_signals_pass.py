@@ -126,6 +126,21 @@ def test_frozen_landing_schema_resolve_and_fallback(store):
     assert c["landing"]["asset_class_fallback"] is True and c["landing"]["tickers"] == []
 
 
+def test_resolve_story_tickers_uses_watch_lenses_union_title():
+    # 수정: entity_resolve가 제목만 보던 걸 → watch_* 렌즈(렌즈 패스가 이미 단 연결) ∪ 제목으로.
+    from newsstore.enrich.signals_pass import _resolve_story_tickers
+    watch = _topics.watch_lenses(_topics.load_topics())
+    # 제목에 이름 없어도 watch_micron 렌즈로 MU 회수(예전엔 landing 빈 폴백의 주범)
+    r1 = _resolve_story_tickers({"title": "반도체 급락", "entities": [], "lenses": ["us_equity", "watch_micron"]}, watch)
+    assert [m["ticker"] for m in r1] == ["MU"]
+    # 렌즈 ∪ 제목 키워드, dedup(마이크론=렌즈, 엔비디아=제목)
+    r2 = _resolve_story_tickers({"title": "엔비디아·마이크론 동반 하락", "entities": [], "lenses": ["watch_micron"]}, watch)
+    t = [m["ticker"] for m in r2]
+    assert set(t) == {"MU", "NVDA"} and len(t) == len(set(t))
+    # 미매칭 → 빈(호출자 폴백)
+    assert _resolve_story_tickers({"title": "날씨", "entities": [], "lenses": ["us_econ"]}, watch) == []
+
+
 def test_frozen_breadth_schema_and_uncovered(store):
     _run(store)
     a = store.db.collection("stories").document("sA").get().to_dict()
