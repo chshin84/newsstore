@@ -265,7 +265,7 @@
     .mktframe-h { font-size:calc(11px*var(--fs)); font-weight:800; letter-spacing:.02em;
       color:var(--accent); text-transform:uppercase; }
     .mktframe-hint { font-size:calc(10.5px*var(--fs)); color:var(--mut); margin-left:auto;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .mktframe-body { padding:0 14px 11px; }
     /* 1c 위험 렌즈 accent(세로 스캔) */
     #reportDoc .sdetail.hot { border-left:4px solid var(--risk); }
@@ -1318,7 +1318,7 @@
     });
     navScrim.addEventListener("click", () => { closeDrawer(); syncSideToggle(); });
     sidenav.addEventListener("click", e => { if (e.target.closest("a")) { closeDrawer(); syncSideToggle(); } });  // 링크→드로어 닫힘(hashchange가 라우팅)
-    matchMedia("(min-width:681px)").addEventListener("change", e => { if (e.matches) { closeDrawer(); syncSideToggle(); } });  // 데스크톱 진입 시 드로어 잔재 초기화
+    matchMedia("(min-width:681px)").addEventListener("change", e => { if (e.matches) closeDrawer(); syncSideToggle(); });  // 데스크톱 진입 시 드로어 잔재 초기화 · 양방향 토글 aria 동기화
     // 데스크톱 접힘 상태 복원(모바일에선 nav-collapsed가 CSS상 무효라 무해)
     if (localStorage.getItem("ns_nav") === "collapsed") document.body.classList.add("nav-collapsed");
     syncSideToggle();
