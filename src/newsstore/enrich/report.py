@@ -176,6 +176,119 @@ def price_context(price: dict | None) -> str:
     return f"{label} {close} (전일 {pct_s}{trend})"
 
 
+# ── divergence 배지(A1) — 뉴스 센티먼트(약한 개수 프록시) vs 실제 가격. 재료 배지·판정 아님. ──
+DIVERGENCE_DEADBAND_DEFAULT = 0.3   # 추세 변화가 |ε|% 미만이면 '무반응'으로 본다(env로 오버라이드)
+DIVERGENCE_TREND_DAYS = 5           # 가격 방향 판정에 쓰는 series 최근 일수(첫↔끝)
+
+
+def _deadband() -> float:
+    """divergence deadband ε(%) — env NEWSSTORE_DIVERGENCE_DEADBAND, 기본 0.3. 파싱 실패는 기본값."""
+    try:
+        return float(os.environ.get("NEWSSTORE_DIVERGENCE_DEADBAND", str(DIVERGENCE_DEADBAND_DEFAULT)))
+    except (TypeError, ValueError):
+        return DIVERGENCE_DEADBAND_DEFAULT
+
+
+def frame_lean(frame: dict) -> int:
+    """프레임 lean = 프리미엄(기대) 극 수 − 위험(공포) 극 수. **약한 개수 프록시**다 —
+    극의 강도·watchpoints를 무시하므로 판정 근거가 아니라 '재료' 배지 산출에만 쓴다(스펙 A1)."""
+    return len(frame.get("premiums") or []) - len(frame.get("risks") or [])
+
+
+def _price_direction(price: dict) -> float | None:
+    """가격 방향(%) — series 최근 추세(첫→끝)를 우선하고 percent_change는 보조·폴백.
+    프레임 lean은 '누적 센티먼트'라 단일일 등락과 시점 스케일이 안 맞아 추세를 우선한다(스펙 A1).
+    series가 2점 미만이면 percent_change로 폴백, 그마저 없으면 None."""
+    pts = [s.get("c") for s in (price.get("series") or [])[-DIVERGENCE_TREND_DAYS:]
+           if isinstance(s.get("c"), (int, float))]
+    if len(pts) >= 2 and pts[0]:
+        return (pts[-1] - pts[0]) / abs(pts[0]) * 100.0
+    pct = price.get("percent_change")
+    return float(pct) if isinstance(pct, (int, float)) else None
+
+
+def divergence(frame: dict, price: dict | None, price_key: str | None, *, deadband: float) -> dict | None:
+    """뉴스 프레임 센티먼트(약한 개수 프록시)와 실제 가격 방향의 어긋남을 '재료' 배지로 산출.
+    **완전 결정론·LLM 0콜.** 헤드라인·프롬프트에 주입하지 않는다(오탐이 메인 생성을 오염 못하게).
+
+    가격 방향은 series 추세 우선(percent_change 폴백). deadband ε 안이면 '무반응'으로 본다.
+    lean==0 또는 가격/가격키 없음 → None(필드 생략)."""
+    if not price_key or not isinstance(price, dict):
+        return None
+    lean = frame_lean(frame)
+    if lean == 0:
+        return None
+    direction = _price_direction(price)
+    if direction is None:
+        return None
+    eps = abs(deadband)
+    if lean < 0:                          # 공포(위험 극) 우세
+        kind = "over_fear" if direction >= -eps else "aligned"   # 안 빠짐/무반응 → 과공포, 하락 → 정합
+    else:                                 # 기대(프리미엄 극) 우세
+        kind = "over_hope" if direction <= eps else "aligned"    # 안 오름/무반응 → 과기대, 상승 → 정합
+    pct = price.get("percent_change")
+    price_pct = round(float(pct), 2) if isinstance(pct, (int, float)) else round(direction, 2)
+    # 추세 라벨은 **deadband 상대**로 3분한다(보합/상승/하락). ε 안이면 '보합'이라, over_fear는
+    # '하락' 버킷을, over_hope는 '상승' 버킷을 절대 만들지 않는다(안 빠짐/안 오름과 모순 방지).
+    if direction > eps:
+        trend = "상승"
+    elif direction < -eps:
+        trend = "하락"
+    else:
+        trend = "보합"
+    if kind == "over_fear":
+        note = (f"뉴스 프레임은 공포(위험 극)가 우세하나 최근 가격 추세는 안 빠짐({trend}) — "
+                "시장이 아직 반영 안 했거나 뉴스가 과민할 수 있다는 재료(단정 아님).")
+    elif kind == "over_hope":
+        note = (f"뉴스 프레임은 기대(프리미엄 극)가 우세하나 최근 가격 추세는 안 오름({trend}) — "
+                "기대가 가격보다 앞섰을 수 있다는 재료(단정 아님).")
+    else:
+        note = f"뉴스 프레임 방향과 최근 가격 추세({trend})가 같은 쪽 — 서로 확증하는 재료(단정 아님)."
+    if isinstance(pct, (int, float)):
+        note += f" 전일 등락 {price_pct:+.2f}%."
+    else:                                 # pct 없어 price_pct가 '추세 %'일 때 그 출처를 노출(전일 등락 아님)
+        note += f" (전일 등락 데이터 없어 price_pct는 최근 추세 {price_pct:+.2f}%로 대체됨.)"
+    return {"kind": kind, "price_key": price_key, "price_pct": price_pct, "note": note}
+
+
+# ── conviction 등급(A2) — 이 리포트 판단의 근거 강도(거친 신호·단조 등급). 완전 결정론·LLM 0콜. ──
+_R_LABEL = {2: "1차 통과", 1: "재작업 통과", 0: "미통과(배지)"}
+
+
+def _triggered_signals(report: dict) -> tuple[int, int]:
+    """triggered 섹션에서 c(고유 인용 story_id 수)·p(유효 pole_id 가진 항목 수)를 센다 — 결정론.
+    not_triggered/watchpoints는 트리거 판정이 아니라 제외한다."""
+    cited: set[str] = set()
+    p = 0
+    for sec in (report.get("sections") or []):
+        if sec.get("name") not in _TRIGGER_SECTIONS:
+            continue
+        for it in (sec.get("items") or []):
+            cited.update(it.get("story_ids") or [])
+            if it.get("pole_id"):
+                p += 1
+    return len(cited), p
+
+
+def conviction(c: int, p: int, r: int) -> dict:
+    """근거 강도 등급(high/medium/low) — **단조**: c(인용)·p(극 지지)·r(리뷰 통과 방식) 어느 것이
+    늘어도 등급이 내려가지 않는다. 정확한 컷이 아니라 이 단조성이 계약이다(매직넘버 회피).
+
+    c==0이면 강제 low(인용 없으면 근거 없음). r은 거친 프록시(1차통과=2/재작업통과=1/배지=0) —
+    재작업 통과가 반드시 덜 근거된 건 아니므로 basis에 '거친 신호'임을 노출한다(스펙 A2)."""
+    if c == 0:
+        level = "low"
+    elif r == 2 and p >= 1 and c >= 2:
+        level = "high"
+    elif r >= 1 and c >= 1:
+        level = "medium"
+    else:
+        level = "low"
+    basis = (f"고유 인용 {c}건·프레임 극 지지 {p}건·리뷰 {_R_LABEL.get(r, '?')}. "
+             "정확한 컷이 아닌 거친 단조 신호 — 근거 약하면 디스카운트하라.")
+    return {"level": level, "basis": basis}
+
+
 def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str,
                          reject_notes: str | None = None, price_ctx: str | None = None) -> str:
     import json as _json
@@ -256,11 +369,16 @@ def _review(client, report: dict, stories: list[dict], frame: dict | None = None
 
 def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
                     context_lens_ids: list[str] | None = None,
-                    price_ctx_by_lens: dict[str, str] | None = None) -> dict:
+                    price_ctx_by_lens: dict[str, str] | None = None,
+                    price_by_lens: dict[str, dict] | None = None) -> dict:
     """§4 파이프라인: 백드롭 → 섹션(렌즈별) → 급부상 → 저장. 프레임은 입력(frames.py 선행).
     리포트는 lens_ids(=자산)만 생성. context_lens_ids(비자산 포함)가 주어지면 백드롭 입력을
-    그 넓은 풀에서 뽑아 정치·정책·경제 뉴스를 자산 리포트로 녹인다(#2 fold-in)."""
+    그 넓은 풀에서 뽑아 정치·정책·경제 뉴스를 자산 리포트로 녹인다(#2 fold-in).
+
+    price_by_lens[lid]={"key":price_key,"doc":가격문서} — divergence 배지(A1) 산출용 원 가격(series·
+    percent_change). price_ctx_by_lens(포맷 문자열)와 달리 series를 살려 추세 방향을 도출한다."""
     cutoff = now - (window or timedelta(hours=72))
+    deadband = _deadband()
     totals = {"reported": 0, "skipped_empty": 0, "failed": 0}
 
     ctx_ids = context_lens_ids or lens_ids
@@ -305,9 +423,10 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
         selected[lens_id] = top
         top_k_ids |= {s["id"] for s in top}
 
-    def _one(doc_id, lens_id, frame, top, price_ctx="", criteria=None) -> str:
+    def _one(doc_id, lens_id, frame, top, price_ctx="", price=None, criteria=None) -> str:
         """한 렌즈 리포트 생성. 반환 'reported'|'failed'(집계는 호출부 — 스레드 안전).
-        price_ctx=이 자산 실제 가격(뉴스 지연 보정 교차검증). store.save_report만 부수효과."""
+        price_ctx=이 자산 실제 가격(뉴스 지연 보정 교차검증). price={"key","doc"}=divergence 배지(A1)용
+        원 가격. store.save_report만 부수효과."""
         try:
             raw = client.generate_json(build_section_prompt(lens_id, frame, top, backdrop, price_ctx=price_ctx),
                                        timeout=90.0, model=model_for("report_section"))
@@ -319,6 +438,7 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
             log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
             return "failed"
         review = _review(client, v, top, frame, price_ctx)   # frame=극 출처(#1), price=가격 출처
+        r = 2 if review["passed"] else 0                      # 리뷰 통과 방식(conviction 신호 — _one 시점 캡처)
         if not review["passed"]:
             # 리뷰 실패 → 실패 사유(notes)를 넣어 1회만 재생성·재검증·재리뷰(루프 금지, 개선 기회).
             # 재리뷰 통과 시 개선분으로 교체; 실패해도 기존 v를 그대로 저장(배지 계약 불변).
@@ -331,11 +451,17 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
                 if v2 is not None:
                     review2 = _review(client, v2, top, frame, price_ctx)
                     if review2["passed"]:
-                        v, review = v2, review2         # 개선분 채택
+                        v, review, r = v2, review2, 1       # 개선분 채택(재작업 통과)
             except LLMError as e:                       # 재시도 콜 실패 → 기존 v 유지(전파 금지)
                 log.warning("report %s: 재시도 생성 실패 — 기존 결과 유지: %s", doc_id, e)
+        c, p = _triggered_signals(v)                          # conviction 신호(결정론)
         doc = {**v, "topic": lens_id, "generated_at": now,
-               "frame_updated_at": frame.get("updated_at"), "review": review}
+               "frame_updated_at": frame.get("updated_at"), "review": review,
+               "conviction": conviction(c, p, r)}
+        if price is not None:                                 # divergence 배지(가격 매핑 렌즈만)
+            div = divergence(frame, price.get("doc"), price.get("key"), deadband=deadband)
+            if div is not None:
+                doc["divergence"] = div
         if criteria:
             doc["criteria"] = criteria
         store.save_report(doc_id, doc)
@@ -345,7 +471,9 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
     # rising은 top_k 확정 의존이라 팬아웃 뒤 순차(§3.5 순서). save_report만 부수효과라 스레드 안전.
     conc = max(1, int(os.environ.get("NEWSSTORE_REPORT_CONCURRENCY", "6")))
     pctx = price_ctx_by_lens or {}
-    units = [(lid, lid, store.get_frame(lid), top, pctx.get(lid, "")) for lid, top in selected.items()]
+    pmap = price_by_lens or {}
+    units = [(lid, lid, store.get_frame(lid), top, pctx.get(lid, ""), pmap.get(lid))
+             for lid, top in selected.items()]
     with ThreadPoolExecutor(max_workers=min(conc, max(1, len(units)))) as ex:
         for r in ex.map(lambda u: _one(*u), units):
             totals[r] += 1
@@ -354,7 +482,7 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
     all_stories = {s["id"]: s for ss in per_lens.values() for s in ss}
     rising = select_rising(list(all_stories.values()), top_k_ids=top_k_ids, now=now)
     if len(rising) >= REPORT_MIN_STORIES:
-        totals[_one("rising", "rising", {}, rising, price_ctx="",
+        totals[_one("rising", "rising", {}, rising, price_ctx="", price=None,
                     criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")] += 1
     # 스킵 신호 발행(§4) — UI가 "아직 생성 전/오늘 스토리 부족" vs "갱신 지연"을 구분.
     # 스킵 0건이어도 빈 배열로 덮어써 전 런의 스킵 잔재를 제거한다(멱등).
