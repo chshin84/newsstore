@@ -292,6 +292,46 @@
     .conv-low { color:var(--mut); background:var(--pill); }
     .conv-low .cvdot { background:var(--mut); }
 
+    /* ===== WV1~4: v1↔v2 뷰 토글 + v2 증강(가설 위계) ===== */
+    /* 토글은 스토리·리포트 탭에서만 노출(맥락 게이팅) — .tabs 우측 정렬 세그먼트 */
+    .viewtoggle { display:inline-flex; gap:2px; background:var(--pill); border-radius:7px; padding:2px;
+      margin-left:auto; align-self:center; }
+    .viewtoggle[hidden] { display:none; }   /* author display가 UA [hidden]를 이기므로 명시 숨김 */
+    .viewtoggle .vtb { border:0; background:transparent; color:var(--mut); font-weight:700;
+      padding:3px 11px; border-radius:5px; font-size:calc(12px*var(--fs)); min-height:0; }
+    .viewtoggle .vtb.on { background:var(--accent); color:#fff; }
+    /* 가설 위계: v2 신호는 검증 전 '가설' — 경고색·대형배너 금지, 회색·파선으로 위계를 낮춘다(divchip과 같은 언어) */
+    .v2badge { display:inline-block; font-size:calc(9px*var(--fs)); font-weight:800; color:var(--mut);
+      background:var(--pill); border:1px dashed var(--line2); border-radius:5px; padding:0 5px;
+      cursor:help; vertical-align:middle; }
+    .v2block { border:1px dashed var(--line2); border-radius:9px; padding:9px 11px; margin:11px 0;
+      background:var(--card2); }
+    .v2h { font-size:calc(12px*var(--fs)); font-weight:700; color:var(--sub); margin-bottom:7px; }
+    .v2list, .v2qlist { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+    .v2list li, .v2qitem { font-size:calc(12.5px*var(--fs)); color:var(--sub); line-height:1.5;
+      display:flex; flex-wrap:wrap; gap:6px; align-items:baseline; }
+    .v2tk { color:var(--fg); } .v2sym { color:var(--mut); font-size:calc(11px*var(--fs)); }
+    .v2ac { color:var(--sub); } .v2ac-t, .v2win { color:var(--mut); font-size:calc(11px*var(--fs)); }
+    .v2band { font-weight:600; font-size:calc(11.5px*var(--fs)); }
+    .v2-up { color:var(--imp); } .v2-down { color:var(--risk); } .v2-flat { color:var(--mut); }
+    .v2breadth { font-size:calc(11.5px*var(--fs)); color:var(--mut); margin-top:9px; display:flex;
+      flex-wrap:wrap; gap:6px; align-items:center; }
+    .v2chip { background:var(--pill); border-radius:999px; padding:1px 8px; color:var(--sub);
+      font-size:calc(11px*var(--fs)); }
+    .v2pc { color:var(--green); font-size:calc(11px*var(--fs)); font-weight:600; }
+    .v2cardaug { margin-top:7px; display:flex; flex-wrap:wrap; gap:5px; align-items:center; }
+    .v2cardtk, .v2cardbr { display:inline-flex; align-items:center; gap:4px; color:var(--mut);
+      background:var(--pill); border:1px dashed var(--line2); border-radius:999px;
+      padding:1px 8px; font-size:calc(10.5px*var(--fs)); cursor:help; }
+    .v2notice { color:var(--mut); text-align:center; padding:26px 16px; line-height:1.7;
+      border:1px dashed var(--line2); border-radius:10px; margin:10px 0; }
+    .v2queue .v2qhint { color:var(--mut); font-size:calc(12px*var(--fs)); margin:2px 0 10px; cursor:help; }
+    .v2qk { color:var(--fg); font-weight:600; }
+    .v2vol { color:var(--green); font-size:calc(11px*var(--fs)); }
+    .v2vol.off { color:var(--mut); }
+    .v2nocov { color:var(--mut); font-size:calc(11px*var(--fs)); font-style:italic; }
+    .v2sample { color:var(--risk); font-size:calc(11px*var(--fs)); font-weight:700; }
+
     /* ===== B3: 근거(기사 출처) 접이식 — 스토리 카드 대체 ===== */
     .ev-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:3px 0 0; }
     .ev-toggle { background:var(--pill); color:var(--pill-fg); border:1px solid var(--line);
@@ -411,6 +451,10 @@
         <button class="tab" id="tabStories">스토리</button>
         <button class="tab" id="tabFeed">피드</button>
         <button class="tab tabprice" id="tabPrice">가격</button>
+        <div class="viewtoggle" id="viewToggle" hidden role="group" aria-label="v1 v2 뷰 전환">
+          <button type="button" class="vtb" data-view="v1" title="v1 뷰">v1</button>
+          <button type="button" class="vtb" data-view="v2" title="v2 뷰 (가설·조사 큐)">v2</button>
+        </div>
       </div>
       <div class="controls" id="feedControls" hidden>
         <label for="src">소스</label>
@@ -630,6 +674,33 @@
     const storyById = new Map();
     const memberCache = new Map();         // story_id -> {count, items} — count가 변하면(새 멤버) 무효화
 
+    // === VIEW-LOGIC-START (node test가 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
+    // WV1: v1↔v2 뷰 라우팅 순수로직. 뷰 상태는 딥링크 해시(&v2 토큰)와 localStorage(ns_view)로 이중 표현.
+    // URL 토큰이 있으면 그것이 권위(공유 링크가 같은 뷰를 재현 — 수신자가 v1로 강등되지 않게), 없으면 저장값, 없으면 v1.
+    const VIEWS = ["v1", "v2"];
+    function parseHashView(hash) {
+      // 해시를 { route, view }로 분해. route=기본 경로(#report·#story-… 등), view=URL이 명시한 뷰("v1"|"v2") 또는 null.
+      const parts = String(hash || "").split("&");
+      let view = null;
+      for (const p of parts.slice(1)) {
+        if (p === "v2") view = "v2";
+        else if (p === "v1") view = "v1";
+      }
+      return { route: parts[0] || "", view };
+    }
+    function resolveView(urlView, storedView) {
+      // 우선순위: URL 명시 > 저장값 > 기본 v1. 딥링크 재현이 저장값을 이긴다(공유 링크가 뷰를 실어 나른다).
+      if (VIEWS.includes(urlView)) return urlView;
+      if (VIEWS.includes(storedView)) return storedView;
+      return "v1";
+    }
+    function withView(route, view) {
+      // 경로에 뷰 토큰 부여. v1은 기본이라 토큰 생략(URL 청결·기존 링크 보존), v2만 &v2 부착.
+      const base = String(route || "").split("&")[0];
+      return view === "v2" ? base + "&v2" : base;
+    }
+    // === VIEW-LOGIC-END ===
+
     // === STORIES-LOGIC-START (node test가 이 마커 사이를 슬라이스해 검증; 순수함수만, DOM/외부스코프 금지) ===
     function toMs(t) {
       if (t == null) return null;
@@ -745,6 +816,56 @@
         out.push({ ...g, main });
       }
       return out;
+    }
+    // --- WV2/WV4: 스토리 v2 순수로직 (개체 착지 landing · 매크로 브레드스 breadth) ---
+    // 전부 '가설/조사 큐'(검증 전) — 숫자는 버킷/반올림으로 저살리언스(티커+정밀% = 매매신호 오독 억제).
+    function excessBand(pct) {
+      // 지수 대비 초과수익을 방향+대략 크기 밴드로(정밀 % 노출 금지 — 거짓정밀 억제).
+      if (pct == null) return null;                    // Number(null)=0 함정 방어(부재는 밴드 없음)
+      const n = Number(pct);
+      if (!Number.isFinite(n)) return null;
+      const a = Math.abs(n);
+      if (a < 1) return { dir: "flat", text: "지수와 비슷" };
+      const mag = a < 3 ? "소폭" : a < 8 ? "뚜렷이" : "큰폭";
+      return { dir: n > 0 ? "up" : "down", text: `지수 대비 ${mag} ${n > 0 ? "초과" : "하회"}` };
+    }
+    function landingRows(landing) {
+      // landing.tickers를 표시 행으로. resolved=true면 실제 종목(ticker+label+밴드),
+      // resolved=false면 종목 감추고 자산군 라벨만(폴백) — 미해결 자산군은 1회로 dedup(노이즈 억제).
+      if (!landing || !Array.isArray(landing.tickers)) return [];
+      const fallback = landing.asset_class_fallback || "";
+      const rows = [], seenClass = new Set();
+      for (const t of landing.tickers) {
+        if (t && t.resolved) {
+          const wd = Number(t && t.window_days);
+          rows.push({ resolved: true, ticker: (t.ticker || ""), label: (t.label || t.ticker || ""),
+                      band: excessBand(t.excess_pct), windowDays: Number.isFinite(wd) ? wd : null });
+        } else {
+          const cls = (t && t.label) || fallback || "자산군";
+          if (seenClass.has(cls)) continue;
+          seenClass.add(cls);
+          rows.push({ resolved: false, ticker: "", label: cls, band: null, windowDays: null });
+        }
+      }
+      return rows;
+    }
+    function breadthBadge(breadth) {
+      // 매크로 브레드스: 한 사건이 몇 개 자산군에 걸쳤나. span·자산군 모두 없으면 생략(graceful).
+      if (!breadth) return null;
+      const classes = Array.isArray(breadth.asset_classes) ? breadth.asset_classes.filter(Boolean) : [];
+      const span = breadth.span || "";
+      if (!classes.length && !span) return null;
+      const uncovered = Array.isArray(breadth.uncovered) ? breadth.uncovered.filter(Boolean) : [];
+      return { span, assetClasses: classes, priceConfirmed: !!breadth.price_confirmed,
+               uncovered, unverified: !!breadth.unverified };
+    }
+    function storyHasV2(story) {
+      // WV4 빈상태 판정 seam: 이 스토리에 v2 증강(landing/breadth)이 하나라도 있나.
+      return !!(story && (landingRows(story.landing).length || breadthBadge(story.breadth)));
+    }
+    function storiesV2Empty(stories) {
+      // 어느 스토리에도 v2 증강이 없으면 true → "v2 준비 중" 안내(v2가 v1과 똑같아 고장처럼 안 보이게).
+      return !(stories || []).some(storyHasV2);
     }
     // === STORIES-LOGIC-END ===
 
@@ -875,6 +996,42 @@
       if (!conviction || !LV[conviction.level]) return null;
       return { level: conviction.level, label: LV[conviction.level], basis: conviction.basis || "" };
     }
+    // --- WV3/WV4: 리포트 v2 순수로직 (설명 안 되는 움직임 조사 큐) ---
+    // 정렬은 백엔드 rank 그대로(배열 순서 신뢰 — web 재정렬 금지, SSOT). 숫자는 버킷으로 저살리언스.
+    function moveBand(z, pct) {
+      // 이동 크기를 z(표준화) 우선, 없으면 pct 폴백해 방향+대략 크기 밴드로(정밀 수치 노출 금지 — 거짓정밀 억제).
+      const nz = z == null ? NaN : Number(z);          // Number(null)=0 함정 방어
+      if (Number.isFinite(nz)) {
+        const a = Math.abs(nz);
+        return { dir: nz > 0 ? "up" : "down", text: `${a < 2 ? "다소 큰" : a < 3 ? "큰" : "매우 큰"} 이동` };
+      }
+      const np = pct == null ? NaN : Number(pct);
+      if (Number.isFinite(np)) {
+        const a = Math.abs(np);
+        return { dir: np > 0 ? "up" : "down", text: `${a < 3 ? "다소 큰" : a < 8 ? "큰" : "매우 큰"} 이동` };
+      }
+      return null;
+    }
+    function unexplainedQueue(signals) {
+      // signals/unexplained_moves 소비. 부재/형식오류면 null(graceful). 배열 순서=백엔드 rank(재정렬 금지).
+      // vol_confirmed=null(FX·금리·선물)은 거래량 표기 생략, min_sample_ok=false면 '표본 부족'.
+      if (!signals || !Array.isArray(signals.items)) return null;
+      const items = signals.items.map(it => ({
+        key: (it && (it.ticker || it.key)) || "",
+        label: (it && it.label) || (it && (it.ticker || it.key)) || "",
+        kind: (it && it.kind) || "",
+        move: moveBand(it && it.move_z, it && it.move_pct),
+        volConfirmed: (it && it.vol_confirmed) == null ? null : !!it.vol_confirmed,
+        storyCoverage: !!(it && it.story_coverage),
+        unverified: !!(it && it.unverified),
+      }));
+      return { items, minSampleOk: signals.min_sample_ok !== false,
+               generatedAt: (signals && signals.generated_at) || null };
+    }
+    function reportV2Empty(queue) {
+      // WV4: 큐가 비면 true → "v2 준비 중" 안내(v2가 v1과 똑같아 고장처럼 안 보이게).
+      return !(queue && queue.items && queue.items.length);
+    }
     // === REPORT-LOGIC-END ===
 
     // === PRICE-LOGIC-START (node test 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
@@ -917,7 +1074,7 @@
       };
       return row("impact", s.impact, s.impact_ref, "imp") + row("risk", s.risk, s.risk_ref, "risk");
     }
-    function storyCardHtml(s, lensLabel) {
+    function storyCardHtml(s, lensLabel, v2) {                 // v2: v2 뷰 증강 HTML(생략 시 "" — v1 출력 불변)
       const c = srcColors(s.id);
       const head = txt(displayHead(s)) || "(제목 없음)";
       const last = s.last_seen && s.last_seen.toDate ? s.last_seen.toDate() : null;
@@ -928,7 +1085,71 @@
       return `<div class="scard" data-id="${esc(s.id)}" style="--bar:${c.bar}">${rep}
         ${sec}<div class="st">${head}</div>${lensChipsHtml(s, 2)}
         <div class="sfoot"><span class="scnt">${Number(s.count) || 0}건</span>
-          ${metersHtml(s)}${newb}<span class="stm">${relTime(last)}</span></div></div>`;
+          ${metersHtml(s)}${newb}<span class="stm">${relTime(last)}</span></div>${v2 || ""}</div>`;
+    }
+    // ===== WV2~4: v2 증강 렌더 (가설 위계 · 개체 착지 · 브레드스 · 조사 큐) =====
+    // 프레이밍 라벨은 공유 상수(SSOT — 드리프트 방지). v2 신호는 전부 '가설'이며 인과 아님을 툴팁으로 못박는다.
+    const V2_HYP_TIP = "가격 동시발생, 인과 아님";
+    const V2_HYP_BADGE = "가설";
+    const V2_QUEUE_TITLE = "조사 큐 · 설명 안 되는 움직임";
+    const V2_WAIT = "v2 신호 준비 중 (백엔드 대기)";
+    function v2Badge() { return `<span class="v2badge" title="${esc(V2_HYP_TIP)}">${V2_HYP_BADGE}</span>`; }
+    function v2Notice() { return `<div class="v2notice">${txt(V2_WAIT)}</div>`; }
+    function bandHtml(band) {
+      if (!band) return "";
+      const arrow = band.dir === "up" ? "▲" : band.dir === "down" ? "▼" : "·";
+      return `<span class="v2band v2-${band.dir}">${arrow} ${txt(band.text)}</span>`;
+    }
+    function landingHtml(landing) {                            // 상세용 전체 착지 목록
+      const rows = landingRows(landing);
+      if (!rows.length) return "";
+      const lis = rows.map(r => {
+        const name = r.resolved
+          ? `<b class="v2tk">${txt(r.label)}</b>${r.ticker && r.ticker !== r.label ? ` <span class="v2sym">${esc(r.ticker)}</span>` : ""}`
+          : `<span class="v2ac">${txt(r.label)} <span class="v2ac-t">(자산군)</span></span>`;
+        const wd = r.windowDays != null ? `<span class="v2win">최근 ${r.windowDays}일</span>` : "";
+        return `<li>${name} ${bandHtml(r.band)} ${wd}</li>`;
+      }).join("");
+      return `<div class="v2block"><div class="v2h">${v2Badge()} 얽힌 종목 · 지수 대비 (회고적)</div>
+        <ul class="v2list">${lis}</ul></div>`;
+    }
+    function breadthHtml(breadth) {                            // 상세용 브레드스 배지
+      const b = breadthBadge(breadth);
+      if (!b) return "";
+      const chips = b.assetClasses.length
+        ? b.assetClasses.map(c => `<span class="v2chip">${txt(c)}</span>`).join("") : "";
+      const span = b.span ? `<span class="v2chip">${txt(b.span)}</span>` : "";
+      const pc = b.priceConfirmed ? `<span class="v2pc">가격 확인</span>` : "";
+      return `<div class="v2breadth" title="${esc(V2_HYP_TIP)}">${v2Badge()} 매크로 브레드스: ${b.assetClasses.length}개 자산군 ${span}${chips}${pc}</div>`;
+    }
+    function storyCardV2(s) {                                  // 카드용 컴팩트: 브레드스 배지 + 착지 종목 1개
+      const bh = breadthBadge(s && s.breadth);
+      const rows = landingRows(s && s.landing);
+      if (!bh && !rows.length) return "";
+      const top = rows[0];
+      const tkHtml = top
+        ? `<span class="v2cardtk" title="${esc(V2_HYP_TIP)}">${v2Badge()} ${txt(top.label)}${top.resolved ? "" : " (자산군)"} ${bandHtml(top.band)}</span>` : "";
+      const brHtml = bh
+        ? `<span class="v2cardbr" title="${esc(V2_HYP_TIP)}">${bh.assetClasses.length}개 자산군</span>` : "";
+      return `<div class="v2cardaug">${tkHtml}${brHtml}</div>`;
+    }
+    function unexplainedQueueHtml(queue) {                     // 리포트용 조사 큐(백엔드 rank 순서 그대로)
+      if (!queue || !queue.items.length) return "";
+      const lis = queue.items.map(it => {
+        const mv = bandHtml(it.move);
+        // vol_confirmed=null(FX·금리·선물)은 거래량 표기 생략. true=확인, false=미확인.
+        const vol = it.volConfirmed == null ? ""
+          : `<span class="v2vol${it.volConfirmed ? "" : " off"}">${it.volConfirmed ? "거래량 확인" : "거래량 미확인"}</span>`;
+        const cov = it.storyCoverage ? "" : `<span class="v2nocov">서사 없음</span>`;
+        return `<li class="v2qitem"><span class="v2qk">${txt(it.label)}</span> ${mv} ${vol} ${cov}</li>`;
+      }).join("");
+      // min_sample_ok=false면 순위 대신 '표본 부족' 표기(백엔드 rank를 신뢰하지 말라는 신호)
+      const sample = queue.minSampleOk ? "" : `<span class="v2sample">표본 부족</span>`;
+      return `<section class="sdetail v2queue" id="rep-v2queue">
+        <div class="seclbl">${txt(V2_QUEUE_TITLE)}</div>
+        <div class="dt">${v2Badge()} 설명 안 되는 움직임 ${sample}</div>
+        <div class="v2qhint" title="${esc(V2_HYP_TIP)}">가격은 크게 움직였는데 뉴스 서사가 아직 없는 자산 — 조사 대상이지 결론이 아니다(인과 아님).</div>
+        <ul class="v2qlist">${lis}</ul></section>`;
     }
     function articleCardHtml(it) {
       const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
@@ -983,6 +1204,7 @@
         <div class="dt">${head}</div>
         ${detailMode === "translated" && lead ? `<div class="dlead">${txt(lead)}</div>` : ""}
         ${lensChipsHtml(s)}
+        ${currentView() === "v2" ? landingHtml(s.landing) + breadthHtml(s.breadth) : ""}
         ${detailMode === "translated" ? bulletsHtml(s.article) : ""}
         ${toggle}<div class="dmeta">${meta} ${sortT}</div>
         ${rows || '<div class="sempty">표시할 기사가 없습니다.</div>'}</div>`;
@@ -1040,7 +1262,10 @@
           return;
         }
         const lensLabel = g => LENS_LABELS[g.lensId] || (g.lensId === "_etc" ? "기타" : g.lensId);
-        stripEl.innerHTML = groups.map(g => storyCardHtml(g.main, lensLabel(g))).join("");   // 섹션별 메인 1개
+        const v2 = currentView() === "v2";                       // WV1: 렌더 진입점이 뷰를 읽는다
+        stripEl.innerHTML = groups.map(g => storyCardHtml(g.main, lensLabel(g), v2 ? storyCardV2(g.main) : "")).join("");   // 섹션별 메인 1개
+        // WV4 빈상태: v2인데 어느 스토리에도 증강이 없으면 상세영역에 '준비 중' 안내(v2가 v1과 똑같아 고장처럼 안 보이게)
+        if (!bg && v2 && !openStoryId && storiesV2Empty(visible)) detailEl.innerHTML = v2Notice();
         buildStoryNav(groups);                                   // B5: 사이드바 스토리 목록
         if (pendingStoryId) {                                  // #story-{id} 딥링크 대기분 열기(openStory가 없으면 직접 fetch)
           const t = pendingStoryId; pendingStoryId = null;
@@ -1115,18 +1340,28 @@
         const skips = (reports._skips && reports._skips.lenses) || [];
         const docm = assembleReportDoc(groups, reports);
         buildReportNav(docm);                          // B5: 사이드바 리포트 목차(빈 문서면 '리포트 없음')
-        if (!docm.sections.length) {
+        // WV3: v2 뷰에서만 signals/unexplained_moves 조사 큐를 추가로 읽는다(v1은 read 0 — 낭비 없음).
+        const v2 = currentView() === "v2";             // WV1: 렌더 진입점이 뷰를 읽는다
+        let queue = null;
+        if (v2) {
+          try {
+            const sig = await getDoc(doc(db, "signals", "unexplained_moves"));
+            queue = sig.exists() ? unexplainedQueue(sig.data()) : null;   // 부재/실패 graceful(배포 순서 무관)
+          } catch (e) { queue = null; }
+        }
+        // v2 + 큐만 있고 리포트가 비어도 큐는 보여준다(graceful). 그 외 빈 문서는 기존 안내.
+        if (!docm.sections.length && !(v2 && queue && queue.items.length)) {
           reportDocEl.innerHTML = `<div class="sempty">아직 생성된 리포트가 없어요.<br>매일 아침 자동 생성됩니다.</div>`;
           return;
         }
         const now = Date.now();
         const links = crossLinks(docm.sections);
         // B3: 초기 렌더는 items/스토리 문서를 전혀 fetch하지 않는다(0). 근거 기사는 토글 펼칠 때 lazy.
-        renderReportDoc(docm, frames, links, now, skips);
+        renderReportDoc(docm, frames, links, now, skips, queue);
         setupReportSpy();                              // B5: 스크롤 스파이(현재 섹션 하이라이트)
         // 2a: async 렌더 완료 후 딥링크(#rep-*) 재스크롤 — 네이티브 앵커는 섹션 렌더 전 헛돎.
-        const h = location.hash;
-        if (h.startsWith("#rep-")) document.getElementById(h.slice(1))?.scrollIntoView({ block: "start" });
+        const rt = parseHashView(location.hash).route; // 뷰 토큰(&v2) 제거한 순수 경로로 앵커 조회
+        if (rt.startsWith("#rep-")) document.getElementById(rt.slice(1))?.scrollIntoView({ block: "start" });
       } catch (e) {
         reportLoaded = false;                          // 고착 방지: 탭 재진입/‘다시 시도’로 재로드되게
         reportDocEl.innerHTML = `<div class="error">리포트를 불러오지 못했어요: <code>${esc(e.message)}</code>`
@@ -1157,7 +1392,7 @@
       const n = new Date(v).getTime();
       return Number.isFinite(n) ? n : null;
     }
-    function renderReportDoc(docm, frames, links, now, skips) {
+    function renderReportDoc(docm, frames, links, now, skips, queue) {
       const body = docm.sections.map(({ lensId, group, report }) => {
         const rc = (report.sections || []).filter(x => x.name === "risk_triggered")   // 1c: 아킬레스 트리거 수
           .reduce((n, x) => n + ((x.items || []).length), 0);
@@ -1236,8 +1471,12 @@
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
       }).join("");
+      // WV3/WV4: v2면 조사 큐를 급부상/신규 근처(최상단)에 얹는다. 큐가 비면 '준비 중' 안내(고장처럼 안 보이게).
+      // v1이면 prefix="" — 기존 렌더 완전 불변(additive 별 경로).
+      const prefix = currentView() !== "v2" ? ""
+        : (reportV2Empty(queue) ? v2Notice() : unexplainedQueueHtml(queue));
       // WW2: 글로벌 시장 프레임(frames/_market)+백드롭은 화면에서 숨김 — 렌더 안 함(백엔드 데이터는 유지).
-      reportDocEl.innerHTML = body;
+      reportDocEl.innerHTML = prefix + body;
     }
 
     // B3: 근거(기사 출처) lazy fetch — story_id별 Promise 메모이즈.
@@ -1362,7 +1601,7 @@
       const tw = e.target.closest(".navtw");
       if (tw) { e.stopPropagation(); toggleFolder(tw.closest(".navfolder")); return; }
       const fh = e.target.closest(".navfolder-h");
-      if (fh) { location.hash = "#" + fh.dataset.tab; closeDrawer(); syncSideToggle(); return; }
+      if (fh) { location.hash = withView("#" + fh.dataset.tab, currentView()); closeDrawer(); syncSideToggle(); return; }   // 폴더(리포트·스토리) 탐색도 현재 뷰 유지
     });
     applyFolderStates();
     // 스크롤 스파이: 현재 화면 상단에 걸린 리포트 섹션의 사이드바 링크를 하이라이트.
@@ -1455,6 +1694,25 @@
       priceDocEl.innerHTML = `<div class="pcards">${cards}</div>`;
     }
 
+    // ============================ v1↔v2 뷰 상태 (WV1) ============================
+    // 뷰 상태 SSOT: 딥링크 해시(&v2)와 localStorage(ns_view). currentView()가 단일 진입점 —
+    // 모든 렌더(loadStories·loadReport·rerenderActiveTab·5분폴링·탭재진입·딥링크)가 이걸 읽어 분기한다.
+    const VIEW_KEY = "ns_view";
+    const viewToggle = document.getElementById("viewToggle");
+    function storedView() { const v = localStorage.getItem(VIEW_KEY); return v === "v2" ? "v2" : "v1"; }
+    let viewState = storedView();                     // routeFromHash가 URL·저장값으로 재해결
+    function currentView() { return viewState; }
+    function syncViewToggle() {
+      viewToggle.querySelectorAll(".vtb").forEach(b => b.classList.toggle("on", b.dataset.view === viewState));
+    }
+    function selectView(v) {
+      if (!VIEWS.includes(v) || v === viewState) return;
+      localStorage.setItem(VIEW_KEY, v);              // 저장(해시 토큰이 없어도 새로고침 유지)
+      const base = parseHashView(location.hash).route || "#report";
+      location.hash = withView(base, v);              // hashchange → routeFromHash가 재해결·재렌더(딥링크 뷰상태)
+    }
+    viewToggle.addEventListener("click", e => { const b = e.target.closest(".vtb"); if (b) selectView(b.dataset.view); });
+
     function showTab(which) {
       const stories = which === "stories", report = which === "report", price = which === "price";
       const feed = !stories && !report && !price;
@@ -1468,29 +1726,56 @@
       const key = feed ? "feed" : which;
       document.querySelectorAll(".navtab").forEach(a => a.classList.toggle("active", a.dataset.tab === key));
 
+      // WV1 맥락 게이팅: v1↔v2 토글은 스토리·리포트 탭에서만 노출(피드·가격에선 no-op이라 숨김 — 혼란 방지)
+      viewToggle.hidden = !(stories || report);
+      if (!viewToggle.hidden) syncViewToggle();
+
       if (stories && !storiesLoaded) { storiesLoaded = true; loadStories(); }
       if (report && !reportLoaded) { reportLoaded = true; loadReport(); }
       if (price && !priceLoaded) { priceLoaded = true; loadPrices(); }
     }
+    function invalidateHiddenTabs() {
+      // WV1: 뷰가 바뀌면 비활성 로드탭을 무효화 → 재진입할 때 현재 뷰로 새로 렌더(재진입 후 v1 회귀·stale 방지).
+      if (reportView.hidden) reportLoaded = false;
+      if (storiesView.hidden) storiesLoaded = false;
+    }
     function routeFromHash() {
       // #rep-* 는 리포트 문서 내 섹션 앵커 — 리포트 탭을 유지해야 브라우저 기본 스크롤이 동작(M1)
-      const h = location.hash;
-      if (h.startsWith("#story-")) {                           // 스토리 딥링크 → 스토리 탭 + 상세 열기
-        const id = h.slice(7);
+      // WV1: 해시에서 라우트와 뷰(&v2)를 분리 파싱. URL 뷰 > 저장값 > v1로 해결(딥링크 공유 재현).
+      const { route, view: urlView } = parseHashView(location.hash);
+      const resolved = resolveView(urlView, storedView());
+      const viewChanged = resolved !== viewState;
+      viewState = resolved;
+      localStorage.setItem(VIEW_KEY, resolved);               // 해시가 명시한 뷰를 저장에도 반영(SSOT 수렴)
+      if (route.startsWith("#story-")) {                       // 스토리 딥링크 → 스토리 탭 + 상세 열기
+        const id = route.slice(7);
+        const wasLoaded = storiesLoaded;
+        if (!wasLoaded || viewChanged) pendingStoryId = id;    // 새 로드/재렌더가 끝에서 pending을 연다
         showTab("stories");
-        if (storiesLoaded) { if (openStoryId !== id) openStory(id); }   // openStory가 storyById 없으면 직접 fetch
-        else pendingStoryId = id;                              // 로드 전이면 loadStories 끝에서 연다
+        if (viewChanged) invalidateHiddenTabs();
+        if (wasLoaded) {
+          if (viewChanged) loadStories();                     // 이미 로드 + 뷰 변경 → 현재 뷰로 재렌더(끝에서 pending 오픈)
+          else if (openStoryId !== id) openStory(id);         // openStory가 storyById 없으면 직접 fetch
+        }
         return;
       }
-      showTab(h === "#stories" ? "stories"
-        : (h === "#report" || h.startsWith("#rep-")) ? "report"
-        : h === "#price" ? "price"
-        : h === "#feed" ? "feed"
-        : "report");                                             // B5: 디폴트 첫 화면 = 리포트(빈/미지 해시)
+      const tab = route === "#stories" ? "stories"
+        : (route === "#report" || route.startsWith("#rep-")) ? "report"
+        : route === "#price" ? "price"
+        : route === "#feed" ? "feed"
+        : "report";                                            // B5: 디폴트 첫 화면 = 리포트(빈/미지 해시)
+      const wasLoaded = tab === "report" ? reportLoaded : tab === "stories" ? storiesLoaded : true;
+      showTab(tab);
+      if (viewChanged) {
+        invalidateHiddenTabs();
+        // 이미 로드된 활성 탭(스토리·리포트)은 현재 뷰로 재렌더 — 새로고침·토글 후 v1 회귀 방지.
+        if (wasLoaded && (tab === "stories" || tab === "report")) rerenderActiveTab();
+      }
     }
+    // 탭 클릭은 현재 뷰를 해시에 실어 나른다(스토리·리포트만 — 피드·가격은 뷰 no-op이라 청결하게 유지).
     tabFeed.addEventListener("click", () => { location.hash = "#feed"; });
-    tabStories.addEventListener("click", () => { location.hash = "#stories"; });
-    tabReport.addEventListener("click", () => { location.hash = "#report"; });
+    tabStories.addEventListener("click", () => { location.hash = withView("#stories", currentView()); });
+    tabReport.addEventListener("click", () => { location.hash = withView("#report", currentView()); });
     tabPrice.addEventListener("click", () => { location.hash = "#price"; });
     window.addEventListener("hashchange", routeFromHash);
 
