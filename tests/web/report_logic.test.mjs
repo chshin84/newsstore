@@ -6,9 +6,11 @@ const html = readFileSync(new URL("../../web/index.html", import.meta.url), "utf
 const START = "// === REPORT-LOGIC-START", END = "// === REPORT-LOGIC-END";
 const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "REPORT-LOGIC 마커 필요(드리프트 가드)");
-const { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks } =
+const { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks,
+        divergenceChip, convictionPill } =
   new Function(html.slice(i, j) +
-    "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks };")();
+    "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards, topRisks," +
+    " divergenceChip, convictionPill };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -74,6 +76,32 @@ test("dedupCards: 한 리포트 내 카드 1회, 재인용은 참조 배지 (스
   const d = dedupCards(order);
   assert.deepEqual(d, [{ id: "s1", first: true }, { id: "s2", first: true },
                        { id: "s1", first: false }]);
+});
+
+test("divergenceChip: over_fear/over_hope만 재료칩, aligned/none/부재는 생략(fail-soft)", () => {
+  const fear = divergenceChip({ kind: "over_fear", price_key: "EWY", price_pct: -1.2, note: "가격은 덜 빠짐" });
+  assert.ok(fear && /과도한 공포/.test(fear.label));
+  assert.equal(fear.price_key, "EWY");
+  assert.equal(fear.price_pct, -1.2);
+  assert.equal(fear.note, "가격은 덜 빠짐");
+  assert.ok(/과도한 기대/.test(divergenceChip({ kind: "over_hope" }).label));
+  assert.equal(divergenceChip({ kind: "aligned" }), null);   // 정합은 칩 없음
+  assert.equal(divergenceChip({ kind: "none" }), null);
+  assert.equal(divergenceChip(null), null);                  // A 미발행(옛 문서·가격 없는 렌즈) → 생략
+  assert.equal(divergenceChip({}), null);
+  // price_pct 부재·비수치 → null(칩은 나오되 % 생략)
+  assert.equal(divergenceChip({ kind: "over_fear" }).price_pct, null);
+  assert.equal(divergenceChip({ kind: "over_fear", price_pct: "x" }).price_pct, null);
+});
+
+test("convictionPill: high/medium/low만 등급, 부재/미지 레벨은 생략(fail-soft)", () => {
+  assert.equal(convictionPill({ level: "high", basis: "3개 지표 일치" }).label, "확신 높음");
+  assert.equal(convictionPill({ level: "high" }).basis, "");   // basis 부재 → 빈 문자열(툴팁 안전)
+  assert.equal(convictionPill({ level: "medium" }).label, "확신 중간");
+  assert.equal(convictionPill({ level: "low" }).level, "low");
+  assert.equal(convictionPill(null), null);                    // A 미발행 → 생략
+  assert.equal(convictionPill({ level: "bogus" }), null);      // 미지 레벨 → 생략(계약 밖 값 방어)
+  assert.equal(convictionPill({}), null);
 });
 
 console.log(`\nreport_logic: ${pass} passed, ${fail} failed`);
