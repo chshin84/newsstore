@@ -152,17 +152,17 @@ def test_run_report_pass_injects_price_ctx_into_section():
     assert "원/달러 1520" in seen["section"] and "가격 교차검증" in seen["section"]
 
 
-def test_section_prompt_temporal_arc_and_causal_rule():
-    # 시간적 인과: 전개를 시간순 arc로 보여주고, 되돌림/현재상태 규칙 명시(평면 스냅샷 방지).
+def test_section_prompt_narrative_weighting_not_chronological():
+    # 서사 구조: 전개는 시간순 arc(근거)로 보여주되, 출력은 현재상태 가중·시간순 나열 금지.
     from datetime import timedelta
     t0 = NOW - timedelta(days=2)
     story = {"id": "s1", "title": "원달러", "summary": "환율",
              "developments": [{"text": "1550원 급등", "delta_time": t0},
                               {"text": "1239원으로 진정", "delta_time": t0 + timedelta(days=1)}]}
     p = build_section_prompt("fx", FRAME, [story], "")
-    assert p.index("1550원 급등") < p.index("1239원으로 진정")     # 오래된→최신 arc
-    assert "시간적 인과" in p and ("되돌림" in p or "현재" in p)    # 인과 규칙
-    assert "스냅샷" in p                                          # 리포트=지금 시점 스냅샷
+    assert p.index("1550원 급등") < p.index("1239원으로 진정")     # 입력 arc는 오래된→최신
+    assert "서사 구조" in p and "나열" in p                        # 시간순 나열 금지
+    assert ("negate" in p or "무효화" in p) and "가중치" in p      # 무효화 강등 + 현재 가중
 
 
 def test_review_prompt_includes_frame_and_developments():
