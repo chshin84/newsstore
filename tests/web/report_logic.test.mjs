@@ -7,10 +7,12 @@ const START = "// === REPORT-LOGIC-START", END = "// === REPORT-LOGIC-END";
 const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "REPORT-LOGIC 마커 필요(드리프트 가드)");
 const { assembleReportDoc, reportStatus, crossLinks, dedupCards,
-        divergenceChip, convictionPill, normalizeHeadline, dedupEvidence } =
+        divergenceChip, convictionPill, normalizeHeadline, dedupEvidence,
+        splitReportSections, leadItems, reportNavLenses } =
   new Function(html.slice(i, j) +
     "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards," +
-    " divergenceChip, convictionPill, normalizeHeadline, dedupEvidence };")();
+    " divergenceChip, convictionPill, normalizeHeadline, dedupEvidence," +
+    " splitReportSections, leadItems, reportNavLenses };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -19,7 +21,7 @@ const rep = (topic, over = {}) => ({ topic, headline: "h", lead: "l",
   sections: [{ name: "risk_triggered", items: [{ text: "x", story_ids: ["s1"], pole_id: "r1" }] }],
   generated_at: new Date(NOW - 3600e3), review: { passed: true }, ...over });
 
-test("assembleReportDoc: 그룹 순서 + 백드롭 서두 + rising은 첫 그룹 바로 뒤", () => {
+test("assembleReportDoc: 급부상 최상단 + 그룹 순서 + 백드롭 서두 (WW4 — rising 항상 맨 위)", () => {
   // m1: groups는 순서 보존 배열([{name, lens_ids}]) — Firestore map 키 정렬 회피
   const groups = [{ name: "리스크", lens_ids: ["risk"] },
                   { name: "주식", lens_ids: ["kr_equity", "us_equity"] }];
@@ -27,17 +29,55 @@ test("assembleReportDoc: 그룹 순서 + 백드롭 서두 + rising은 첫 그룹
                     rising: rep("rising"), _backdrop: { text: "bd" } };
   const doc = assembleReportDoc(groups, reports);
   assert.equal(doc.backdrop, "bd");
-  // 사용자 확정 순서(2026-07-04): 첫 그룹(리스크) → 급부상 → 나머지
-  assert.deepEqual(doc.sections.map(s => s.lensId), ["risk", "rising", "kr_equity"]);
-  assert.equal(doc.sections[0].group, "리스크");        // us_equity 리포트 없음 → 생략(fail-soft)
+  // UI 순서 규칙①(2026-07-05): 급부상 → 그룹 순서(리스크 → 주식)
+  assert.deepEqual(doc.sections.map(s => s.lensId), ["rising", "risk", "kr_equity"]);
+  assert.equal(doc.sections[0].group, "급부상");        // us_equity 리포트 없음 → 생략(fail-soft)
 });
 
-test("assembleReportDoc: 첫 그룹 리포트가 스킵된 날은 rising이 맨 앞", () => {
+test("assembleReportDoc: rising 없으면 그룹 순서만 (최상단 규칙은 rising 존재 시에만)", () => {
   const groups = [{ name: "리스크", lens_ids: ["risk"] },
                   { name: "주식", lens_ids: ["kr_equity"] }];
-  const reports = { kr_equity: rep("kr_equity"), rising: rep("rising") };
-  const doc = assembleReportDoc(groups, reports);
-  assert.deepEqual(doc.sections.map(s => s.lensId), ["rising", "kr_equity"]);
+  const doc = assembleReportDoc(groups, { risk: rep("risk"), kr_equity: rep("kr_equity") });
+  assert.deepEqual(doc.sections.map(s => s.lensId), ["risk", "kr_equity"]);
+});
+
+test("splitReportSections: 트리거 상단 유지 · 주시·미발생 최하단(미발생이 가장 아래) — WW1", () => {
+  const sections = [
+    { name: "not_triggered", items: [{ text: "n" }] },
+    { name: "risk_triggered", items: [{ text: "r" }] },
+    { name: "watchpoints", items: [{ text: "w" }] },
+    { name: "premium_triggered", items: [{ text: "p" }] },
+  ];
+  const { top, bottom } = splitReportSections(sections);
+  // 상단은 원래 순서 보존(트리거류만), 하단은 항상 [주시, 미발생] 순(미발생 마지막)
+  assert.deepEqual(top.map(s => s.name), ["risk_triggered", "premium_triggered"]);
+  assert.deepEqual(bottom.map(s => s.name), ["watchpoints", "not_triggered"]);
+});
+
+test("splitReportSections: 미발생만 있어도 하단, 알 수 없는 섹션은 상단(가시 유지) · 빈 입력 방어", () => {
+  const { top, bottom } = splitReportSections([
+    { name: "not_triggered" }, { name: "mystery" }]);
+  assert.deepEqual(top.map(s => s.name), ["mystery"]);
+  assert.deepEqual(bottom.map(s => s.name), ["not_triggered"]);
+  assert.deepEqual(splitReportSections(null), { top: [], bottom: [] });
+});
+
+test("leadItems: 배열→불릿(빈 문자열 제거), 문자열→산문 폴백, null 방어 — WW6 graceful", () => {
+  assert.deepEqual(leadItems(["a", "", "  ", "b"]), { mode: "bullets", items: ["a", "b"] });
+  assert.deepEqual(leadItems([]), { mode: "bullets", items: [] });
+  assert.deepEqual(leadItems("산문 리드"), { mode: "prose", text: "산문 리드" });
+  assert.deepEqual(leadItems(null), { mode: "prose", text: "" });
+  assert.deepEqual(leadItems(undefined), { mode: "prose", text: "" });
+  // 계약 위반 입력(객체) 방어: "[object Object]" 노출 금지 — 배열 속 객체는 드롭, 통째 객체는 빈 산문
+  assert.deepEqual(leadItems(["ok", { x: 1 }]), { mode: "bullets", items: ["ok"] });
+  assert.deepEqual(leadItems({ x: 1 }), { mode: "prose", text: "" });
+});
+
+test("reportNavLenses: docm.sections 순서에서 렌즈 평면화(그룹 헤더 없음) — WW5 SSOT", () => {
+  const docm = { sections: [{ lensId: "rising" }, { lensId: "risk" }, { lensId: "kr_equity" }] };
+  assert.deepEqual(reportNavLenses(docm), ["rising", "risk", "kr_equity"]);
+  assert.deepEqual(reportNavLenses({}), []);
+  assert.deepEqual(reportNavLenses(null), []);
 });
 
 test("reportStatus: 정상/생성전/갱신지연/오늘스킵 4구분", () => {

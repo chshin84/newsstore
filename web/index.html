@@ -220,16 +220,15 @@
     .tp { font-size:calc(10px*var(--fs)); color:var(--mut); } .tp b { color:var(--sub); } .tp.ev b { color:var(--green); }
 
     /* ===== 리포트 ===== */
-    /* 프레임 칩(.fchip) — 요구 9: 빨강/주황/초록 텍스트를 크고 굵게, 틴트 배경으로 가독성 확보 */
+    /* 프레임 칩(.fchip) — WW3: 색으로 구분하지 않는다. 글자·배경 중립 + 카테고리 라벨/아이콘(.fcat)이 변별 신호. */
     .fchips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 12px; }
-    .fchip { font-size:calc(12.5px*var(--fs)); font-weight:700; padding:3px 10px;
-      border-radius:999px; line-height:1.4; }
-    .fchip.risk { color:var(--risk); background:color-mix(in srgb, var(--risk) 14%, transparent);
-      border:1px solid color-mix(in srgb, var(--risk), transparent 70%); }
-    .fchip.imp { color:var(--imp); background:color-mix(in srgb, var(--imp) 14%, transparent);
-      border:1px solid color-mix(in srgb, var(--imp), transparent 70%); }
-    .fchip.green { color:var(--green); background:color-mix(in srgb, var(--green) 14%, transparent);
-      border:1px solid color-mix(in srgb, var(--green), transparent 70%); }
+    .fchip { font-size:calc(12.5px*var(--fs)); font-weight:600; padding:3px 10px;
+      border-radius:999px; line-height:1.4; color:var(--fg);
+      background:var(--pill); border:1px solid var(--line2); }
+    /* 카테고리 표식(색 아닌 신호 — 의무): 아이콘 모양 + 라벨 텍스트로 위험/기대/주시를 구분(색맹 안전) */
+    .fcat { font-weight:800; font-size:calc(10px*var(--fs)); letter-spacing:.02em;
+      color:var(--sub); margin-right:5px; padding-right:5px; border-right:1px solid var(--line2); }
+    .fcat .fcat-i { margin-right:2px; }
     /* B6(#5): 섹션 헤더 — 붉은 왼쪽 테두리 대신 시맨틱 색점(halo)+대문자 라벨로 전문적으로.
        색 의미 유지: risk=경고색 · premium=기대색 · watchpoints=중립초록 · not_triggered=회색. */
     .rsec-h { display:flex; align-items:center; gap:8px; font-size:calc(11.5px*var(--fs));
@@ -246,6 +245,12 @@
        비파괴: 전문은 DOM에 남고 시각적으로만 클램프. */
     #reportDoc .dlead { margin:4px 0 8px; display:-webkit-box; -webkit-line-clamp:2;
       -webkit-box-orient:vertical; overflow:hidden; }
+    /* WW6: 리드가 배열이면 불릿(스캔 가능). 2줄 클램프는 불릿에 부적합 → 별도 표시(클램프 없음). */
+    #reportDoc .dlead-bul { list-style:none; margin:4px 0 9px; padding:0; }
+    #reportDoc .dlead-bul li { position:relative; padding:2px 0 2px 15px; color:var(--fg); line-height:1.5;
+      font-size:calc(13.5px*var(--fs)); }
+    #reportDoc .dlead-bul li::before { content:""; position:absolute; left:3px; top:9px; width:5px; height:5px;
+      border-radius:50%; background:var(--accent); }
     .rsec-h.risk_triggered { color:var(--risk); }
     .rsec-h.premium_triggered { color:var(--imp); }
     .rsec-h.not_triggered { color:var(--mut); }
@@ -254,19 +259,7 @@
     .darts.rcards { grid-template-columns:1fr; max-width:560px; }
     /* (.scx 스토리카드 확장·.ranchors 인라인 목차 CSS는 B2/B3에서 제거 — 목차는 사이드바로, 근거는 접이식으로) */
     /* B5(#2): '핵심 리스크 다이제스트'(.reprisks*) 제거 — 렌즈 리포트와 중복이라 스타일도 함께 삭제. */
-    /* B5(#8a): 글로벌 시장 프레임 — 얇은 접이식(기본 접힘). 헤더 한 줄만 보이고 클릭 시 칩·리드 펼침. */
-    .mktframe { background:var(--card2); border:1px solid var(--line2); border-radius:10px;
-      margin:0 0 14px; overflow:hidden; }
-    .mktframe-toggle { display:flex; align-items:baseline; gap:8px; width:100%; text-align:left;
-      background:transparent; border:0; padding:9px 14px; cursor:pointer; font-family:inherit; }
-    @media (hover:hover) { .mktframe-toggle:hover { background:var(--hover); } }
-    .mktframe-toggle::before { content:"▸"; color:var(--mut); font-size:calc(11px*var(--fs)); }
-    .mktframe-toggle[aria-expanded="true"]::before { content:"▾"; }
-    .mktframe-h { font-size:calc(11px*var(--fs)); font-weight:800; letter-spacing:.02em;
-      color:var(--accent); text-transform:uppercase; }
-    .mktframe-hint { font-size:calc(10.5px*var(--fs)); color:var(--mut); margin-left:auto;
-      min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .mktframe-body { padding:0 14px 11px; }
+    /* WW2: 글로벌 시장 프레임(.mktframe*)은 화면에서 숨김 — CSS 제거. 백엔드 _market 생성·주입은 유지(fork 확정). */
     /* 1c 위험 렌즈 accent(세로 스캔) */
     #reportDoc .sdetail.hot { border-left:4px solid var(--risk); }
     /* 3a achilles_kind 이중부호화(프레임 칩) */
@@ -281,8 +274,6 @@
       .fchips { gap:5px; }
     }
 
-    /* ===== B2: 글로벌 프레임 리드(백드롭 통합 — 최상단 1회) ===== */
-    .mktframe-lead { font-size:calc(12.5px*var(--fs)); color:var(--fg); line-height:1.55; margin:0 0 8px; }
 
     /* ===== B4: divergence 재료칩 · conviction 등급(가격 정합 UI 표면) ===== */
     /* divergence = 약한 프록시 '재료'(판정 아님) — 경고색/대형 배너 금지, 파선 회색으로 위계 낮춤 */
@@ -334,6 +325,16 @@
     .rframe-toggle[aria-expanded="true"]::before { content:"▾ "; }
     @media (hover:hover) { .rframe-toggle:hover { background:var(--hover); } }
     .rframe-body { margin-top:6px; }
+    /* WW1: 주시·미발생 — 최하단 접이식(기본 숨김). 트리거·프레임 뒤에 배치. */
+    .rextra { margin:8px 0 2px; }
+    .rextra-toggle { background:var(--pill); color:var(--pill-fg); border:1px solid var(--line);
+      border-radius:999px; padding:2px 11px; font-size:calc(10.5px*var(--fs)); font-weight:600;
+      cursor:pointer; font-family:inherit; }
+    .rextra-toggle::before { content:"▸ "; color:var(--mut); }
+    .rextra-toggle[aria-expanded="true"]::before { content:"▾ "; }
+    @media (hover:hover) { .rextra-toggle:hover { background:var(--hover); } }
+    .rextra-body { margin-top:6px; }
+    #reportDoc .rextra-body .rsec-h:first-child { margin-top:4px; }
 
     /* ===== B5: 좌측 사이드바 네비(리포트·스토리 · 스크롤스파이 · 모바일 드로어) ===== */
     .layout { display:flex; align-items:flex-start; gap:0; max-width:1180px; margin:0 auto; }
@@ -341,25 +342,37 @@
     .sidenav { flex:0 0 var(--side-w); position:sticky; top:88px; align-self:flex-start;
       max-height:calc(100vh - 96px); overflow-y:auto; padding:14px 12px 24px;
       border-right:1px solid var(--line); }
-    .navsec { margin-bottom:16px; }
-    .navsec-h { font-size:calc(10.5px*var(--fs)); font-weight:800; letter-spacing:.04em;
-      text-transform:uppercase; color:var(--mut); margin:0 0 6px 6px; }
-    .navgroup { font-size:calc(10px*var(--fs)); font-weight:700; color:var(--accent);
-      margin:9px 0 3px 6px; letter-spacing:.02em; }
-    .navlist .navgroup:first-child { margin-top:0; }
-    .navlink { display:block; color:var(--sub); text-decoration:none; font-size:calc(12.5px*var(--fs));
-      line-height:1.4; padding:5px 8px; border-radius:7px; border-left:2px solid transparent;
-      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    @media (hover:hover) { .navlink:hover { background:var(--hover); color:var(--fg); } }
-    .navlink.active { background:var(--pill); color:var(--accent); border-left-color:var(--accent); font-weight:600; }
+    /* WW5: 디렉토리 트리 — 리포트·스토리는 폴더(펼침/접힘), 가격은 리프. 피드는 사이드바에서 제거(헤더 탭만 유지). */
+    .navtree { display:flex; flex-direction:column; gap:2px; }
     .navempty { font-size:calc(11px*var(--fs)); color:var(--mut); padding:4px 8px; }
+    /* 폴더 헤더: 트위스티(펼침 토글) + 라벨(탭 이동). 활성 탭이면 .navtab.active 표식이 붙는다. */
+    .navfolder-h { display:flex; align-items:center; gap:6px; width:100%; text-align:left;
+      background:transparent; border:0; padding:6px 8px; border-radius:7px; cursor:pointer;
+      font-family:inherit; font-size:calc(12.5px*var(--fs)); font-weight:700; color:var(--fg); }
+    @media (hover:hover) { .navfolder-h:hover { background:var(--hover); } }
+    .navtw { flex:0 0 auto; width:15px; height:15px; display:inline-flex; align-items:center; justify-content:center;
+      color:var(--mut); font-size:calc(10px*var(--fs)); border-radius:4px; transition:transform .15s ease; }
+    .navtw::before { content:"▸"; }
+    .navfolder-h[aria-expanded="true"] .navtw { transform:rotate(90deg); }
+    @media (hover:hover) { .navtw:hover { background:var(--pill); color:var(--fg); } }
+    /* 자식: 디렉토리 은유의 얇은 세로 rail(구조 신호 — 선택 표식 아님, 중립 hairline이라 카드 좌측 컬러보더와 다름) */
+    .navfolder-body { display:flex; flex-direction:column; gap:1px;
+      margin:1px 0 5px 15px; padding-left:9px; border-left:1px solid var(--line2); }
+    .navlink { display:block; color:var(--sub); text-decoration:none; font-size:calc(12.5px*var(--fs));
+      line-height:1.4; padding:5px 8px; border-radius:7px;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .navleaf { font-size:calc(12px*var(--fs)); }
+    .navleaf-top { font-weight:700; margin-top:2px; color:var(--fg); }
+    @media (hover:hover) { .navlink:hover { background:var(--hover); color:var(--fg); } }
+    /* 선택 표식(WW5 재디자인): 좌측 색막대·도트 금지 → 전체행 accent 틴트 채움(파일탐색기 selected-row 관용구).
+       카드의 4px 좌측 컬러보더·카드 색점과 시각 채널이 달라 충돌 없음. navlink·navtab·스크롤스파이 공통. */
+    .navlink.active, .navtab.active { background:color-mix(in srgb, var(--accent) 15%, transparent);
+      color:var(--accent); font-weight:600; }
     /* B1(#1): 좌상단 사이드바 토글 — 데스크톱은 접기/펼치기, 모바일은 드로어 여닫기(항상 노출) */
     .hleft { display:flex; align-items:center; gap:9px; min-width:0; }
     .side-toggle { min-height:40px; min-width:40px; padding:6px 10px; line-height:1;
       font-size:calc(16px*var(--fs)); flex:0 0 auto; }
-    /* 사이드바 상단 '메뉴' 4탭 — 현재 탭이 active */
     .navtab { font-weight:600; }
-    .navtab.active { background:var(--pill); color:var(--accent); border-left-color:var(--accent); }
     .navscrim { position:fixed; inset:0; background:rgba(0,0,0,.42); z-index:15; }
     @media (max-width:1000px) { :root { --side-w:186px; } }        /* 중간폭 방어: 사이드바(+고스트) 축소 */
     @media (min-width:681px) {                                    /* 데스크톱: 드로어 상태 강제 해제(리사이즈 잔재 방지) */
@@ -411,22 +424,20 @@
   </header>
   <div class="layout">
     <aside class="sidenav" id="sidenav" aria-label="네비게이션">
-      <nav class="navsec">
-        <div class="navsec-h">메뉴</div>
-        <div class="navlist navtabs">
-          <a href="#feed" data-tab="feed" class="navlink navtab">피드</a>
-          <a href="#stories" data-tab="stories" class="navlink navtab">스토리</a>
-          <a href="#report" data-tab="report" class="navlink navtab">리포트</a>
-          <a href="#price" data-tab="price" class="navlink navtab">가격</a>
+      <nav class="navtree" id="navTree">
+        <div class="navfolder" data-folder="report">
+          <button class="navfolder-h navtab" type="button" data-tab="report" aria-expanded="true">
+            <span class="navtw" aria-hidden="true"></span><span class="navfolder-l">리포트</span>
+          </button>
+          <div class="navfolder-body" id="navReportList"><div class="navempty">불러오는 중…</div></div>
         </div>
-      </nav>
-      <nav class="navsec">
-        <div class="navsec-h">리포트 목차</div>
-        <div class="navlist" id="navReportList"><div class="navempty">불러오는 중…</div></div>
-      </nav>
-      <nav class="navsec">
-        <div class="navsec-h">스토리 목록</div>
-        <div class="navlist" id="navStoryList"><div class="navempty">불러오는 중…</div></div>
+        <div class="navfolder" data-folder="stories">
+          <button class="navfolder-h navtab" type="button" data-tab="stories" aria-expanded="true">
+            <span class="navtw" aria-hidden="true"></span><span class="navfolder-l">스토리</span>
+          </button>
+          <div class="navfolder-body" id="navStoryList"><div class="navempty">불러오는 중…</div></div>
+        </div>
+        <a href="#price" data-tab="price" class="navlink navtab navleaf-top">가격</a>
       </nav>
     </aside>
     <main><div class="wrap">
@@ -457,6 +468,14 @@
     const srcSel = document.getElementById("src");
     const seenTags = new Set();
     const db = getFirestore(initializeApp(firebaseConfig));
+
+    // WW5 persistence 일관: 트리 폴더 펼침(nav:*)과 WW1 주시·미발생 펼침(extra:*)을 단일 localStorage 스토어로 통일.
+    // 값은 명시 boolean(id별). 폴더 기본=펼침, extra 블록 기본=접힘 — isOpen(id, def)로 기본값을 표현.
+    const EXPAND_KEY = "ns_expand";
+    let expandState;
+    try { expandState = JSON.parse(localStorage.getItem(EXPAND_KEY)) || {}; } catch (e) { expandState = {}; }
+    function isOpen(id, def) { return id in expandState ? !!expandState[id] : def; }
+    function setOpen(id, v) { expandState[id] = v; try { localStorage.setItem(EXPAND_KEY, JSON.stringify(expandState)); } catch (e) {} }
 
     // 소스명 → 고정 색 (해시 기반). 카드 왼쪽 띠 + 소스 태그.
     // 알려진 소스는 황금각(137.5°) 간격으로 색 배정 → 겹침 최소화, 미지 소스는 해시 폴백
@@ -730,8 +749,8 @@
     // === REPORT-LOGIC-START (node test가 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
     const REPORT_STALE_MS = 24 * 3600 * 1000;           // §5(b) 기대 주기 1일
     function assembleReportDoc(groups, reports) {
-      // 단일 데일리 문서 결정론 조립(§4): 백드롭 서두 → 첫 그룹(리스크) → 급부상 → 나머지 그룹.
-      // 그룹 순서 SSOT = topics.yaml 렌즈 등장 순서(meta/report_groups로 발행), rising 위치만 UI 규칙.
+      // 단일 데일리 문서 결정론 조립(§4): 급부상(최상단) → 그룹 순서(topics.yaml: 리스크·주식…).
+      // 그룹 순서 SSOT = topics.yaml 렌즈 등장 순서(meta/report_groups로 발행). rising 위치는 UI 규칙①.
       // groups는 순서 보존 배열([{name, lens_ids}]) — Firestore map 키 정렬로 순서가 깨지지 않게(m1).
       // 리포트 없는 렌즈는 생략(fail-soft — 상태는 reportStatus가 별도 판정).
       const sections = [];
@@ -739,14 +758,37 @@
         for (const lid of (g.lens_ids || []))
           if (reports && reports[lid]) sections.push({ lensId: lid, group: g.name, report: reports[lid] });
       if (reports && reports.rising) {
-        // 사용자 확정 순서(2026-07-04): rising은 첫 그룹 바로 뒤(첫 그룹 스킵 시 맨 앞)
-        const firstGroup = (groups && groups.length) ? groups[0].name : null;
-        let at = 0;
-        while (at < sections.length && sections[at].group === firstGroup) at++;
-        sections.splice(at, 0, { lensId: "rising", group: "급부상", report: reports.rising });
+        // UI 순서 규칙①: 급부상(rising)은 항상 최상단(2026-07-05 사용자 지시). 내부 lensId는 "rising" 유지.
+        sections.unshift({ lensId: "rising", group: "급부상", report: reports.rising });
       }
       return { backdrop: (reports && reports._backdrop && reports._backdrop.text) || "",
                sections };
+    }
+    function splitReportSections(sections) {
+      // WW1: 트리거(아킬레스·기대 등)는 상단 유지, 주시·미발생은 최하단(미발생을 가장 아래).
+      // 표시 순서만 — 섹션 스키마·데이터 불변. UI 순서 규칙②.
+      const BOTTOM = { watchpoints: 0, not_triggered: 1 };   // 하단 순위(미발생이 마지막)
+      const top = [], bottom = [];
+      for (const sec of (sections || [])) {
+        if (sec && sec.name in BOTTOM) bottom.push(sec);
+        else top.push(sec);
+      }
+      bottom.sort((a, b) => BOTTOM[a.name] - BOTTOM[b.name]);
+      return { top, bottom };
+    }
+    function leadItems(lead) {
+      // WW6: 리드 렌더 모드 도출 — 배열이면 불릿, 문자열(구형)이면 산문 폴백(배포 순서 무관 graceful).
+      // 계약 위반 입력(객체) 방어: 문자열/숫자만 취하고 객체는 드롭 — "[object Object]" 노출 금지.
+      const scalar = x => x != null && typeof x !== "object";
+      if (Array.isArray(lead)) {
+        const items = lead.filter(scalar).map(x => String(x)).filter(s => s.trim());
+        return { mode: "bullets", items };
+      }
+      return { mode: "prose", text: scalar(lead) ? String(lead) : "" };
+    }
+    function reportNavLenses(docm) {
+      // WW5: 사이드바 리포트 목차 = docm.sections 순서에서 렌즈 평면화(그룹 헤더 없음). SSOT 도출.
+      return ((docm && docm.sections) || []).map(s => s.lensId);
     }
     function reportStatus(report, now, skippedToday) {
       if (!report) return "not_generated";              // 스토리 부족 스킵(§4) — "아직 생성 전"
@@ -1095,15 +1137,17 @@
     function frameChipsHtml(f) {
       if (!f) return "";
       // 3a: achilles_kind 이중부호화 — words_deeds(RAS 말-행동 괴리)는 ⚡ + 근거건수, structural은 파선.
-      const ax = (arr, cls) => (arr || []).map(p => {
+      // WW3: 위험/기대/주시 구분은 색이 아니라 카테고리 라벨(.fcat: 아이콘 모양 + 텍스트)로 — 색맹·중립 안전.
+      const ax = (arr, cls, catIcon, catLabel) => (arr || []).map(p => {
         const kind = p.achilles_kind, evN = (p.evidence_dev_ids || []).length;
         const ras = kind === "words_deeds" ? `<span class="ras" aria-label="말-행동 괴리">⚡</span>` : "";
         const evn = evN ? `<sup class="evn">${evN}</sup>` : "";
         const title = kind === "words_deeds" ? `말-행동 괴리(RAS) · 근거 ${evN}건`
           : kind === "structural" ? "구조적 이월" : esc(p.id || "");
-        return `<span class="fchip ${cls}${kind === "structural" ? " structural" : ""}" title="${esc(title)}">${ras}${txt(p.text)}${evn}</span>`;
+        const cat = `<span class="fcat"><span class="fcat-i" aria-hidden="true">${catIcon}</span>${catLabel}</span>`;
+        return `<span class="fchip ${cls}${kind === "structural" ? " structural" : ""}" title="${esc(title)}">${cat}${ras}${txt(p.text)}${evn}</span>`;
       }).join("");
-      return `<div class="fchips">${ax(f.risks, "risk")}${ax(f.premiums, "imp")}${ax(f.watchpoints, "green")}</div>`;
+      return `<div class="fchips">${ax(f.risks, "risk", "▲", "위험")}${ax(f.premiums, "imp", "◆", "기대")}${ax(f.watchpoints, "green", "◇", "주시")}</div>`;
     }
     function tsToMs(v) {
       if (!v) return null;
@@ -1137,7 +1181,8 @@
         const cv = convictionPill(report.conviction);
         const convHtml = cv
           ? `<span class="convpill conv-${esc(cv.level)}" title="${esc(cv.basis)}"><span class="cvdot"></span>${txt(cv.label)}</span>` : "";
-        const secs = (report.sections || []).map(sec => {
+        // 섹션 1개 → HTML(빈 섹션은 "" — 렌더 생략). WW1 재배치를 위해 섹션→HTML을 함수로 뽑는다.
+        const secHtml = (sec) => {
           const items = (sec.items || []).map(it => {
             // B3: 스토리 카드 제거 → 항목당 '근거 N건' 접이식(기본 접힘). 펼칠 때 story_ids의 items lazy fetch.
             const sids = (it.story_ids || []).filter(Boolean);
@@ -1151,7 +1196,11 @@
             return `<li>${txt(it.text)}${evRow}</li>`;
           }).join("");
           return items ? `<h4 class="rsec-h ${esc(sec.name || "")}">${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
-        }).join("");
+        };
+        // WW1: 트리거(아킬레스·기대)는 상단, 주시·미발생은 최하단 접이식(기본 숨김). 순수 seam이 순서 결정.
+        const { top, bottom } = splitReportSections(report.sections);
+        const topHtml = top.map(secHtml).join("");
+        const bottomHtml = bottom.map(secHtml).join("");
         const gen = tsToMs(report.generated_at);
         const hot = rc ? `<span class="newb" style="background:var(--risk)">아킬레스 ${rc}</span>` : "";
         // B3(#3): 렌즈 프레임(아킬레스·기대·주시 극)을 온디맨드 펼치기 — 항상표시 아님(렌즈 반복 제거 유지).
@@ -1159,28 +1208,31 @@
         const lensFrameHtml = hasFrame
           ? `<div class="rframe"><button class="rframe-toggle" type="button" aria-expanded="false">프레임 보기</button><div class="rframe-body" hidden>${frameChipsHtml(f)}</div></div>`
           : "";
+        // WW1: 주시·미발생 최하단 접이식(트리거·프레임 뒤). persistence는 extra:<lensId>(기본 접힘).
+        const extraId = "extra:" + lensId, extraOpen = isOpen(extraId, false);
+        const extraBlock = bottomHtml
+          ? `<div class="rextra"><button class="rextra-toggle" type="button" data-expand-id="${esc(extraId)}" aria-expanded="${extraOpen ? "true" : "false"}">주시·미발생</button><div class="rextra-body"${extraOpen ? "" : " hidden"}>${bottomHtml}</div></div>`
+          : "";
+        // WW4: 급부상(rising)은 사용자 노출 라벨 "급부상"으로 강제(내부 lensId만 rising). group과 중복이면 1회만.
+        const disp = lensId === "rising" ? "급부상" : (LENS_LABELS[lensId] || lensId);
+        const seclbl = disp === group ? txt(group) : `${txt(group)} · ${txt(disp)}`;
+        // WW6: 리드가 배열이면 불릿, 문자열(구형)이면 산문 폴백(graceful).
+        const li = leadItems(report.lead);
+        const leadHtml = li.mode === "bullets"
+          ? (li.items.length ? `<ul class="dlead-bul">${li.items.map(t => `<li>${txt(t)}</li>`).join("")}</ul>` : "")
+          : (li.text ? `<div class="dlead">${txt(li.text)}</div>` : "");
         return `<section class="sdetail${rc ? " hot" : ""}" id="rep-${esc(lensId)}">
-          <div class="seclbl">${txt(group)} · ${txt(LENS_LABELS[lensId] || lensId)}</div>
+          <div class="seclbl">${seclbl}</div>
           <div class="dt">${txt(report.headline) || "(제목 없음)"} ${hot}${convHtml}${divHtml}${badge}${stale}${frameStale}${skew}</div>
-          <div class="dlead">${txt(report.lead)}</div>
+          ${leadHtml}
+          ${topHtml}
           ${lensFrameHtml}
-          ${secs}
+          ${extraBlock}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
       }).join("");
-      // B5(#2): '지금 시장이 두려워하는 것' 다이제스트 제거 — 전 렌즈 risk_triggered 재집계라
-      //         각 렌즈 리포트와 중복이었다(topRisks도 유일 소비처가 사라져 함께 제거).
-      // B5(#8a): 글로벌 시장 프레임(frames/_market)+백드롭을 최상단 1회로 두되, 항상 펼침이 아니라
-      //          얇은 접이식으로 축소(과한 추가정보). 렌즈 리포트가 본론을 커버.
-      const mkt = frames["_market"];
-      const mktChips = (mkt && ((mkt.risks || []).length || (mkt.premiums || []).length)) ? frameChipsHtml(mkt) : "";
-      const globalBlock = (mktChips || docm.backdrop)
-        ? `<div class="mktframe"><button class="mktframe-toggle" type="button" aria-expanded="false">`
-          + `<span class="mktframe-h">글로벌 시장 프레임</span><span class="mktframe-hint">전 자산군 공포·기대 · 펼치기</span></button>`
-          + `<div class="mktframe-body" hidden>`
-          + (docm.backdrop ? `<div class="mktframe-lead">${txt(docm.backdrop)}</div>` : "") + mktChips + `</div></div>`
-        : "";
-      reportDocEl.innerHTML = globalBlock + body;
+      // WW2: 글로벌 시장 프레임(frames/_market)+백드롭은 화면에서 숨김 — 렌더 안 함(백엔드 데이터는 유지).
+      reportDocEl.innerHTML = body;
     }
 
     // B3: 근거(기사 출처) lazy fetch — story_id별 Promise 메모이즈.
@@ -1228,9 +1280,10 @@
       const rf = e.target.closest(".rframe-toggle");            // B3: 렌즈 프레임 온디맨드 펼치기
       if (rf) { const b = rf.nextElementSibling, open = !!b && b.hasAttribute("hidden");
         if (b) b.hidden = !open; rf.setAttribute("aria-expanded", open ? "true" : "false"); return; }
-      const mf = e.target.closest(".mktframe-toggle");          // B5: 글로벌 시장 프레임 접이식
-      if (mf) { const b = mf.nextElementSibling, open = !!b && b.hasAttribute("hidden");
-        if (b) b.hidden = !open; mf.setAttribute("aria-expanded", open ? "true" : "false"); return; }
+      const xt = e.target.closest(".rextra-toggle");            // WW1: 주시·미발생 최하단 접이식(펼침 상태 persist)
+      if (xt) { const b = xt.nextElementSibling, open = !!b && b.hasAttribute("hidden");
+        if (b) b.hidden = !open; xt.setAttribute("aria-expanded", open ? "true" : "false");
+        setOpen(xt.dataset.expandId, open); return; }
       const btn = e.target.closest(".ev-toggle");
       if (!btn) return;
       const body = btn.closest(".ev-row").nextElementSibling;   // .ev-body
@@ -1263,25 +1316,50 @@
 
     // ============================ 사이드바 네비 (B5) ============================
     const sidenav = document.getElementById("sidenav");
+    const navTree = document.getElementById("navTree");
     const navReportList = document.getElementById("navReportList");
     const navStoryList = document.getElementById("navStoryList");
     const navScrim = document.getElementById("navScrim");
     const sideToggle = document.getElementById("sideToggle");
 
-    // 리포트 목차 = 그룹→렌즈(SSOT: docm.sections 순서 = topics.yaml report_group). 하드코딩 복제 없음.
+    // WW5: 리포트 목차 = 렌즈 평면 나열(그룹 중간 헤더 없음). 순서 SSOT = reportNavLenses(docm)(=docm.sections).
     function buildReportNav(docm) {
-      let html = "", lastGroup = null;
-      for (const { lensId, group } of ((docm && docm.sections) || [])) {
-        if (group !== lastGroup) { html += `<div class="navgroup">${txt(group)}</div>`; lastGroup = group; }
-        html += `<a href="#rep-${esc(lensId)}" data-lens="${esc(lensId)}" class="navlink">${txt(LENS_LABELS[lensId] || lensId)}</a>`;
-      }
+      const html = reportNavLenses(docm).map(lensId => {
+        const disp = lensId === "rising" ? "급부상" : (LENS_LABELS[lensId] || lensId);   // WW4: "rising" 글자 노출 금지
+        return `<a href="#rep-${esc(lensId)}" data-lens="${esc(lensId)}" class="navlink navleaf">${txt(disp)}</a>`;
+      }).join("");
       navReportList.innerHTML = html || `<div class="navempty">리포트 없음</div>`;
     }
     function buildStoryNav(groups) {
       navStoryList.innerHTML = ((groups || []).map(g =>
-        `<a href="#story-${esc(g.main.id)}" data-story="${esc(g.main.id)}" class="navlink">${txt(displayHead(g.main)) || "(제목 없음)"}</a>`).join(""))
+        `<a href="#story-${esc(g.main.id)}" data-story="${esc(g.main.id)}" class="navlink navleaf">${txt(displayHead(g.main)) || "(제목 없음)"}</a>`).join(""))
         || `<div class="navempty">스토리 없음</div>`;
     }
+    // WW5: 폴더(리포트·스토리) 펼침/접힘 — 기본 펼침, 상태는 통합 스토어(nav:<folder>)에 persist(WW1과 일관).
+    function applyFolder(folder, open) {
+      const body = folder.querySelector(".navfolder-body");
+      const h = folder.querySelector(".navfolder-h");
+      if (body) body.hidden = !open;
+      if (h) h.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    function applyFolderStates() {
+      document.querySelectorAll(".navfolder").forEach(f =>
+        applyFolder(f, isOpen("nav:" + f.dataset.folder, true)));
+    }
+    function toggleFolder(folder) {
+      if (!folder) return;
+      const id = "nav:" + folder.dataset.folder, open = !isOpen(id, true);
+      setOpen(id, open); applyFolder(folder, open);
+    }
+    // 트위스티(.navtw)는 펼침만 토글(라우팅 억제), 폴더 헤더 나머지는 탭으로 라우팅(hashchange가 showTab 실행).
+    // 자동 펼침은 하지 않는다 — 폴더 상태는 사용자 트위스티만 바꾸고 persist(기본=펼침)해, 접힘 선호가 새로고침에도 유지된다.
+    navTree.addEventListener("click", e => {
+      const tw = e.target.closest(".navtw");
+      if (tw) { e.stopPropagation(); toggleFolder(tw.closest(".navfolder")); return; }
+      const fh = e.target.closest(".navfolder-h");
+      if (fh) { location.hash = "#" + fh.dataset.tab; closeDrawer(); syncSideToggle(); return; }
+    });
+    applyFolderStates();
     // 스크롤 스파이: 현재 화면 상단에 걸린 리포트 섹션의 사이드바 링크를 하이라이트.
     let reportSpy = null;
     function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\\]]/g, "\\$&"); }
@@ -1381,9 +1459,10 @@
       tabStories.classList.toggle("active", stories);
       tabReport.classList.toggle("active", report);
       tabPrice.classList.toggle("active", price);
-      // B1: 사이드바 메뉴 4탭도 현재 탭에 맞춰 active(헤더 탭과 동기화 — 둘 다 hash 라우팅)
+      // B1: 사이드바 탭(폴더 헤더·가격 리프)도 현재 탭에 맞춰 active(헤더 탭과 동기화 — 둘 다 hash 라우팅)
       const key = feed ? "feed" : which;
       document.querySelectorAll(".navtab").forEach(a => a.classList.toggle("active", a.dataset.tab === key));
+
       if (stories && !storiesLoaded) { storiesLoaded = true; loadStories(); }
       if (report && !reportLoaded) { reportLoaded = true; loadReport(); }
       if (price && !priceLoaded) { priceLoaded = true; loadPrices(); }
