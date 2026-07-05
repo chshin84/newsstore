@@ -8,11 +8,13 @@ const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "REPORT-LOGIC 마커 필요(드리프트 가드)");
 const { assembleReportDoc, reportStatus, crossLinks, dedupCards,
         divergenceChip, convictionPill, normalizeHeadline, dedupEvidence,
-        splitReportSections, leadItems, reportNavLenses } =
+        splitReportSections, leadItems, reportNavLenses,
+        moveBand, unexplainedQueue, reportV2Empty } =
   new Function(html.slice(i, j) +
     "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards," +
     " divergenceChip, convictionPill, normalizeHeadline, dedupEvidence," +
-    " splitReportSections, leadItems, reportNavLenses };")();
+    " splitReportSections, leadItems, reportNavLenses," +
+    " moveBand, unexplainedQueue, reportV2Empty };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -166,6 +168,53 @@ test("dedupEvidence: 빈 제목은 병합 금지(정보 손실 방지) · 빈 �
   assert.equal(reps.length, 2);
   assert.deepEqual(dedupEvidence(null), { reps: [], total: 0, unique: 0 });
   assert.deepEqual(dedupEvidence([]), { reps: [], total: 0, unique: 0 });
+});
+
+// --- WV3/WV4: 리포트 v2 (설명 안 되는 움직임 조사 큐) ---
+test("moveBand: z 우선(없으면 pct 폴백) 방향+버킷, 정밀 수치 노출 금지", () => {
+  assert.equal(moveBand(1.5, null).dir, "up");
+  assert.equal(moveBand(1.5, null).text, "다소 큰 이동");   // |z|<2
+  assert.equal(moveBand(2.5, null).text, "큰 이동");        // 2~3
+  assert.equal(moveBand(-4, null).dir, "down");
+  assert.equal(moveBand(-4, null).text, "매우 큰 이동");    // 3+
+  assert.equal(moveBand(null, 5).text, "큰 이동");          // z 없음 → pct 폴백(3~8)
+  assert.equal(moveBand(null, 12).text, "매우 큰 이동");    // pct 8+
+  assert.equal(moveBand(null, null), null);                // 둘 다 없음 → 생략
+  // 불변식: 밴드에 raw 숫자가 새지 않는다
+  for (const [z, p] of [[1.7, null], [null, 6.3]]) assert.ok(!/\d/.test(moveBand(z, p).text));
+});
+
+test("unexplainedQueue: 백엔드 rank 배열 순서 그대로 소비(재정렬 금지 — SSOT)", () => {
+  const sig = { generated_at: NOW, min_sample_ok: true, items: [
+    { ticker: "EWY", label: "한국 ETF", kind: "equity", move_z: 3.1, vol_confirmed: true, story_coverage: false, rank: 1 },
+    { key: "USDKRW", label: "원달러", kind: "fx", move_z: 2.2, vol_confirmed: null, story_coverage: false, rank: 2 },
+    { ticker: "ZZZ", label: "후순위", kind: "equity", move_z: 5.0, vol_confirmed: false, story_coverage: true, rank: 3 },
+  ] };
+  const q = unexplainedQueue(sig);
+  assert.deepEqual(q.items.map(x => x.key), ["EWY", "USDKRW", "ZZZ"]);   // 입력(rank) 순서 보존
+  // move_z가 더 큰 ZZZ(5.0)가 뒤에 있어도 재정렬하지 않음 — 백엔드 rank 신뢰
+  assert.equal(q.items[0].volConfirmed, true);
+  assert.equal(q.items[1].volConfirmed, null);                          // FX → 거래량 표기 생략 seam
+  assert.equal(q.items[2].volConfirmed, false);
+  assert.equal(q.items[1].move.text, "큰 이동");
+  assert.equal(q.minSampleOk, true);
+});
+
+test("unexplainedQueue: min_sample_ok=false 전달, 부재/형식오류 graceful null", () => {
+  assert.equal(unexplainedQueue({ items: [{ ticker: "A" }], min_sample_ok: false }).minSampleOk, false);
+  assert.equal(unexplainedQueue({ items: [{ ticker: "A" }] }).minSampleOk, true);   // 부재 → ok(기본)
+  assert.equal(unexplainedQueue(null), null);
+  assert.equal(unexplainedQueue({}), null);                             // items 없음
+  assert.equal(unexplainedQueue({ items: "x" }), null);                 // 계약 위반 방어
+  const q = unexplainedQueue({ items: [{ rank: 1 }] });                 // 라벨 없는 항목
+  assert.equal(q.items[0].label, "");                                   // "[object Object]" 노출 없음
+  assert.equal(q.items[0].move, null);
+});
+
+test("reportV2Empty: 큐 없거나 비면 true(빈상태 안내 트리거)", () => {
+  assert.equal(reportV2Empty(null), true);
+  assert.equal(reportV2Empty({ items: [] }), true);
+  assert.equal(reportV2Empty({ items: [{ key: "A" }] }), false);
 });
 
 console.log(`\nreport_logic: ${pass} passed, ${fail} failed`);

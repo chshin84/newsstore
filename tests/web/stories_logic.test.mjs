@@ -12,8 +12,9 @@ assert.ok(i !== -1 && j !== -1 && j > i, "STORIES-LOGIC 마커가 index.html에 
 const block = html.slice(i, j);
 const { toMs, groupItemsByDevelopment, pickDisplayItems,
         storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains,
-        displayHead, displayLead } =
-  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains, displayHead, displayLead };")();
+        displayHead, displayLead,
+        excessBand, landingRows, breadthBadge, storyHasV2, storiesV2Empty } =
+  new Function(block + "\nreturn { toMs, groupItemsByDevelopment, pickDisplayItems, storyRank, deltaBadge, isNew, nodeTimes, IMPACT_PRIOR, groupStoriesByLens, dedupeMains, displayHead, displayLead, excessBand, landingRows, breadthBadge, storyHasV2, storiesV2Empty };")();
 
 let pass = 0, fail = 0;
 const test = (name, fn) => { try { fn(); pass++; } catch (e) { fail++; console.error("FAIL:", name, "\n ", e.message); } };
@@ -193,6 +194,71 @@ test("dedupeMains: 대표가 겹치면 그 렌즈는 다음 스토리로, 없으
   const byLens = Object.fromEntries(ded.map(g => [g.lensId, g.main.id]));
   assert.equal(byLens["L1"], "a");        // L1 대표=a
   assert.equal(byLens["L2"], "c");        // L2는 a가 이미 쓰여 다음 스토리 c로
+});
+
+// --- WV2/WV4: 스토리 v2 (개체 착지 · 브레드스 · 빈상태) ---
+test("excessBand: 방향+버킷 밴드(정밀 % 노출 금지 — 거짓정밀 억제)", () => {
+  assert.equal(excessBand(0.4).dir, "flat");                 // |x|<1 → 지수와 비슷
+  assert.equal(excessBand(0.4).text, "지수와 비슷");
+  assert.equal(excessBand(2).dir, "up");
+  assert.equal(excessBand(2).text, "지수 대비 소폭 초과");     // 1~3
+  assert.equal(excessBand(5).text, "지수 대비 뚜렷이 초과");   // 3~8
+  assert.equal(excessBand(12).text, "지수 대비 큰폭 초과");    // 8+
+  assert.equal(excessBand(-5).dir, "down");
+  assert.equal(excessBand(-5).text, "지수 대비 뚜렷이 하회");
+  assert.equal(excessBand(null), null);                      // 수치 아님 → 생략(graceful)
+  assert.equal(excessBand("x"), null);
+  // 불변식: 밴드 텍스트에 원시 정밀 숫자가 새어나오지 않는다(3.7 같은 소수 금지)
+  for (const v of [3.7, -11.23, 6.5]) assert.ok(!/\d/.test(excessBand(v).text), "밴드에 raw 숫자 금지");
+});
+
+test("landingRows: resolved면 실제 종목, 미해결이면 자산군만 + 자산군 dedup", () => {
+  const landing = { asset_class_fallback: "국내주식", tickers: [
+    { ticker: "005930", label: "삼성전자", excess_pct: 4.2, window_days: 20, resolved: true },
+    { label: "국내주식", resolved: false },
+    { label: "국내주식", resolved: false },   // 중복 자산군 → 1회로
+  ] };
+  const rows = landingRows(landing);
+  assert.equal(rows.length, 2);                              // 종목 1 + 자산군 1(dedup)
+  assert.equal(rows[0].resolved, true);
+  assert.equal(rows[0].label, "삼성전자");
+  assert.equal(rows[0].windowDays, 20);
+  assert.equal(rows[0].band.text, "지수 대비 뚜렷이 초과");
+  assert.equal(rows[1].resolved, false);
+  assert.equal(rows[1].ticker, "");                          // 미해결 → 종목 감춤
+  assert.equal(rows[1].band, null);                          // 미해결 → 밴드 없음
+});
+
+test("landingRows: 미해결 라벨 없으면 asset_class_fallback, 그것도 없으면 '자산군' · 부재 방어", () => {
+  assert.deepEqual(landingRows(null), []);
+  assert.deepEqual(landingRows({}), []);
+  assert.deepEqual(landingRows({ tickers: "x" }), []);       // 계약 위반 방어
+  const r = landingRows({ asset_class_fallback: "원자재", tickers: [{ resolved: false }] });
+  assert.equal(r[0].label, "원자재");
+  const r2 = landingRows({ tickers: [{ resolved: false }] });
+  assert.equal(r2[0].label, "자산군");
+});
+
+test("breadthBadge: 자산군/스팬 있으면 배지, 둘 다 없으면 생략(graceful)", () => {
+  const b = breadthBadge({ span: "3자산군", asset_classes: ["주식", "FX", "금리"],
+    price_confirmed: true, uncovered: ["원자재"], unverified: true });
+  assert.equal(b.assetClasses.length, 3);
+  assert.equal(b.priceConfirmed, true);
+  assert.deepEqual(b.uncovered, ["원자재"]);
+  assert.equal(b.unverified, true);
+  assert.equal(breadthBadge(null), null);
+  assert.equal(breadthBadge({}), null);                      // span도 자산군도 없음 → 생략
+  assert.equal(breadthBadge({ asset_classes: [] }), null);
+  assert.ok(breadthBadge({ span: "단일" }));                 // span만 있어도 배지
+});
+
+test("storiesV2Empty: 어느 스토리에도 landing/breadth 없으면 true(빈상태 안내 트리거)", () => {
+  assert.equal(storiesV2Empty([]), true);
+  assert.equal(storiesV2Empty([{ id: "a" }, { id: "b" }]), true);
+  assert.equal(storiesV2Empty([{ id: "a", breadth: { span: "2자산군" } }]), false);
+  assert.equal(storiesV2Empty([{ id: "a",
+    landing: { tickers: [{ ticker: "X", resolved: true, excess_pct: 3 }] } }]), false);
+  assert.equal(storyHasV2({ id: "a", landing: { tickers: [] } }), false);   // 빈 tickers는 증강 아님
 });
 
 console.log(`\nstories_logic: ${pass} passed, ${fail} failed`);
