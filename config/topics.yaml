@@ -10,10 +10,11 @@ lenses:
   - {id: risk, type: risk, report_group: 리스크, label: {ko: 지정학·시스템 리스크, en: Risk}, hints: {topics: [geopolitics]}}
   # ── 금융자산 (standing) ──
   - {id: kr_equity, type: standing, report_group: 주식, price_key: kosdaq, label: {ko: 한국 주식, en: KR Equities}, hints: {asset_hint: [kr_market, kr_corp, kr_stock], topics: [equities]}}
-  - {id: us_equity, type: standing, report_group: 주식, price_key: sp500, label: {ko: 미국 주식, en: US Equities}, hints: {asset_hint: [equity, us_stock, us_market], topics: [equities]}}
+  # extra_price_keys(WB2): signals 전용 부가 가격계열(리포트 price_key 교차검증은 1차만, 불변).
+  - {id: us_equity, type: standing, report_group: 주식, price_key: sp500, extra_price_keys: [nasdaq], label: {ko: 미국 주식, en: US Equities}, hints: {asset_hint: [equity, us_stock, us_market], topics: [equities]}}
   - {id: kr_rates, type: standing, report_group: 금리·채권, label: {ko: 한국 금리·채권, en: KR Rates}, hints: {asset_hint: [kr_bond, kr_macro], entities: [한국은행], topics: [rates, bonds, central_bank]}}
-  - {id: us_rates, type: standing, report_group: 금리·채권, price_key: us10y, label: {ko: 미국 금리·채권, en: US Rates}, hints: {asset_hint: [us_bond], entities: [Fed, Treasury], topics: [rates, bonds, central_bank]}}
-  - {id: fx, type: standing, report_group: 환율, price_key: usdkrw, label: {ko: 환율, en: FX}, hints: {asset_hint: [fx], topics: [fx]}}
+  - {id: us_rates, type: standing, report_group: 금리·채권, price_key: us10y, extra_price_keys: [us2y, us30y], label: {ko: 미국 금리·채권, en: US Rates}, hints: {asset_hint: [us_bond], entities: [Fed, Treasury], topics: [rates, bonds, central_bank]}}
+  - {id: fx, type: standing, report_group: 환율, price_key: usdkrw, extra_price_keys: [usdjpy], label: {ko: 환율, en: FX}, hints: {asset_hint: [fx], topics: [fx]}}
   - {id: oil_energy, type: standing, report_group: 원자재, price_key: wti, label: {ko: 유가·에너지, en: Oil/Energy}, hints: {asset_hint: [energy], entities: [OPEC], topics: [energy]}}
   - {id: precious_metals, type: standing, report_group: 원자재, price_key: gold, label: {ko: 귀금속, en: Metals}, hints: {keywords: [금값, gold, silver, 은값], topics: [commodities]}}
   - {id: commodities, type: standing, report_group: 원자재, label: {ko: 기타 원자재, en: Commodities}, hints: {asset_hint: [commodity], topics: [commodities]}}
