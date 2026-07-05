@@ -72,12 +72,20 @@ def parse_yahoo_chart(raw, *, max_points: int = SERIES_MAX_POINTS) -> dict | Non
     r0 = res[0]
     meta = r0.get("meta") or {}
     ts = r0.get("timestamp") or []
-    quotes = (((r0.get("indicators") or {}).get("quote") or [{}])[0] or {}).get("close") or []
+    quote0 = (((r0.get("indicators") or {}).get("quote") or [{}])[0] or {})
+    quotes = quote0.get("close") or []
+    # 거래량(WB1): 같은 콜에 실려온다. **주식만 의미**(FX·수익률지수·선물은 호출자가 무시).
+    # 없으면 series 점에 'v' 키 자체를 안 실어(additive·비파괴 — 기존 소비자 무영향).
+    volumes = quote0.get("volume") or []
     series = []
-    for t, c in zip(ts, quotes):
+    for i, (t, c) in enumerate(zip(ts, quotes)):
         cv, dt = _fnum(c), _epoch_to_date(t)
         if cv is not None and dt is not None:
-            series.append({"t": dt, "c": cv})
+            pt = {"t": dt, "c": cv}
+            vv = _fnum(volumes[i]) if i < len(volumes) else None   # i는 ts 인덱스와 정렬(null close만 드롭)
+            if vv is not None:
+                pt["v"] = vv
+            series.append(pt)
     series = series[-max_points:]                    # 최근 N일(오래된→최신 유지)
     # 값·등락 모두 시계열에서 도출 — 값=series[-1](차트 끝점과 일치), 전일=series[-2].
     # ⚠️ regularMarketPrice(라이브)를 close로 쓰면 시계열이 stale일 때 다일간 등락이 되고

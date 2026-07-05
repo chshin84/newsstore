@@ -32,14 +32,33 @@ def test_load_fails_loud_on_dup_key(tmp_path):
 E = [1782777600, 1782864000, 1782950400]
 
 
-def _yc(closes, *, epochs=None, chart_prev=None, currency="USD", price=None):
-    """Yahoo chart 응답 fake — closes=오래된→최신(Yahoo 순서). chart_prev=meta.chartPreviousClose."""
+def _yc(closes, *, epochs=None, chart_prev=None, currency="USD", price=None, volumes=None):
+    """Yahoo chart 응답 fake — closes=오래된→최신(Yahoo 순서). chart_prev=meta.chartPreviousClose.
+    volumes=indicators.quote[0].volume(WB1 — 주식 거래량, 같은 콜)."""
     ts = epochs if epochs is not None else E[:len(closes)]
     meta = {"regularMarketPrice": price if price is not None else closes[-1], "currency": currency}
     if chart_prev is not None:
         meta["chartPreviousClose"] = chart_prev
+    quote = {"close": closes}
+    if volumes is not None:
+        quote["volume"] = volumes
     return {"chart": {"result": [{"meta": meta, "timestamp": ts,
-            "indicators": {"quote": [{"close": closes}]}}], "error": None}}
+            "indicators": {"quote": [quote]}}], "error": None}}
+
+
+def test_parse_yahoo_volume_added_when_present():
+    # WB1: 거래량이 있으면 series 점에 'v'로 실린다(같은 콜). 없으면 'v' 키 자체가 없다(additive).
+    q = parse_yahoo_chart(_yc([100.0, 101.0, 102.0], volumes=[10, 20, 30], price=102.0))
+    assert [p["v"] for p in q["series"]] == [10.0, 20.0, 30.0]
+    assert [p["c"] for p in q["series"]] == [100.0, 101.0, 102.0]     # close 불변
+    q2 = parse_yahoo_chart(_yc([100.0, 101.0], price=101.0))          # 거래량 미수신
+    assert all("v" not in p for p in q2["series"])                    # 'v' 없음(비파괴)
+
+
+def test_parse_yahoo_volume_aligns_after_null_close_drop():
+    # null close는 드롭되지만 거래량은 timestamp 인덱스에 정렬(밀림 없음).
+    q = parse_yahoo_chart(_yc([100.0, None, 102.0], epochs=E, volumes=[11, 22, 33], price=102.0))
+    assert [(p["c"], p["v"]) for p in q["series"]] == [(100.0, 11.0), (102.0, 33.0)]  # null행 통째 드롭
 
 
 def test_parse_yahoo_ok_value_and_chart():

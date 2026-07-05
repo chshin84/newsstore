@@ -120,6 +120,50 @@ def test_report_groups_assets_only():
     assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 자산 렌즈가 정확히 1그룹
 
 
+def test_watch_lenses_expose_keywords_for_entity_resolve():
+    # signals.entity_resolve가 keywords로 결정론 매칭 — watch_lenses는 keywords를 노출한다.
+    t = topics.load_topics()
+    by = {w["ticker"]: w for w in topics.watch_lenses(t)}
+    assert "엔비디아" in by["NVDA"]["keywords"] and "NVIDIA" in by["NVDA"]["keywords"]
+    assert by["005930"]["symbol"] == "005930.KS"                  # watch_tickers와 동일 도출
+    # watch_tickers는 watch_lenses의 keywords 뺀 뷰(SSOT 도출)
+    assert {w["ticker"] for w in topics.watch_tickers(t)} == set(by)
+
+
+def test_price_keys_for_includes_extra_but_primary_unchanged():
+    # WB2: signals는 1차+부가 계열 전부, 리포트(price_key_for)는 1차만(불변).
+    t = topics.load_topics()
+    assert topics.price_key_for(t, "us_equity") == "sp500"        # 리포트 1차 불변
+    assert topics.price_keys_for(t, "us_equity") == ["sp500", "nasdaq"]
+    assert topics.price_keys_for(t, "us_rates") == ["us10y", "us2y", "us30y"]
+    assert topics.price_keys_for(t, "fx") == ["usdkrw", "usdjpy"]
+    assert topics.price_keys_for(t, "kr_realestate") == []        # 가격 없는 렌즈
+
+
+def test_all_live_price_keys_consumed_by_a_lens():
+    # WB2 드리프트 가드: prices.yaml의 모든 라이브 계열은 어떤 standing 렌즈에 매핑돼야 한다
+    # (미매핑=영원히 미소비로 조용히 썩음 — fail-loud). us2y·us30y·usdjpy·nasdaq이 이걸로 배선됨.
+    from newsstore.collect.prices import load_price_symbols
+    from pathlib import Path
+    t = topics.load_topics()
+    pkeys = {s.key for s in load_price_symbols(
+        str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
+    mapped = {k for keys in topics.all_lens_price_keys(t).values() for k in keys}
+    assert pkeys <= mapped, f"prices.yaml 미매핑 계열(고아): {sorted(pkeys - mapped)}"
+
+
+def test_extra_price_keys_exist_in_prices_yaml():
+    # 부가 계열도 1차 price_key와 같은 드리프트 가드(prices.yaml 실재).
+    from newsstore.collect.prices import load_price_symbols
+    from pathlib import Path
+    t = topics.load_topics()
+    pkeys = {s.key for s in load_price_symbols(
+        str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
+    for l in t["lenses"]:
+        for k in (l.get("extra_price_keys") or []):
+            assert k in pkeys, f"{l['id']}: extra_price_key {k!r}가 prices.yaml에 없음"
+
+
 def test_report_group_order_equities_then_rates_then_rest():
     # WB4: 조립 순서 = 주식(한국·미국) → 금리·채권(한국·미국) → 나머지. SSOT=topics.yaml 등장 순서.
     # 순서 pin(회귀 가드) — 계약 shape(정확히 1그룹·누락 없음)은 test_report_groups_assets_only가 지킴.
