@@ -221,13 +221,12 @@
 
     /* ===== 리포트 ===== */
     /* 프레임 칩(.fchip) — WW3: 색으로 구분하지 않는다. 글자·배경 중립 + 카테고리 라벨/아이콘(.fcat)이 변별 신호. */
-    .fchips { display:flex; flex-wrap:wrap; gap:6px; margin:2px 0 12px; }
-    .fchip { font-size:calc(12.5px*var(--fs)); font-weight:600; padding:3px 10px;
-      border-radius:999px; line-height:1.4; color:var(--fg);
-      background:var(--pill); border:1px solid var(--line2); }
-    /* 카테고리 표식(색 아닌 신호 — 의무): 아이콘 모양 + 라벨 텍스트로 위험/기대/주시를 구분(색맹 안전) */
-    .fcat { font-weight:800; font-size:calc(10px*var(--fs)); letter-spacing:.02em;
-      color:var(--sub); margin-right:5px; padding-right:5px; border-right:1px solid var(--line2); }
+    .fchips { display:flex; flex-direction:column; gap:5px; margin:6px 0 12px; }
+    /* WW3+(사용자): 프레임 = 배경·볼드 제거. 플레인 텍스트 목록(줄당 1극) + 카테고리 라벨/아이콘만 변별. */
+    .fchip { font-size:calc(12.5px*var(--fs)); font-weight:400; line-height:1.45; color:var(--fg); padding:1px 0; }
+    /* 카테고리 표식(색·볼드 아닌 신호): 아이콘 + 라벨 + 구분선으로 위험/기대/주시 변별(색맹 안전) */
+    .fcat { font-weight:400; font-size:calc(10.5px*var(--fs)); letter-spacing:.02em;
+      color:var(--sub); margin-right:6px; padding-right:6px; border-right:1px solid var(--line2); }
     .fcat .fcat-i { margin-right:2px; }
     /* B6(#5): 섹션 헤더 — 붉은 왼쪽 테두리 대신 시맨틱 색점(halo)+대문자 라벨로 전문적으로.
        색 의미 유지: risk=경고색 · premium=기대색 · watchpoints=중립초록 · not_triggered=회색. */
@@ -246,7 +245,8 @@
     #reportDoc .dlead { margin:4px 0 8px; display:-webkit-box; -webkit-line-clamp:2;
       -webkit-box-orient:vertical; overflow:hidden; }
     /* WW6: 리드가 배열이면 불릿(스캔 가능). 2줄 클램프는 불릿에 부적합 → 별도 표시(클램프 없음). */
-    #reportDoc .dlead-bul { list-style:none; margin:4px 0 9px; padding:0; }
+    #reportDoc .dlead-bul { list-style:none; margin:6px 0 12px; padding:9px 12px 9px 14px;
+      background:var(--leadbg); border-left:3px solid var(--accent); border-radius:0 8px 8px 0; }
     #reportDoc .dlead-bul li { position:relative; padding:2px 0 2px 15px; color:var(--fg); line-height:1.5;
       font-size:calc(13.5px*var(--fs)); }
     #reportDoc .dlead-bul li::before { content:""; position:absolute; left:3px; top:9px; width:5px; height:5px;
@@ -261,11 +261,12 @@
     /* B5(#2): '핵심 리스크 다이제스트'(.reprisks*) 제거 — 렌즈 리포트와 중복이라 스타일도 함께 삭제. */
     /* WW2: 글로벌 시장 프레임(.mktframe*)은 화면에서 숨김 — CSS 제거. 백엔드 _market 생성·주입은 유지(fork 확정). */
     /* 1c 위험 렌즈 accent(세로 스캔) */
-    #reportDoc .sdetail.hot { border-left:4px solid var(--risk); }
+    /* 각 리포트 카드 테두리 진하게 + 왼편 붉은색(risk) 제거(사용자). .hot은 '아킬레스 N' 배지로만. */
+    #reportDoc .sdetail { border:1px solid color-mix(in srgb, var(--sub) 35%, transparent); }
     /* 3a achilles_kind 이중부호화(프레임 칩) */
     .fchip .ras { font-size:.85em; margin-right:2px; }
-    .fchip.structural { border-style:dashed; opacity:.72; }
-    .fchip .evn { font-weight:800; margin-left:3px; opacity:.7; }
+    .fchip.structural { opacity:.72; }
+    .fchip .evn { font-weight:400; margin-left:3px; opacity:.7; }
     /* 2a 딥링크 스크롤 오프셋(스티키 헤더에 안 가리게) */
     #reportDoc .sdetail[id^="rep-"] { scroll-margin-top:120px; }
     @media (max-width:680px) {
@@ -406,9 +407,9 @@
         </div>
       </div>
       <div class="tabs">
-        <button class="tab" id="tabFeed">피드</button>
-        <button class="tab" id="tabStories">스토리</button>
         <button class="tab active" id="tabReport">리포트</button>
+        <button class="tab" id="tabStories">스토리</button>
+        <button class="tab" id="tabFeed">피드</button>
         <button class="tab tabprice" id="tabPrice">가격</button>
       </div>
       <div class="controls" id="feedControls" hidden>
@@ -437,6 +438,7 @@
           </button>
           <div class="navfolder-body" id="navStoryList"><div class="navempty">불러오는 중…</div></div>
         </div>
+        <a href="#feed" data-tab="feed" class="navlink navtab navleaf-top">피드</a>
         <a href="#price" data-tab="price" class="navlink navtab navleaf-top">가격</a>
       </nav>
     </aside>
@@ -765,9 +767,9 @@
                sections };
     }
     function splitReportSections(sections) {
-      // WW1: 트리거(아킬레스·기대 등)는 상단 유지, 주시·미발생은 최하단(미발생을 가장 아래).
+      // 트리거(아킬레스·기대)+주시는 상단 유지, 미발생만 최하단 접이식(사용자 — 주시 숨기지 마).
       // 표시 순서만 — 섹션 스키마·데이터 불변. UI 순서 규칙②.
-      const BOTTOM = { watchpoints: 0, not_triggered: 1 };   // 하단 순위(미발생이 마지막)
+      const BOTTOM = { not_triggered: 0 };   // 하단 = 미발생만(주시는 상단 표시)
       const top = [], bottom = [];
       for (const sec of (sections || [])) {
         if (sec && sec.name in BOTTOM) bottom.push(sec);
@@ -1203,15 +1205,17 @@
         const bottomHtml = bottom.map(secHtml).join("");
         const gen = tsToMs(report.generated_at);
         const hot = rc ? `<span class="newb" style="background:var(--risk)">아킬레스 ${rc}</span>` : "";
-        // B3(#3): 렌즈 프레임(아킬레스·기대·주시 극)을 온디맨드 펼치기 — 항상표시 아님(렌즈 반복 제거 유지).
+        // 프레임 = 추상 극. 토글은 AI요약 바로 아래, 펼치면 프레임 본문은 스토리 정리(트리거) 바로 뒤에 등장(사용자).
         const hasFrame = f && ((f.risks || []).length || (f.premiums || []).length || (f.watchpoints || []).length);
-        const lensFrameHtml = hasFrame
-          ? `<div class="rframe"><button class="rframe-toggle" type="button" aria-expanded="false">프레임 보기</button><div class="rframe-body" hidden>${frameChipsHtml(f)}</div></div>`
+        const frameId = "frame-" + lensId;
+        const frameToggleHtml = hasFrame
+          ? `<div class="rframe"><button class="rframe-toggle" type="button" data-frame-id="${esc(frameId)}" aria-expanded="false">프레임 보기</button></div>`
           : "";
-        // WW1: 주시·미발생 최하단 접이식(트리거·프레임 뒤). persistence는 extra:<lensId>(기본 접힘).
+        const frameBodyHtml = hasFrame ? `<div class="rframe-body" id="${esc(frameId)}" hidden>${frameChipsHtml(f)}</div>` : "";
+        // 미발생만 최하단 접이식(주시는 상단 표시). persistence는 extra:<lensId>(기본 접힘).
         const extraId = "extra:" + lensId, extraOpen = isOpen(extraId, false);
         const extraBlock = bottomHtml
-          ? `<div class="rextra"><button class="rextra-toggle" type="button" data-expand-id="${esc(extraId)}" aria-expanded="${extraOpen ? "true" : "false"}">주시·미발생</button><div class="rextra-body"${extraOpen ? "" : " hidden"}>${bottomHtml}</div></div>`
+          ? `<div class="rextra"><button class="rextra-toggle" type="button" data-expand-id="${esc(extraId)}" aria-expanded="${extraOpen ? "true" : "false"}">미발생</button><div class="rextra-body"${extraOpen ? "" : " hidden"}>${bottomHtml}</div></div>`
           : "";
         // WW4: 급부상(rising)은 사용자 노출 라벨 "급부상"으로 강제(내부 lensId만 rising). group과 중복이면 1회만.
         const disp = lensId === "rising" ? "급부상" : (LENS_LABELS[lensId] || lensId);
@@ -1225,8 +1229,9 @@
           <div class="seclbl">${seclbl}</div>
           <div class="dt">${txt(report.headline) || "(제목 없음)"} ${hot}${convHtml}${divHtml}${badge}${stale}${frameStale}${skew}</div>
           ${leadHtml}
+          ${frameToggleHtml}
           ${topHtml}
-          ${lensFrameHtml}
+          ${frameBodyHtml}
           ${extraBlock}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
@@ -1277,8 +1282,8 @@
         } catch (err) { moreBtn.disabled = false; moreBtn.textContent = "더보기 실패 — 다시"; }
         return;
       }
-      const rf = e.target.closest(".rframe-toggle");            // B3: 렌즈 프레임 온디맨드 펼치기
-      if (rf) { const b = rf.nextElementSibling, open = !!b && b.hasAttribute("hidden");
+      const rf = e.target.closest(".rframe-toggle");            // 프레임 온디맨드 — 본문은 정리 섹션 뒤(원격 id)
+      if (rf) { const b = document.getElementById(rf.dataset.frameId), open = !!b && b.hasAttribute("hidden");
         if (b) b.hidden = !open; rf.setAttribute("aria-expanded", open ? "true" : "false"); return; }
       const xt = e.target.closest(".rextra-toggle");            // WW1: 주시·미발생 최하단 접이식(펼침 상태 persist)
       if (xt) { const b = xt.nextElementSibling, open = !!b && b.hasAttribute("hidden");

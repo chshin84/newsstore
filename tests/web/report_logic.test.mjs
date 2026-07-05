@@ -41,7 +41,7 @@ test("assembleReportDoc: rising 없으면 그룹 순서만 (최상단 규칙은 
   assert.deepEqual(doc.sections.map(s => s.lensId), ["risk", "kr_equity"]);
 });
 
-test("splitReportSections: 트리거 상단 유지 · 주시·미발생 최하단(미발생이 가장 아래) — WW1", () => {
+test("splitReportSections: 트리거+주시 상단 유지 · 미발생만 최하단(사용자: 주시 숨기지 마)", () => {
   const sections = [
     { name: "not_triggered", items: [{ text: "n" }] },
     { name: "risk_triggered", items: [{ text: "r" }] },
@@ -49,9 +49,9 @@ test("splitReportSections: 트리거 상단 유지 · 주시·미발생 최하�
     { name: "premium_triggered", items: [{ text: "p" }] },
   ];
   const { top, bottom } = splitReportSections(sections);
-  // 상단은 원래 순서 보존(트리거류만), 하단은 항상 [주시, 미발생] 순(미발생 마지막)
-  assert.deepEqual(top.map(s => s.name), ["risk_triggered", "premium_triggered"]);
-  assert.deepEqual(bottom.map(s => s.name), ["watchpoints", "not_triggered"]);
+  // 상단 = 미발생 제외 전부(원래 순서 보존 — 주시 포함), 하단 = 미발생만
+  assert.deepEqual(top.map(s => s.name), ["risk_triggered", "watchpoints", "premium_triggered"]);
+  assert.deepEqual(bottom.map(s => s.name), ["not_triggered"]);
 });
 
 test("splitReportSections: 미발생만 있어도 하단, 알 수 없는 섹션은 상단(가시 유지) · 빈 입력 방어", () => {
