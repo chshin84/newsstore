@@ -120,10 +120,19 @@ def main(argv=None) -> int:
                                            for g, ids in _topics.report_groups(t).items()]})
                 lens_ids = _topics.report_lens_ids(t)             # 리포트=자산(standing)만
                 context_ids = _topics.context_lens_ids(t)         # 시장프레임·백드롭 입력(비자산 포함)
+                # 렌즈별 실제 가격 컨텍스트(뉴스 지연 보정 교차검증) — 가격키 매핑된 렌즈만.
+                price_ctx = {}
+                for lid in lens_ids:
+                    pk = _topics.price_key_for(t, lid)
+                    if pk:
+                        ctx = _report.price_context(store.get_price(pk))
+                        if ctx:
+                            price_ctx[lid] = ctx
                 _frames.run_frame_pass(store, client, lens_ids=lens_ids, now=now,   # 선행(§4)
                                        context_lens_ids=context_ids)
                 totals = _report.run_report_pass(store, client, lens_ids=lens_ids, now=now,
-                                                 context_lens_ids=context_ids)
+                                                 context_lens_ids=context_ids,
+                                                 price_ctx_by_lens=price_ctx)
         except LLMError as e:
             log.error("enrichment aborted: %s", e)
             return 1

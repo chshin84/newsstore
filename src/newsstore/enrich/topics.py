@@ -48,6 +48,15 @@ def context_lens_ids(t: dict) -> list[str]:
     return [l["id"] for l in t["lenses"] if l["type"] not in ("watch", "sector")]
 
 
+def price_key_for(t: dict, lens_id: str) -> str | None:
+    """렌즈 → 교차검증용 가격키(prices/{key}). 없으면 None(가격 없는 렌즈=교차검증 스킵).
+    뉴스는 지연될 수 있어, 실제 가격을 리포트의 '현재 상태' 우선 근거로 쓰기 위한 매핑(SSOT)."""
+    for l in t["lenses"]:
+        if l["id"] == lens_id:
+            return l.get("price_key")
+    return None
+
+
 def report_groups(t: dict) -> dict[str, list[str]]:
     """report_group → [lens_id...] (yaml 등장 순서 보존). UI 섹션 앵커 도출(SSOT).
     자산(standing) 렌즈만 — 리포트 대상과 일치(report_lens_ids). report_group 누락 시 KeyError."""

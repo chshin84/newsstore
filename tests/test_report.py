@@ -54,7 +54,7 @@ def test_min_stories_constant():
 
 
 from newsstore.enrich.report import (validate_report, build_section_prompt, build_backdrop_prompt,
-                                     build_review_prompt)
+                                     build_review_prompt, price_context)
 
 FRAME = {"risks": [{"id": "r1", "text": "빅테크 capex 감속"}],
          "premiums": [{"id": "p1", "text": "HBM 수요"}],
@@ -109,6 +109,47 @@ def test_section_prompt_includes_developments():
              "developments": [{"text": "아일랜드 당국 누적 1,500 BTC 압수", "delta_time": NOW}]}
     p = build_section_prompt("crypto", FRAME, [story], "")
     assert "아일랜드 당국 누적 1,500 BTC 압수" in p   # 전개가 생성기 입력에 실림
+
+
+def test_price_context_format_and_empty():
+    p = {"label": "원/달러", "close": 1520.0, "percent_change": -0.78, "symbol": "KRW=X",
+         "series": [{"t": "d1", "c": 1555}, {"t": "d2", "c": 1540}, {"t": "d3", "c": 1530},
+                    {"t": "d4", "c": 1525}, {"t": "d5", "c": 1520}]}
+    ctx = price_context(p)
+    assert "원/달러" in ctx and "1520" in ctx and "-0.78%" in ctx and "하락" in ctx   # 추세 방향
+    assert price_context(None) == "" and price_context({}) == "" and price_context({"close": None}) == ""
+
+
+def test_section_prompt_price_crosscheck_rule():
+    # 뉴스 지연 보정: 가격 주입 시 교차검증 규칙 명시(뉴스 vs 가격 어긋나면 가격 우선).
+    story = [{"id": "s1", "title": "t", "summary": "x"}]
+    p = build_section_prompt("fx", FRAME, story, "", price_ctx="원/달러 1520 (전일 -0.78%)")
+    assert "원/달러 1520" in p and "가격 교차검증" in p
+    assert "지연" in p and "우선 근거" in p
+    assert "가격 교차검증" not in build_section_prompt("fx", FRAME, story, "")   # 가격 없으면 규칙 없음
+
+
+def test_review_prompt_accepts_price_as_source():
+    # 리뷰어도 가격을 출처③으로 인정 — 가격 기반 현재상태 서술을 날조로 오탐하지 않게.
+    p = build_review_prompt({"headline": "h", "lead": "l", "sections": []},
+                            [{"id": "s1", "title": "t", "summary": "x"}], frame=FRAME,
+                            price_ctx="원/달러 1520 (전일 -0.78%)")
+    assert "원/달러 1520" in p and "출처③" in p
+
+
+def test_run_report_pass_injects_price_ctx_into_section():
+    store = _Store({"fx": _stories()}, {"fx": FRAME})
+    seen = {}
+
+    class _Cap(_LLM):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "데일리 리포트 에디터" in prompt:
+                seen["section"] = prompt
+            return super().generate_json(prompt, timeout=timeout, model=model)
+
+    run_report_pass(store, _Cap(SECTION_OK, {"passed": True, "notes": ""}),
+                    lens_ids=["fx"], now=NOW, price_ctx_by_lens={"fx": "원/달러 1520 (전일 -0.78%)"})
+    assert "원/달러 1520" in seen["section"] and "가격 교차검증" in seen["section"]
 
 
 def test_section_prompt_temporal_arc_and_causal_rule():

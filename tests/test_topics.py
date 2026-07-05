@@ -73,6 +73,23 @@ def test_report_lenses_are_assets_only():
             l["id"] == lid and l.get("report_group") for l in t["lenses"]), f"{lid}: report_group 누락"
 
 
+def test_price_key_mapping_for_crossvalidation():
+    # 렌즈→가격키 매핑(교차검증). 가격 있는 자산만, 없으면 None(스킵).
+    t = topics.load_topics()
+    assert topics.price_key_for(t, "fx") == "usdkrw"
+    assert topics.price_key_for(t, "us_equity") == "sp500"
+    assert topics.price_key_for(t, "oil_energy") == "wti"
+    assert topics.price_key_for(t, "precious_metals") == "gold"
+    assert topics.price_key_for(t, "kr_realestate") is None      # 가격 없음 → 스킵
+    # 매핑된 가격키는 config/prices.yaml에 실재해야 한다(드리프트 가드)
+    from newsstore.collect.prices import load_price_symbols
+    from pathlib import Path
+    pkeys = {s.key for s in load_price_symbols(str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
+    for l in t["lenses"]:
+        pk = l.get("price_key")
+        assert pk is None or pk in pkeys, f"{l['id']}: price_key {pk!r}가 prices.yaml에 없음"
+
+
 def test_context_lens_ids_includes_nonasset_for_foldin():
     # context = 시장프레임·백드롭 입력 풀 — 비자산(리스크·경제·정치·정책) 스토리를 자산 리포트로
     # 녹이려면(#2) 이 풀에 남아야 한다. watch·sector만 제외.

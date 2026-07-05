@@ -149,8 +149,35 @@ def _story_line(s: dict) -> str:
     return base + (f" :: 전개(시간순): {arc}" if arc else "")
 
 
+def _g(v):
+    """숫자면 짧게 포맷(소수 정리), 아니면 빈 문자열."""
+    try:
+        return f"{float(v):g}"
+    except (TypeError, ValueError):
+        return ""
+
+
+def price_context(price: dict | None) -> str:
+    """가격 문서 → 교차검증용 한 줄(현재값·전일 등락·최근 추세). 뉴스 지연을 가격으로 보정하는 앵커.
+    가격 없음/무효 → 빈 문자열(교차검증 생략)."""
+    if not isinstance(price, dict):
+        return ""
+    close = _g(price.get("close"))
+    if not close:
+        return ""
+    label = price.get("label") or price.get("symbol") or "가격"
+    pct = price.get("percent_change")
+    pct_s = f"{pct:+.2f}%" if isinstance(pct, (int, float)) else "?"
+    trend = ""
+    pts = [s.get("c") for s in (price.get("series") or [])[-5:] if isinstance(s.get("c"), (int, float))]
+    if len(pts) >= 2:
+        arrow = "하락" if pts[-1] < pts[0] else ("상승" if pts[-1] > pts[0] else "횡보")
+        trend = f", 최근 {len(pts)}일 {arrow}({_g(pts[0])}→{_g(pts[-1])})"
+    return f"{label} {close} (전일 {pct_s}{trend})"
+
+
 def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str,
-                         reject_notes: str | None = None) -> str:
+                         reject_notes: str | None = None, price_ctx: str | None = None) -> str:
     import json as _json
     # 실 프레임은 updated_at(datetime) 등 비직렬화 필드를 포함 — 3축(AXES)만 추려 직렬화(C1)
     axes_only = {a: frame.get(a) or [] for a in AXES}
@@ -165,6 +192,11 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
         "갱신·반박·되돌리면 현재(최신) 상태로 판정하라 — 어제 급변이 오늘 진정/반전됐으면 리포트는 "
         "'진정/반전'이지 옛 급변이 아니다. 되돌림(A→B→A 허위→B 되돌림)이 있으면 그 되돌림을 헤드라인/"
         "핵심으로. 리포트는 '지금 시점' 스냅샷이다.\n"
+        + (f"가격 교차검증(중요): 이 자산의 실제 가격 = {price_ctx}. 뉴스는 지연될 수 있다 — "
+           "뉴스 서술의 방향과 가격이 어긋나면(예: 뉴스는 급등·공포인데 가격은 하락·안정) "
+           "**가격을 '현재 상태'의 우선 근거**로 삼아 서술을 보정하라(가격이 이미 반영했으면 그게 현재다). "
+           "가격이 뉴스를 확증하면 그 판단의 신뢰를 높여라. 단 가격은 '왜'를 말하지 않으니 인과는 스토리로.\n"
+           if price_ctx else "") +
         "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용 — "
         "인용 스토리에 실제로 담긴 사실만 근거로 삼아라. 스토리에 없는 수치·고유명사·협의/계약 "
         "진전 등을 지어내 트리거 근거로 쓰지 마라(과인용 금지 — grounding 리뷰 기각의 주 원인). "
@@ -181,32 +213,35 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
 MAX_BACKDROP = 1200
 
 
-def build_review_prompt(report: dict, stories: list[dict], frame: dict | None = None) -> str:
+def build_review_prompt(report: dict, stories: list[dict], frame: dict | None = None,
+                        price_ctx: str | None = None) -> str:
     import json as _json
-    # 리뷰어는 생성기와 '같은' 근거(전개 포함)를 봐야 한다 — 덜 보면 정당한 항목을 오탐(#1).
+    # 리뷰어는 생성기와 '같은' 근거(전개·가격 포함)를 봐야 한다 — 덜 보면 정당한 항목을 오탐(#1).
     lines = [_story_line(s) for s in stories]
-    # 출처는 둘: ① 인용 스토리(+전개) ② standing 프레임 극. watchpoints·트리거는 프레임 극을
-    # 오늘 스토리에 대조한 것이라, 프레임 극을 restate하는 것은 '프레임이 출처'다(날조 아님).
+    # 출처는 셋: ① 인용 스토리(+전개) ② standing 프레임 극 ③ 실제 가격(현재 상태 근거).
     frame_block = ""
     if frame:
         axes_only = {a: frame.get(a) or [] for a in AXES}
         frame_block = ("standing 프레임(출처② — 리포트가 이 극을 restate/관찰하는 것은 근거 있음):\n"
                        f"{_json.dumps(axes_only, ensure_ascii=False)}\n")
+    price_block = (f"실제 가격(출처③ — 뉴스 지연 보정용, 가격 기반 '현재 상태' 서술은 근거 있음): {price_ctx}\n"
+                   if price_ctx else "")
     return (
-        "당신은 리포트 심사자다(grounding+fit). 출처는 둘: ① 인용 스토리(제목·요약·전개) ② 아래 "
-        "standing 프레임 극. 기각 기준: (1) 항목 주장이 인용 스토리·프레임 극 **어디에도 없는** "
-        "새 사실·수치를 날조(둘 중 하나에 있으면 근거 있음 — 특히 프레임 극의 내용을 watchpoints/"
-        "트리거로 옮긴 것은 정상), (2) 매수/매도/비중 조언 포함, (3) 인용 story와 실제로 무관한 "
-        "억지 연결(과인용). 단순히 요약 앞부분에 없다고 날조로 속단 말고 전개·프레임까지 확인하라.\n"
-        + frame_block +
+        "당신은 리포트 심사자다(grounding+fit). 출처는 셋: ① 인용 스토리(제목·요약·전개) ② standing "
+        "프레임 극 ③ 실제 가격. 기각 기준: (1) 항목 주장이 셋 **어디에도 없는** 새 사실·수치를 날조 "
+        "(하나라도 있으면 근거 있음 — 프레임 극을 watchpoints/트리거로 옮기거나, 가격에 근거해 현재 "
+        "상태를 서술하는 것은 정상), (2) 매수/매도/비중 조언 포함, (3) 인용 story와 실제로 무관한 "
+        "억지 연결(과인용). 단순히 요약 앞부분에 없다고 날조로 속단 말고 전개·프레임·가격까지 확인하라.\n"
+        + frame_block + price_block +
         f"리포트:\n{_json.dumps(report, ensure_ascii=False)}\n스토리:\n" + "\n".join(lines) + "\n"
         '아래 JSON만 출력: {"passed": true|false, "notes": "기각 사유 또는 빈 문자열"}')
 
 
-def _review(client, report: dict, stories: list[dict], frame: dict | None = None) -> dict:
-    """리뷰 콜 — 실패는 passed=false(통과 위장 금지, §5 표). frame=섹션 리뷰 시 극 출처(#1)."""
+def _review(client, report: dict, stories: list[dict], frame: dict | None = None,
+            price_ctx: str | None = None) -> dict:
+    """리뷰 콜 — 실패는 passed=false(통과 위장 금지, §5 표). frame=극 출처(#1), price_ctx=가격 출처."""
     try:
-        v = client.generate_json(build_review_prompt(report, stories, frame), timeout=60.0,
+        v = client.generate_json(build_review_prompt(report, stories, frame, price_ctx), timeout=60.0,
                                  model=model_for("report_review"))
     except LLMError as e:
         return {"passed": False, "notes": f"리뷰 불가: {e}"}
@@ -216,7 +251,8 @@ def _review(client, report: dict, stories: list[dict], frame: dict | None = None
 
 
 def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
-                    context_lens_ids: list[str] | None = None) -> dict:
+                    context_lens_ids: list[str] | None = None,
+                    price_ctx_by_lens: dict[str, str] | None = None) -> dict:
     """§4 파이프라인: 백드롭 → 섹션(렌즈별) → 급부상 → 저장. 프레임은 입력(frames.py 선행).
     리포트는 lens_ids(=자산)만 생성. context_lens_ids(비자산 포함)가 주어지면 백드롭 입력을
     그 넓은 풀에서 뽑아 정치·정책·경제 뉴스를 자산 리포트로 녹인다(#2 fold-in)."""
@@ -265,11 +301,11 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
         selected[lens_id] = top
         top_k_ids |= {s["id"] for s in top}
 
-    def _one(doc_id, lens_id, frame, top, criteria=None) -> str:
+    def _one(doc_id, lens_id, frame, top, price_ctx="", criteria=None) -> str:
         """한 렌즈 리포트 생성. 반환 'reported'|'failed'(집계는 호출부 — 스레드 안전).
-        store.save_report만 부수효과(Firestore 클라 스레드 안전). 실패=기존 유지(§5b)."""
+        price_ctx=이 자산 실제 가격(뉴스 지연 보정 교차검증). store.save_report만 부수효과."""
         try:
-            raw = client.generate_json(build_section_prompt(lens_id, frame, top, backdrop),
+            raw = client.generate_json(build_section_prompt(lens_id, frame, top, backdrop, price_ctx=price_ctx),
                                        timeout=90.0, model=model_for("report_section"))
         except LLMError as e:
             log.warning("report %s: 생성 실패 — 기존 유지(§5b): %s", doc_id, e)
@@ -278,17 +314,18 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
         if v is None:
             log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
             return "failed"
-        review = _review(client, v, top, frame)         # 기각이어도 저장+배지(결정③). frame=극 출처(#1)
+        review = _review(client, v, top, frame, price_ctx)   # frame=극 출처(#1), price=가격 출처
         if not review["passed"]:
             # 리뷰 실패 → 실패 사유(notes)를 넣어 1회만 재생성·재검증·재리뷰(루프 금지, 개선 기회).
             # 재리뷰 통과 시 개선분으로 교체; 실패해도 기존 v를 그대로 저장(배지 계약 불변).
             try:
                 raw2 = client.generate_json(
-                    build_section_prompt(lens_id, frame, top, backdrop, reject_notes=review["notes"]),
+                    build_section_prompt(lens_id, frame, top, backdrop,
+                                         reject_notes=review["notes"], price_ctx=price_ctx),
                     timeout=90.0, model=model_for("report_section"))
                 v2 = validate_report(raw2, frame=frame, input_story_ids={s["id"] for s in top})
                 if v2 is not None:
-                    review2 = _review(client, v2, top, frame)
+                    review2 = _review(client, v2, top, frame, price_ctx)
                     if review2["passed"]:
                         v, review = v2, review2         # 개선분 채택
             except LLMError as e:                       # 재시도 콜 실패 → 기존 v 유지(전파 금지)
@@ -303,7 +340,8 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
     # 5a: 렌즈별 리포트를 유계 동시성으로 병렬화(#45 벽시간 절감). 동시성=1이면 직렬과 동일(가역).
     # rising은 top_k 확정 의존이라 팬아웃 뒤 순차(§3.5 순서). save_report만 부수효과라 스레드 안전.
     conc = max(1, int(os.environ.get("NEWSSTORE_REPORT_CONCURRENCY", "6")))
-    units = [(lid, lid, store.get_frame(lid), top) for lid, top in selected.items()]
+    pctx = price_ctx_by_lens or {}
+    units = [(lid, lid, store.get_frame(lid), top, pctx.get(lid, "")) for lid, top in selected.items()]
     with ThreadPoolExecutor(max_workers=min(conc, max(1, len(units)))) as ex:
         for r in ex.map(lambda u: _one(*u), units):
             totals[r] += 1
@@ -312,7 +350,7 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
     all_stories = {s["id"]: s for ss in per_lens.values() for s in ss}
     rising = select_rising(list(all_stories.values()), top_k_ids=top_k_ids, now=now)
     if len(rising) >= REPORT_MIN_STORIES:
-        totals[_one("rising", "rising", {}, rising,
+        totals[_one("rising", "rising", {}, rising, price_ctx="",
                     criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")] += 1
     # 스킵 신호 발행(§4) — UI가 "아직 생성 전/오늘 스토리 부족" vs "갱신 지연"을 구분.
     # 스킵 0건이어도 빈 배열로 덮어써 전 런의 스킵 잔재를 제거한다(멱등).
