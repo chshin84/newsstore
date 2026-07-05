@@ -228,7 +228,14 @@ def divergence(frame: dict, price: dict | None, price_key: str | None, *, deadba
         kind = "over_hope" if direction <= eps else "aligned"    # 안 오름/무반응 → 과기대, 상승 → 정합
     pct = price.get("percent_change")
     price_pct = round(float(pct), 2) if isinstance(pct, (int, float)) else round(direction, 2)
-    trend = "상승" if direction > 0 else ("하락" if direction < 0 else "무반응")
+    # 추세 라벨은 **deadband 상대**로 3분한다(보합/상승/하락). ε 안이면 '보합'이라, over_fear는
+    # '하락' 버킷을, over_hope는 '상승' 버킷을 절대 만들지 않는다(안 빠짐/안 오름과 모순 방지).
+    if direction > eps:
+        trend = "상승"
+    elif direction < -eps:
+        trend = "하락"
+    else:
+        trend = "보합"
     if kind == "over_fear":
         note = (f"뉴스 프레임은 공포(위험 극)가 우세하나 최근 가격 추세는 안 빠짐({trend}) — "
                 "시장이 아직 반영 안 했거나 뉴스가 과민할 수 있다는 재료(단정 아님).")
@@ -239,6 +246,8 @@ def divergence(frame: dict, price: dict | None, price_key: str | None, *, deadba
         note = f"뉴스 프레임 방향과 최근 가격 추세({trend})가 같은 쪽 — 서로 확증하는 재료(단정 아님)."
     if isinstance(pct, (int, float)):
         note += f" 전일 등락 {price_pct:+.2f}%."
+    else:                                 # pct 없어 price_pct가 '추세 %'일 때 그 출처를 노출(전일 등락 아님)
+        note += f" (전일 등락 데이터 없어 price_pct는 최근 추세 {price_pct:+.2f}%로 대체됨.)"
     return {"kind": kind, "price_key": price_key, "price_pct": price_pct, "note": note}
 
 

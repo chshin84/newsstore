@@ -483,6 +483,24 @@ def test_divergence_percent_change_fallback_when_no_series():
     assert d["kind"] == "over_fear" and d["price_pct"] == 0.5
 
 
+def test_divergence_note_has_no_trend_contradiction_within_deadband():
+    # 리뷰 지적: over_fear인데 추세가 살짝 하락(deadband 안)이면 '안 빠짐(하락)' 모순이 났다.
+    # deadband 상대 3분(보합)으로 over_fear는 '하락'을, over_hope는 '상승'을 안 만든다.
+    fear = {"risks": [{"id": "r1"}], "premiums": []}
+    d = divergence(fear, _price([100, 99.7]), "x", deadband=0.3)   # 추세 −0.3%(경계=보합)
+    assert d["kind"] == "over_fear" and "하락" not in d["note"] and "보합" in d["note"]
+    hope = {"premiums": [{"id": "p1"}], "risks": []}
+    d2 = divergence(hope, _price([100, 100.2]), "x", deadband=0.3)  # 추세 +0.2%(보합)
+    assert d2["kind"] == "over_hope" and "상승" not in d2["note"] and "보합" in d2["note"]
+
+
+def test_divergence_note_discloses_when_price_pct_is_trend_not_prior_day():
+    # pct 없어 price_pct가 '추세 %'로 대체되면 note가 그 출처를 노출(전일 등락으로 오해 금지).
+    fear = {"risks": [{"id": "r1"}], "premiums": []}
+    d = divergence(fear, _price([100, 101, 102]), "x", deadband=0.3)   # series만, pct 없음
+    assert "전일 등락 데이터 없" in d["note"] and d["price_pct"] == 2.0
+
+
 def test_divergence_price_pct_is_prior_day_change_per_schema():
     fear = {"risks": [{"id": "r1"}], "premiums": []}
     d = divergence(fear, _price([100, 102], pct=-0.78), "usdkrw", deadband=0.3)

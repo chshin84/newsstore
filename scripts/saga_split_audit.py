@@ -94,7 +94,13 @@ def candidate_pairs(stories: list[dict], *, window: timedelta, min_cos: float = 
                     embed_of=_embed_of) -> list[dict]:
     """결정론 후보 축소 — (지배 개체 공유) ∧ (시간 근접) ∧ (코사인 ≥ floor)인 스토리 쌍.
     같은 사가로 의심되는 서로 다른 스토리 쌍을 찾는다(임베딩은 패리티 준수). 코사인 내림차순.
-    embed_of 주입 가능(기본=저장 임베딩 재사용)."""
+    embed_of 주입 가능(기본=저장 임베딩 재사용).
+
+    비교 의미 주의(측정 타당성): 여기 코사인은 스토리 centroid_sum(=멤버 임베딩 합, 코사인상 평균)
+    끼리다. 프로덕션 gray-band 임계는 기사→스토리 centroid(온라인 assign)·max 기사쌍(배치 머지)에서
+    캘리브레이션됐다. 임베딩 '공간'은 같지만(패리티 충족) centroid↔centroid 값은 그 비교들보다
+    체계적으로 낮다 — 임계 대조는 **방향 지표**이지 정밀 판정이 아니다(스펙 A3: 임계는 산출 데이터로
+    확정, 지금은 방향만)."""
     out: list[dict] = []
     n = len(stories)
     for i in range(n):
@@ -223,6 +229,10 @@ def format_report(result: dict, *, labels: dict | None = None) -> str:
     lines.append(f"→ 처방: {result['prescription']}  "
                  "(cluster_recal=임계 바로 아래 갈림·재캘 / llm_saga=의미 기반 / "
                  "saga_unnecessary=분리율 무시 / inconclusive=애매)")
+    lines.append("주의: 코사인은 스토리 centroid_sum(평균)끼리다. 프로덕션 병합 임계는 "
+                 "기사→centroid(온라인)·max 기사쌍(배치)에서 캘리브레이션됐으므로 이 값은 "
+                 "그보다 체계적으로 낮다 — 임계 대조는 방향 지표이지 정밀 판정이 아니다"
+                 "(스펙: 임계는 산출 데이터로 확정). 처방을 과신하지 말 것.")
     return "\n".join(lines)
 
 
