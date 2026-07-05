@@ -366,6 +366,11 @@
     .rframe-toggle[aria-expanded="true"]::before { content:"▾ "; }
     @media (hover:hover) { .rframe-toggle:hover { background:var(--hover); } }
     .rframe-body { margin-top:6px; }
+    /* 프레임 극을 각 정리 항목 옆(인라인)으로 — 사용자: 뭉치지 말고 항목별. '프레임 보기'가 섹션에 .frames-on을 켠다. */
+    .ifr { display:none; margin:3px 0 7px 2px; padding:2px 0 2px 9px; border-left:2px solid var(--line2);
+      font-size:calc(11.5px*var(--fs)); color:var(--sub); line-height:1.45; }
+    #reportDoc .sdetail.frames-on .ifr { display:block; }
+    .ifr .ras { margin-right:2px; } .ifr .evn { margin-left:2px; opacity:.7; }
     /* WW1: 주시·미발생 — 최하단 접이식(기본 숨김). 트리거·프레임 뒤에 배치. */
     .rextra { margin:8px 0 2px; }
     .rextra-toggle { background:var(--pill); color:var(--pill-fg); border:1px solid var(--line);
@@ -1418,6 +1423,19 @@
         const cv = convictionPill(report.conviction);
         const convHtml = cv
           ? `<span class="convpill conv-${esc(cv.level)}" title="${esc(cv.basis)}"><span class="cvdot"></span>${txt(cv.label)}</span>` : "";
+        // 프레임 극을 pole_id로 인덱싱 → 각 섹션 항목 옆에 그 항목의 극을 인라인(사용자: 뭉치지 말고 항목별).
+        const poleById = {}, POLE_CAT = { risk: ["▲", "위험"], imp: ["◆", "기대"], green: ["◇", "주시"] };
+        if (f) for (const [arr, cls] of [[f.risks, "risk"], [f.premiums, "imp"], [f.watchpoints, "green"]])
+          for (const p of (arr || [])) if (p && p.id) poleById[p.id] = { ...p, _cls: cls };
+        const poleInlineHtml = (poleId) => {
+          const p = poleId && poleById[poleId];
+          if (!p) return "";
+          const [icon, label] = POLE_CAT[p._cls] || ["", ""];
+          const evN = (p.evidence_dev_ids || []).length;
+          const ras = p.achilles_kind === "words_deeds" ? `<span class="ras" aria-label="말-행동 괴리">⚡</span>` : "";
+          const evn = evN ? `<sup class="evn">${evN}</sup>` : "";
+          return `<div class="ifr"><span class="fcat"><span class="fcat-i" aria-hidden="true">${icon}</span>${label}</span>${ras}${txt(p.text)}${evn}</div>`;
+        };
         // 섹션 1개 → HTML(빈 섹션은 "" — 렌더 생략). WW1 재배치를 위해 섹션→HTML을 함수로 뽑는다.
         const secHtml = (sec) => {
           const items = (sec.items || []).map(it => {
@@ -1430,7 +1448,7 @@
             const evRow = sids.length
               ? `<div class="ev-row"><button class="ev-toggle" type="button" aria-expanded="false" data-sids="${esc(sids.join(","))}">근거 · 인용 스토리 ${sids.length}</button>${relHtml}</div><div class="ev-body" hidden></div>`
               : "";
-            return `<li>${txt(it.text)}${evRow}</li>`;
+            return `<li>${txt(it.text)}${evRow}${poleInlineHtml(it.pole_id)}</li>`;
           }).join("");
           return items ? `<h4 class="rsec-h ${esc(sec.name || "")}">${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
         };
@@ -1442,11 +1460,10 @@
         const hot = rc ? `<span class="newb" style="background:var(--risk)">아킬레스 ${rc}</span>` : "";
         // 프레임 = 추상 극. 토글은 AI요약 바로 아래, 펼치면 프레임 본문은 스토리 정리(트리거) 바로 뒤에 등장(사용자).
         const hasFrame = f && ((f.risks || []).length || (f.premiums || []).length || (f.watchpoints || []).length);
-        const frameId = "frame-" + lensId;
+        // 프레임 보기 = 섹션에 .frames-on 토글 → 각 항목 옆 인라인 극 표시(뭉친 블록 제거 — 사용자).
         const frameToggleHtml = hasFrame
-          ? `<div class="rframe"><button class="rframe-toggle" type="button" data-frame-id="${esc(frameId)}" aria-expanded="false">프레임 보기</button></div>`
+          ? `<div class="rframe"><button class="rframe-toggle" type="button" aria-expanded="false">프레임 보기</button></div>`
           : "";
-        const frameBodyHtml = hasFrame ? `<div class="rframe-body" id="${esc(frameId)}" hidden>${frameChipsHtml(f)}</div>` : "";
         // 미발생만 최하단 접이식(주시는 상단 표시). persistence는 extra:<lensId>(기본 접힘).
         const extraId = "extra:" + lensId, extraOpen = isOpen(extraId, false);
         const extraBlock = bottomHtml
@@ -1466,7 +1483,6 @@
           ${leadHtml}
           ${frameToggleHtml}
           ${topHtml}
-          ${frameBodyHtml}
           ${extraBlock}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
         </section>`;
@@ -1521,9 +1537,9 @@
         } catch (err) { moreBtn.disabled = false; moreBtn.textContent = "더보기 실패 — 다시"; }
         return;
       }
-      const rf = e.target.closest(".rframe-toggle");            // 프레임 온디맨드 — 본문은 정리 섹션 뒤(원격 id)
-      if (rf) { const b = document.getElementById(rf.dataset.frameId), open = !!b && b.hasAttribute("hidden");
-        if (b) b.hidden = !open; rf.setAttribute("aria-expanded", open ? "true" : "false"); return; }
+      const rf = e.target.closest(".rframe-toggle");            // 프레임 보기 = 각 항목 옆 인라인 극 표시(.frames-on)
+      if (rf) { const sec = rf.closest(".sdetail"); const on = !!sec && sec.classList.toggle("frames-on");
+        rf.setAttribute("aria-expanded", on ? "true" : "false"); return; }
       const xt = e.target.closest(".rextra-toggle");            // WW1: 주시·미발생 최하단 접이식(펼침 상태 persist)
       if (xt) { const b = xt.nextElementSibling, open = !!b && b.hasAttribute("hidden");
         if (b) b.hidden = !open; xt.setAttribute("aria-expanded", open ? "true" : "false");
