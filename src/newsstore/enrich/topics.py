@@ -48,6 +48,22 @@ def context_lens_ids(t: dict) -> list[str]:
     return [l["id"] for l in t["lenses"] if l["type"] not in ("watch", "sector")]
 
 
+def watch_tickers(t: dict) -> list[dict]:
+    """watch 렌즈(개별 종목) → 종목 히스토리 수집 대상 [{ticker, symbol, label}].
+    Yahoo 심볼: 한국 티커(전부 숫자)면 `.KS` 접미(예 005930→005930.KS), 그 외 그대로(NVDA 등)."""
+    out = []
+    for l in t["lenses"]:
+        if l.get("type") != "watch":
+            continue
+        tk = str(l.get("ticker") or "").strip()
+        if not tk:
+            continue
+        sym = f"{tk}.KS" if tk.isdigit() else tk
+        lab = (l.get("label") or {}).get("ko") if isinstance(l.get("label"), dict) else None
+        out.append({"ticker": tk, "symbol": sym, "label": lab or l["id"]})
+    return out
+
+
 def price_key_for(t: dict, lens_id: str) -> str | None:
     """렌즈 → 교차검증용 가격키(prices/{key}). 없으면 None(가격 없는 렌즈=교차검증 스킵).
     뉴스는 지연될 수 있어, 실제 가격을 리포트의 '현재 상태' 우선 근거로 쓰기 위한 매핑(SSOT)."""

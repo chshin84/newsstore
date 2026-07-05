@@ -94,10 +94,12 @@ def parse_yahoo_chart(raw, *, max_points: int = SERIES_MAX_POINTS) -> dict | Non
 
 
 def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbol],
-                   *, delay_s: float = 0.0) -> int:
-    """각 심볼을 fetch(symbol)→parse_yahoo_chart→store.save_price(key, ...). 반환=저장 수.
+                   *, delay_s: float = 0.0, save: Callable[[str, dict], None] | None = None) -> int:
+    """각 심볼을 fetch(symbol)→parse_yahoo_chart→save(key, ...). 반환=저장 수.
+    save 미지정=store.save_price(가격 앵커). 종목 히스토리는 save=store.save_stock_price로 재사용.
     개별 심볼 실패(에러 응답·파싱 실패)는 스킵(fail-soft, 비파괴 — 기존 값 유지).
     delay_s: 콜 간 지연(Yahoo throttle 대응 — 엔트리포인트가 주입)."""
+    save = save or store.save_price
     n = 0
     for i, s in enumerate(symbols):
         if delay_s and i:
@@ -111,7 +113,7 @@ def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbo
         if q is None:
             log.warning("price %s(%s): 무효 응답 — 스킵", s.key, s.symbol)
             continue
-        store.save_price(s.key, {**q, "label": s.label, "symbol": s.symbol})
+        save(s.key, {**q, "label": s.label, "symbol": s.symbol})
         n += 1
     log.info("price pass: %d/%d saved", n, len(symbols))
     return n

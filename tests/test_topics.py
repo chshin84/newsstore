@@ -73,6 +73,15 @@ def test_report_lenses_are_assets_only():
             l["id"] == lid and l.get("report_group") for l in t["lenses"]), f"{lid}: report_group 누락"
 
 
+def test_watch_tickers_yahoo_symbol_mapping():
+    # 종목 히스토리 수집 대상 — 한국 티커(숫자)는 .KS, 미국은 그대로.
+    t = topics.load_topics()
+    by = {w["ticker"]: w for w in topics.watch_tickers(t)}
+    assert by["005930"]["symbol"] == "005930.KS" and by["005930"]["label"] == "삼성전자"
+    assert by["NVDA"]["symbol"] == "NVDA"
+    assert len(by) >= 10                                # 10개 watch 종목
+
+
 def test_price_key_mapping_for_crossvalidation():
     # 렌즈→가격키 매핑(교차검증). 가격 있는 자산만, 없으면 None(스킵).
     t = topics.load_topics()

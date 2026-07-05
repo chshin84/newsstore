@@ -111,6 +111,20 @@ def test_run_price_pass_fetches_and_saves():
     assert "^GSPC" in calls and "CL=F" in calls
 
 
+def test_run_price_pass_uses_custom_save():
+    # 종목 히스토리: save=store.save_stock_price로 stock_prices에 저장(가격 앵커와 분리).
+    saved = {}
+    class _S2:
+        def save_price(self, k, d): saved[("price", k)] = d
+        def save_stock_price(self, k, d): saved[("stock", k)] = d
+    store = _S2()
+    syms = [PriceSymbol("005930", "005930.KS", "삼성전자")]
+    n = run_price_pass(store, lambda s: _yc([99.0, 100.0], price=100.0),
+                       syms, save=store.save_stock_price)
+    assert n == 1 and ("stock", "005930") in saved and ("price", "005930") not in saved
+    assert saved[("stock", "005930")]["close"] == 100.0 and saved[("stock", "005930")]["symbol"] == "005930.KS"
+
+
 def test_run_price_pass_skips_failed_fetch():
     syms = [PriceSymbol("kosdaq", "^KQ11", "코스닥")]
     def fake_fetch(symbol):

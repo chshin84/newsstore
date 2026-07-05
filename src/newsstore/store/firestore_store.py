@@ -267,6 +267,14 @@ class FirestoreStore:
         snap = self.db.collection("prices").document(key).get()
         return (snap.to_dict() or {}) if snap.exists else {}
 
+    def save_stock_price(self, ticker: str, data: dict) -> None:
+        """stock_prices/{ticker} — 뉴스 언급 종목 히스토리 내부 테이블(계속 업데이트). 통째 덮어쓰기."""
+        self.db.collection("stock_prices").document(ticker).set(dict(data))
+
+    def get_stock_price(self, ticker: str) -> dict:
+        snap = self.db.collection("stock_prices").document(ticker).get()
+        return (snap.to_dict() or {}) if snap.exists else {}
+
     def get_stories_for_report(self, lens_id: str, cutoff) -> list[dict]:
         # 전수 스캔(open)+클라 필터 — lensing/scoring/article과 동일 패턴(신규 인덱스 불요).
         out = []
