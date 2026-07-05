@@ -14,6 +14,17 @@
     document.documentElement.style.setProperty("--fs",
       { s: ".92", m: "1", l: "1.15" }[localStorage.getItem("ns_fs") || "m"]);
   </script>
+  <script>
+    // 부트 워치독(B5): 디폴트 첫 화면=리포트라, 모듈 import 실패(config.js 404 등)로 앱이 죽으면
+    // 그게 첫 화면이 된다(solved). 정상 부팅이면 모듈이 __nsBooted=true로 이 폴백을 무력화한다.
+    window.__nsBooted = false;
+    setTimeout(function () {
+      if (window.__nsBooted) return;
+      var el = document.getElementById("reportDoc") || document.getElementById("list");
+      if (el) el.innerHTML = '<div class="error">앱을 불러오지 못했습니다. 설정 또는 네트워크 문제일 수 있어요.'
+        + '<br>새로고침하거나 잠시 후 다시 시도해 주세요.</div>';
+    }, 8000);
+  </script>
   <style>
     :root {
       --bg:#fdfcf8; --card:#fffefc; --line:#ece6da; --fg:#2f2a23;
@@ -225,17 +236,7 @@
     .rsec-h.watchpoints { border-left-color:var(--green); color:var(--green); }
     /* 리포트 인용 카드 1열 + 폭 상한(전역 .darts 1열은 Agent C — 여기선 리포트 쪽 보장만) */
     .darts.rcards { grid-template-columns:1fr; max-width:560px; }
-    /* 스토리 카드 클릭 확장(.scx) — 패턴 E: .open 토글, max-height .18s ease-out */
-    .scx { max-height:0; overflow:hidden; transition:max-height .18s ease-out; }
-    .scard.open .scx { max-height:var(--expand-max); overflow:auto; }
-    .scx-lead { font-size:calc(12px*var(--fs)); color:var(--fg); background:var(--leadbg);
-      border-left:3px solid var(--accent); padding:7px 9px; border-radius:0 6px 6px 0;
-      margin:8px 0 4px; line-height:1.55; }
-    .scx .abul { margin:6px 0 2px; }
-    .scx .abul li { font-size:calc(11.5px*var(--fs)); line-height:1.5; padding:2px 0 2px 14px; }
-    .scx .abul li::before { top:9px; }
-    /* 앵커 pill 행(리포트 목차) */
-    .ranchors { margin:0 0 12px; gap:5px 6px; }
+    /* (.scx 스토리카드 확장·.ranchors 인라인 목차 CSS는 B2/B3에서 제거 — 목차는 사이드바로, 근거는 접이식으로) */
     /* 1a 핵심 리스크 다이제스트 스트립 */
     .reprisks { border-left:4px solid var(--risk); background:color-mix(in srgb, var(--risk) 8%, transparent);
       border-radius:0 8px 8px 0; padding:10px 14px; margin:0 0 14px; }
@@ -262,8 +263,78 @@
     @media (max-width:680px) {
       #reportDoc .sdetail { padding:12px; }
       #reportDoc .sdetail[id^="rep-"] { scroll-margin-top:96px; }
-      .ranchors .pill { padding:4px 10px; font-size:calc(11.5px*var(--fs)); }
       .fchips { gap:5px; }
+    }
+
+    /* ===== B2: 글로벌 프레임 리드(백드롭 통합 — 최상단 1회) ===== */
+    .mktframe-lead { font-size:calc(12.5px*var(--fs)); color:var(--fg); line-height:1.55; margin:0 0 8px; }
+
+    /* ===== B4: divergence 재료칩 · conviction 등급(가격 정합 UI 표면) ===== */
+    /* divergence = 약한 프록시 '재료'(판정 아님) — 경고색/대형 배너 금지, 파선 회색으로 위계 낮춤 */
+    .divchip { font-size:calc(10.5px*var(--fs)); font-weight:600; color:var(--sub);
+      background:var(--pill); border:1px dashed var(--line2); border-radius:999px;
+      padding:1px 9px; vertical-align:middle; cursor:help; }
+    /* conviction = 신뢰도 신호(약한 근거를 디스카운트하라) */
+    .convpill { display:inline-flex; align-items:center; gap:4px; font-size:calc(10px*var(--fs));
+      font-weight:700; border-radius:999px; padding:1px 8px; vertical-align:middle; cursor:help; }
+    .convpill .cvdot { width:6px; height:6px; border-radius:50%; }
+    .conv-high { color:var(--green); background:color-mix(in srgb, var(--green) 14%, transparent); }
+    .conv-high .cvdot { background:var(--green); }
+    .conv-medium { color:var(--imp); background:color-mix(in srgb, var(--imp) 14%, transparent); }
+    .conv-medium .cvdot { background:var(--imp); }
+    .conv-low { color:var(--mut); background:var(--pill); }
+    .conv-low .cvdot { background:var(--mut); }
+
+    /* ===== B3: 근거(기사 출처) 접이식 — 스토리 카드 대체 ===== */
+    .ev-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:3px 0 0; }
+    .ev-toggle { background:var(--pill); color:var(--pill-fg); border:1px solid var(--line);
+      border-radius:999px; padding:2px 10px; font-size:calc(10.5px*var(--fs)); font-weight:600;
+      cursor:pointer; line-height:1.5; font-family:inherit; }
+    .ev-toggle::before { content:"▸ "; color:var(--mut); }
+    .ev-toggle[aria-expanded="true"]::before { content:"▾ "; }
+    @media (hover:hover) { .ev-toggle:hover { background:var(--hover); } }
+    .ev-rel { font-size:calc(10px*var(--fs)); color:var(--mut); }
+    .ev-body { margin:5px 0 4px; padding-left:2px; }
+    .ev-cluster { margin:0 0 6px; }
+    .ev-cluster-h { font-size:calc(9.5px*var(--fs)); color:var(--mut); font-weight:700; margin:0 0 3px 2px; }
+    .ev-art { display:flex; gap:6px; align-items:baseline; text-decoration:none; color:var(--fg);
+      padding:3px 4px; border-radius:6px; line-height:1.45; }
+    @media (hover:hover) { .ev-art:hover { background:var(--hover); } .ev-art:hover .ev-title { color:var(--accent); } }
+    .ev-src { flex:0 0 auto; font-size:calc(9.5px*var(--fs)); font-weight:700; border-radius:999px; padding:1px 7px; }
+    .ev-title { font-size:calc(12px*var(--fs)); }
+    .ev-loading, .ev-empty { font-size:calc(11px*var(--fs)); color:var(--mut); padding:4px 6px; }
+
+    /* ===== B5: 좌측 사이드바 네비(리포트·스토리 · 스크롤스파이 · 모바일 드로어) ===== */
+    .layout { display:flex; align-items:flex-start; gap:0; max-width:1180px; margin:0 auto; }
+    main { flex:1 1 auto; min-width:0; }   /* min-width:0 → 자식 overflow가 레이아웃을 우측으로 밀지 않게 */
+    .sidenav { flex:0 0 234px; position:sticky; top:88px; align-self:flex-start;
+      max-height:calc(100vh - 96px); overflow-y:auto; padding:14px 12px 24px;
+      border-right:1px solid var(--line); }
+    .navsec { margin-bottom:16px; }
+    .navsec-h { font-size:calc(10.5px*var(--fs)); font-weight:800; letter-spacing:.04em;
+      text-transform:uppercase; color:var(--mut); margin:0 0 6px 6px; }
+    .navgroup { font-size:calc(10px*var(--fs)); font-weight:700; color:var(--accent);
+      margin:9px 0 3px 6px; letter-spacing:.02em; }
+    .navlist .navgroup:first-child { margin-top:0; }
+    .navlink { display:block; color:var(--sub); text-decoration:none; font-size:calc(12.5px*var(--fs));
+      line-height:1.4; padding:5px 8px; border-radius:7px; border-left:2px solid transparent;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    @media (hover:hover) { .navlink:hover { background:var(--hover); color:var(--fg); } }
+    .navlink.active { background:var(--pill); color:var(--accent); border-left-color:var(--accent); font-weight:600; }
+    .navempty { font-size:calc(11px*var(--fs)); color:var(--mut); padding:4px 8px; }
+    .navtoggle { display:none; }
+    .navscrim { position:fixed; inset:0; background:rgba(0,0,0,.42); z-index:15; }
+    @media (max-width:1000px) { .sidenav { flex-basis:186px; } }   /* 중간폭 방어: 사이드바 축소 */
+    @media (min-width:681px) {                                    /* 데스크톱: 드로어 상태 강제 해제(리사이즈 잔재 방지) */
+      .sidenav { transform:none !important; }
+      .navscrim { display:none !important; }
+    }
+    @media (max-width:680px) {                                    /* 모바일: 드로어 */
+      .sidenav { position:fixed; top:0; left:0; bottom:0; width:82%; max-width:300px; z-index:20;
+        background:var(--card); border-right:1px solid var(--line); box-shadow:0 0 34px var(--shadow);
+        max-height:none; transform:translateX(-100%); transition:transform .22s ease; padding-top:18px; }
+      .sidenav.open { transform:translateX(0); }
+      .navtoggle { display:inline-flex; align-items:center; justify-content:center; font-size:calc(17px*var(--fs)); }
     }
   </style>
 </head>
@@ -273,17 +344,18 @@
       <div class="hrow">
         <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
         <div class="hbtns">
+          <button id="navToggle" class="navtoggle" title="네비게이션" aria-label="네비게이션 열기">☰</button>
           <button id="fsBtn" title="글자 크기 (작게/중간/크게 순환)" aria-label="글자 크기">가</button>
           <button id="themeBtn" title="배경 밝게/어둡게" aria-label="테마 전환">🌙</button>
         </div>
       </div>
       <div class="tabs">
-        <button class="tab active" id="tabFeed">피드</button>
+        <button class="tab" id="tabFeed">피드</button>
         <button class="tab" id="tabStories">스토리</button>
-        <button class="tab" id="tabReport">리포트</button>
+        <button class="tab active" id="tabReport">리포트</button>
         <button class="tab tabprice" id="tabPrice">가격</button>
       </div>
-      <div class="controls" id="feedControls">
+      <div class="controls" id="feedControls" hidden>
         <label for="src">소스</label>
         <select id="src"><option value="__all__">전체</option></select>
         <label for="tag">태그</label>
@@ -293,23 +365,36 @@
       </div>
     </div>
   </header>
-  <main><div class="wrap">
-    <div id="feedView"><div id="list"></div></div>
-    <div id="storiesView" hidden>
-      <div class="stripwrap">
-        <button class="snav l" id="snavL" aria-label="왼쪽으로">‹</button>
-        <button class="snav r" id="snavR" aria-label="오른쪽으로">›</button>
-        <div class="strip" id="storiesStrip"></div>
+  <div class="layout">
+    <aside class="sidenav" id="sidenav" aria-label="리포트·스토리 네비게이션">
+      <nav class="navsec">
+        <div class="navsec-h">리포트</div>
+        <div class="navlist" id="navReportList"><div class="navempty">불러오는 중…</div></div>
+      </nav>
+      <nav class="navsec">
+        <div class="navsec-h">스토리</div>
+        <div class="navlist" id="navStoryList"><div class="navempty">불러오는 중…</div></div>
+      </nav>
+    </aside>
+    <main><div class="wrap">
+      <div id="feedView" hidden><div id="list"></div></div>
+      <div id="storiesView" hidden>
+        <div class="stripwrap">
+          <button class="snav l" id="snavL" aria-label="왼쪽으로">‹</button>
+          <button class="snav r" id="snavR" aria-label="오른쪽으로">›</button>
+          <div class="strip" id="storiesStrip"></div>
+        </div>
+        <div id="storiesDetail"></div>
       </div>
-      <div id="storiesDetail"></div>
-    </div>
-    <div id="reportView" hidden><div id="reportDoc"></div></div>
-    <div id="priceView" hidden><div id="priceDoc"></div></div>
-  </div></main>
+      <div id="reportView"><div id="reportDoc"></div></div>
+      <div id="priceView" hidden><div id="priceDoc"></div></div>
+    </div></main>
+  </div>
+  <div class="navscrim" id="navScrim" hidden></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, collection, query, orderBy, limit, where, getDocs, doc, getDoc, documentId }
+    import { getFirestore, collection, query, orderBy, limit, where, getDocs, doc, getDoc }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { firebaseConfig } from "./config.js";
 
@@ -652,6 +737,22 @@
         ((report && report.sections) || []).filter(x => x.name === "risk_triggered")
           .flatMap(x => (x.items || []).map(it => ({ lensId, group, text: it.text }))));
     }
+    // B4: divergence 재료칩(#2 가격 정합 UI 표면) — A가 reports/{lens}에 발행하는 계약 소비.
+    // '판정'이 아니라 약한 프록시 '재료'라 over_fear|over_hope만 노출, aligned/none/부재는 생략(fail-soft).
+    function divergenceChip(divergence) {
+      if (!divergence || (divergence.kind !== "over_fear" && divergence.kind !== "over_hope")) return null;
+      const label = divergence.kind === "over_fear" ? "가격 정합: 과도한 공포(재료)"
+                                                    : "가격 정합: 과도한 기대(재료)";
+      const pct = divergence.price_pct == null ? null : Number(divergence.price_pct);
+      return { label, note: divergence.note || "", price_key: divergence.price_key || "",
+               price_pct: Number.isFinite(pct) ? pct : null };
+    }
+    // B4: conviction 등급 — 약한 근거를 디스카운트하라는 신뢰도 신호. 부재/미지 레벨은 생략(fail-soft).
+    function convictionPill(conviction) {
+      const LV = { high: "확신 높음", medium: "확신 중간", low: "확신 낮음" };
+      if (!conviction || !LV[conviction.level]) return null;
+      return { level: conviction.level, label: LV[conviction.level], basis: conviction.basis || "" };
+    }
     // === REPORT-LOGIC-END ===
 
     // === PRICE-LOGIC-START (node test 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
@@ -813,10 +914,12 @@
         storyById.clear(); visible.forEach(s => storyById.set(s.id, s));
         if (!groups.length) {
           stripEl.innerHTML = `<div class="sempty">아직 묶인 스토리가 없어요.<br>기사가 쌓이면 자동으로 묶여 나타납니다.</div>`;
+          buildStoryNav([]);                                     // B5: 사이드바 스토리 목록(빈)
           return;
         }
         const lensLabel = g => LENS_LABELS[g.lensId] || (g.lensId === "_etc" ? "기타" : g.lensId);
         stripEl.innerHTML = groups.map(g => storyCardHtml(g.main, lensLabel(g))).join("");   // 섹션별 메인 1개
+        buildStoryNav(groups);                                   // B5: 사이드바 스토리 목록
         if (pendingStoryId) {                                  // #story-{id} 딥링크 대기분 열기(openStory가 없으면 직접 fetch)
           const t = pendingStoryId; pendingStoryId = null;
           openStory(t);
@@ -865,44 +968,47 @@
     const reportDocEl = document.getElementById("reportDoc");
     const tabReport = document.getElementById("tabReport");
     let reportLoaded = false;
-    const reportCited = new Map();   // 인용 스토리 id→doc — 카드 클릭 확장(.scx)이 조회, loadReport가 채움
+
+    // 네트워크 행(무한 대기) 방어: 리포트가 디폴트 첫 화면이라 read가 멈추면 '불러오는 중'이 영구 고착된다.
+    // 부트 워치독은 모듈 import 실패만 커버 — 이건 정상 부팅 후 read 자체가 안 끝나는 경우를 에러로 승격한다.
+    function withTimeout(promise, ms) {
+      let t;
+      const timer = new Promise((_, rej) => {
+        t = setTimeout(() => rej(new Error("네트워크 응답이 지연되고 있어요. 연결을 확인하고 다시 시도해 주세요.")), ms);
+      });
+      return Promise.race([promise, timer]).finally(() => clearTimeout(t));
+    }
 
     async function loadReport(bg) {
       if (!bg) reportDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;   // 4a: bg면 깜빡임 없음
       await ensureLensLabels();
       try {
-        const [repSnap, frameSnap, groupsSnap] = await Promise.all([
+        const [repSnap, frameSnap, groupsSnap] = await withTimeout(Promise.all([
           getDocs(collection(db, "reports")), getDocs(collection(db, "frames")),
-          getDoc(doc(db, "meta", "report_groups"))]);
+          getDoc(doc(db, "meta", "report_groups"))]), 15000);
         const reports = {}; repSnap.docs.forEach(d => reports[d.id] = d.data());
         const frames = {}; frameSnap.docs.forEach(d => frames[d.id] = d.data());
         const groups = groupsSnap.exists() ? ((groupsSnap.data() || {}).groups || []) : [];
         // _skips는 그룹 렌즈 id가 아니므로 assembleReportDoc(그룹 id 키잉)에서 자동 배제된다(M5)
         const skips = (reports._skips && reports._skips.lenses) || [];
         const docm = assembleReportDoc(groups, reports);
+        buildReportNav(docm);                          // B5: 사이드바 리포트 목차(빈 문서면 '리포트 없음')
         if (!docm.sections.length) {
           reportDocEl.innerHTML = `<div class="sempty">아직 생성된 리포트가 없어요.<br>매일 아침 자동 생성됩니다.</div>`;
           return;
         }
         const now = Date.now();
         const links = crossLinks(docm.sections);
-        // 인용 스토리 카드용 스토리 문서 일괄 로드(documentId in ≤30 청크)
-        const citedIds = [...new Set(docm.sections.flatMap(({ report }) =>
-          (report.sections || []).flatMap(s => (s.items || []).flatMap(i => i.story_ids || []))))];
-        reportCited.clear();
-        const cited = reportCited;                     // 모듈 Map 공유 — 클릭 확장(.scx)이 스토리 조회
-        for (let k = 0; k < citedIds.length; k += 30) {
-          const chunk = citedIds.slice(k, k + 30);
-          const qs = await getDocs(query(collection(db, "stories"),
-                                         where(documentId(), "in", chunk)));
-          qs.docs.forEach(d => cited.set(d.id, { id: d.id, ...d.data() }));
-        }
-        renderReportDoc(docm, frames, links, cited, now, skips);
+        // B3: 초기 렌더는 items/스토리 문서를 전혀 fetch하지 않는다(0). 근거 기사는 토글 펼칠 때 lazy.
+        renderReportDoc(docm, frames, links, now, skips);
+        setupReportSpy();                              // B5: 스크롤 스파이(현재 섹션 하이라이트)
         // 2a: async 렌더 완료 후 딥링크(#rep-*) 재스크롤 — 네이티브 앵커는 섹션 렌더 전 헛돎.
         const h = location.hash;
         if (h.startsWith("#rep-")) document.getElementById(h.slice(1))?.scrollIntoView({ block: "start" });
       } catch (e) {
-        reportDocEl.innerHTML = `<div class="sempty">불러오기 실패: <code>${esc(e.message)}</code></div>`;
+        reportLoaded = false;                          // 고착 방지: 탭 재진입/‘다시 시도’로 재로드되게
+        reportDocEl.innerHTML = `<div class="error">리포트를 불러오지 못했어요: <code>${esc(e.message)}</code>`
+          + `<br><button class="retry-report" type="button" style="margin-top:10px">다시 시도</button></div>`;
       }
     }
 
@@ -927,11 +1033,8 @@
       const n = new Date(v).getTime();
       return Number.isFinite(n) ? n : null;
     }
-    function renderReportDoc(docm, frames, links, cited, now, skips) {
-      const anchors = docm.sections.map(({ lensId, group }) =>
-        `<a href="#rep-${esc(lensId)}" class="pill">${txt(group)} · ${txt(LENS_LABELS[lensId] || lensId)}</a>`).join(" ");
+    function renderReportDoc(docm, frames, links, now, skips) {
       const body = docm.sections.map(({ lensId, group, report }) => {
-        const seenCards = new Set();                     // dedup 스코프 = 이 리포트 안(참조가 리포트를 벗어나지 않게)
         const rc = (report.sections || []).filter(x => x.name === "risk_triggered")   // 1c: 아킬레스 트리거 수
           .reduce((n, x) => n + ((x.items || []).length), 0);
         const st = reportStatus(report, now, (skips || []).includes(lensId));
@@ -948,28 +1051,33 @@
         const refMs = tsToMs(report.frame_updated_at);
         const skew = (fMs != null && refMs != null && fMs !== refMs)
           ? `<span class="pill">본문은 이전 프레임 기준</span>` : "";
+        // B4: divergence 재료칩 + conviction 등급(A 계약 소비 — 필드 부재 시 조용히 생략)
+        const dv = divergenceChip(report.divergence);
+        const divHtml = dv
+          ? `<span class="divchip" title="${esc(dv.note)}">${txt(dv.label)}${dv.price_pct != null
+              ? ` · ${dv.price_key ? esc(dv.price_key) + " " : ""}${dv.price_pct > 0 ? "+" : ""}${dv.price_pct}%` : ""}</span>` : "";
+        const cv = convictionPill(report.conviction);
+        const convHtml = cv
+          ? `<span class="convpill conv-${esc(cv.level)}" title="${esc(cv.basis)}"><span class="cvdot"></span>${txt(cv.label)}</span>` : "";
         const secs = (report.sections || []).map(sec => {
           const items = (sec.items || []).map(it => {
-            const cards = (it.story_ids || []).map(sid => {
-              const s = cited.get(sid);
-              if (!s) return "";
-              if (seenCards.has(sid)) {                  // dedup: 재인용은 참조 배지
-                const rel = (links[sid] || []).filter(l => l !== lensId)
-                  .map(l => LENS_LABELS[l] || l).join(", ");
-                return `<span class="pill">↩ 위 카드 참조${rel ? ` · 관련: ${txt(rel)}` : ""}</span>`;
-              }
-              seenCards.add(sid);
-              return storyCardHtml(s);                   // 기존 스토리 카드 재사용(§7)
-            }).join("");
-            return `<li>${txt(it.text)}<div class="darts rcards">${cards}</div></li>`;
+            // B3: 스토리 카드 제거 → 항목당 '근거 N건' 접이식(기본 접힘). 펼칠 때 story_ids의 items lazy fetch.
+            const sids = (it.story_ids || []).filter(Boolean);
+            const rel = [...new Set(sids.flatMap(sid => (links[sid] || []).filter(l => l !== lensId)))]
+              .map(l => LENS_LABELS[l] || l);
+            const relHtml = rel.length ? `<span class="ev-rel">관련: ${txt(rel.join(", "))}</span>` : "";
+            const evRow = sids.length
+              ? `<div class="ev-row"><button class="ev-toggle" type="button" aria-expanded="false" data-sids="${esc(sids.join(","))}">근거 ${sids.length}건</button>${relHtml}</div><div class="ev-body" hidden></div>`
+              : "";
+            return `<li>${txt(it.text)}${evRow}</li>`;
           }).join("");
           return items ? `<h4 class="rsec-h ${esc(sec.name || "")}">${SEC_LABEL[sec.name] || esc(sec.name)}</h4><ul class="abul">${items}</ul>` : "";
         }).join("");
         const gen = tsToMs(report.generated_at);
         const hot = rc ? `<span class="newb" style="background:var(--risk)">아킬레스 ${rc}</span>` : "";
         return `<section class="sdetail${rc ? " hot" : ""}" id="rep-${esc(lensId)}">
-          <div class="seclbl">${txt(group)}</div>
-          <div class="dt">${txt(report.headline) || "(제목 없음)"} ${hot}${badge}${stale}${frameStale}${skew}</div>
+          <div class="seclbl">${txt(group)} · ${txt(LENS_LABELS[lensId] || lensId)}</div>
+          <div class="dt">${txt(report.headline) || "(제목 없음)"} ${hot}${convHtml}${divHtml}${badge}${stale}${frameStale}${skew}</div>
           <div class="dlead">${txt(report.lead)}</div>
           ${secs}
           <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
@@ -983,36 +1091,110 @@
             `<a href="#rep-${esc(r.lensId)}" class="reprisk">${txt(r.text)}</a>`).join("") +
           (tr.length > 7 ? `<div class="reprisk-more">+${tr.length - 7}개 더 (아래 섹션)</div>` : "") +
           `</div>` : "";
-      // #44: 글로벌 시장 프레임(frames/_market) — 전 자산군 공통 공포를 리포트 최상단에.
+      // B2: 글로벌 시장 프레임(frames/_market) + 백드롭을 리포트 최상단 1회로 통합.
+      //     backdrop은 렌즈마다 반복하지 않고 이 글로벌 블록의 리드로만 노출(렌즈 반복 제거).
       const mkt = frames["_market"];
-      const mktBlock = (mkt && ((mkt.risks || []).length || (mkt.premiums || []).length))
-        ? `<div class="mktframe"><div class="mktframe-h">글로벌 시장 프레임 — 전 자산군을 꿰는 공포·기대</div>${frameChipsHtml(mkt)}</div>`
+      const mktChips = (mkt && ((mkt.risks || []).length || (mkt.premiums || []).length)) ? frameChipsHtml(mkt) : "";
+      const globalBlock = (mktChips || docm.backdrop)
+        ? `<div class="mktframe"><div class="mktframe-h">글로벌 시장 프레임 — 전 자산군을 꿰는 공포·기대</div>`
+          + (docm.backdrop ? `<div class="mktframe-lead">${txt(docm.backdrop)}</div>` : "") + mktChips + `</div>`
         : "";
-      reportDocEl.innerHTML =
-        (docm.backdrop ? `<div class="sdetail"><div class="dlead">${txt(docm.backdrop)}</div></div>` : "") +
-        mktBlock + digest + `<div class="lchips ranchors">${anchors}</div>` + body;
+      reportDocEl.innerHTML = globalBlock + digest + body;
     }
 
-    // 리포트 내 스토리 카드 클릭 확장(요구 7) — 패턴 E: .open 토글, 링크/버튼 가드.
-    // 확장 내용 = displayLead + bulletsHtml(기존 전역 헬퍼 재사용), 스토리는 reportCited에서 조회.
-    reportDocEl.addEventListener("click", e => {
-      if (e.target.closest("a,button,select")) return;
-      const card = e.target.closest(".scard");
-      if (!card) return;
-      if (!card.querySelector(".scx")) {               // 최초 클릭 시 1회 생성(지연 생성)
-        const s = reportCited.get(card.dataset.id);
-        if (!s) return;
-        const lead = displayLead(s);
-        const inner = (lead ? `<div class="scx-lead">${txt(lead)}</div>` : "") + bulletsHtml(s.article);
-        if (!inner) return;                            // 펼칠 내용 없음 → 토글 생략
-        const scx = document.createElement("div");
-        scx.className = "scx";
-        scx.innerHTML = inner;
-        card.appendChild(scx);
-        void scx.offsetHeight;                         // 강제 리플로우 — 첫 열림에도 트랜지션 재생
+    // B3: 근거(기사 출처) lazy fetch — story_id별 Promise 메모이즈.
+    // 재펼침·여러 항목이 같은 story_id 인용·동시 펼침 모두 단일 fetch로 수렴(N+1 read 차단).
+    // 실패 시 캐시에서 제거해 재시도 허용(성공만 캐시). 초기 렌더 fetch 0.
+    const reportItemsCache = new Map();   // story_id -> Promise<items[]>
+    function fetchStoryItems(sid) {
+      if (!reportItemsCache.has(sid)) {
+        reportItemsCache.set(sid,
+          getDocs(query(collection(db, "items"), where("story_id", "==", sid), orderBy("published_at")))
+            .then(qs => qs.docs.map(d => d.data()))
+            .catch(err => { reportItemsCache.delete(sid); throw err; }));
       }
-      card.classList.toggle("open");
+      return reportItemsCache.get(sid);
+    }
+    function evArticleHtml(it) {                        // 출처=기사 원문(스토리 문서 아님) — 제목+url 링크
+      const isTS = it.source === "TruthSocial";
+      const title = isTS ? "Truth Social" : (txt(it.title) || "(제목 없음)");
+      const c = srcColors(it.source);
+      return `<a class="ev-art" href="${esc(it.url)}" target="_blank" rel="noopener">
+        <span class="ev-src" style="background:${c.bg};color:${c.fg}">${txt(it.source) || "?"}</span>
+        <span class="ev-title">${title}</span></a>`;
+    }
+    reportDocEl.addEventListener("click", async e => {
+      if (e.target.closest(".retry-report")) { loadReport(); return; }   // 로드 실패 후 재시도
+      const btn = e.target.closest(".ev-toggle");
+      if (!btn) return;
+      const body = btn.closest(".ev-row").nextElementSibling;   // .ev-body
+      if (!body) return;
+      if (!body.hasAttribute("hidden")) {                       // 접기
+        body.setAttribute("hidden", ""); btn.setAttribute("aria-expanded", "false"); return;
+      }
+      body.removeAttribute("hidden"); btn.setAttribute("aria-expanded", "true");
+      if (body.dataset.loaded) return;                          // 이미 렌더 — 재fetch 안 함(캐시가 있어도 DOM 재사용)
+      body.dataset.loaded = "1";
+      body.innerHTML = `<div class="ev-loading">근거 불러오는 중…</div>`;
+      const sids = (btn.dataset.sids || "").split(",").filter(Boolean);
+      try {
+        const clusters = await Promise.all(sids.map(async sid => ({ items: await fetchStoryItems(sid) })));
+        const multi = clusters.length > 1;                      // 여러 클러스터면 story_id별 얇은 소제목으로 묶음
+        body.innerHTML = clusters.map(({ items }) => {
+          const arts = items.map(evArticleHtml).join("") || `<div class="ev-empty">기사 없음</div>`;
+          const h = multi ? `<div class="ev-cluster-h">${items.length}개 기사</div>` : "";
+          return `<div class="ev-cluster">${h}${arts}</div>`;
+        }).join("");
+      } catch (err) {
+        body.dataset.loaded = "";                               // 재시도 허용
+        body.innerHTML = `<div class="ev-empty">근거 불러오기 실패: <code>${esc(err.message)}</code></div>`;
+      }
     });
+
+    // ============================ 사이드바 네비 (B5) ============================
+    const sidenav = document.getElementById("sidenav");
+    const navReportList = document.getElementById("navReportList");
+    const navStoryList = document.getElementById("navStoryList");
+    const navScrim = document.getElementById("navScrim");
+    const navToggle = document.getElementById("navToggle");
+
+    // 리포트 목차 = 그룹→렌즈(SSOT: docm.sections 순서 = topics.yaml report_group). 하드코딩 복제 없음.
+    function buildReportNav(docm) {
+      let html = "", lastGroup = null;
+      for (const { lensId, group } of ((docm && docm.sections) || [])) {
+        if (group !== lastGroup) { html += `<div class="navgroup">${txt(group)}</div>`; lastGroup = group; }
+        html += `<a href="#rep-${esc(lensId)}" data-lens="${esc(lensId)}" class="navlink">${txt(LENS_LABELS[lensId] || lensId)}</a>`;
+      }
+      navReportList.innerHTML = html || `<div class="navempty">리포트 없음</div>`;
+    }
+    function buildStoryNav(groups) {
+      navStoryList.innerHTML = ((groups || []).map(g =>
+        `<a href="#story-${esc(g.main.id)}" data-story="${esc(g.main.id)}" class="navlink">${txt(displayHead(g.main)) || "(제목 없음)"}</a>`).join(""))
+        || `<div class="navempty">스토리 없음</div>`;
+    }
+    // 스크롤 스파이: 현재 화면 상단에 걸린 리포트 섹션의 사이드바 링크를 하이라이트.
+    let reportSpy = null;
+    function cssEsc(s) { return (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/["\\\]]/g, "\\$&"); }
+    function setupReportSpy() {
+      if (reportSpy) { reportSpy.disconnect(); reportSpy = null; }
+      const secs = [...reportDocEl.querySelectorAll('section[id^="rep-"]')];
+      if (!secs.length || typeof IntersectionObserver === "undefined") return;
+      reportSpy = new IntersectionObserver(entries => {
+        for (const en of entries) {
+          if (!en.isIntersecting) continue;
+          const lid = en.target.id.slice(4);                    // "rep-".length === 4
+          navReportList.querySelectorAll(".navlink.active").forEach(a => a.classList.remove("active"));
+          const link = navReportList.querySelector(`.navlink[data-lens="${cssEsc(lid)}"]`);
+          if (link) link.classList.add("active");
+        }
+      }, { rootMargin: "-110px 0px -68% 0px" });
+      secs.forEach(s => reportSpy.observe(s));
+    }
+    function closeDrawer() { sidenav.classList.remove("open"); navScrim.hidden = true; }
+    navToggle.addEventListener("click", () => { navScrim.hidden = !sidenav.classList.toggle("open"); });
+    navScrim.addEventListener("click", closeDrawer);
+    sidenav.addEventListener("click", e => { if (e.target.closest("a")) closeDrawer(); });  // 링크→드로어 닫힘(hashchange가 라우팅)
+    matchMedia("(min-width:681px)").addEventListener("change", e => { if (e.matches) closeDrawer(); });  // 데스크톱 진입 시 드로어 상태 초기화(리사이즈 잔재 방지)
 
     // ============================ 가격 뷰 ============================
     const priceView = document.getElementById("priceView");
@@ -1088,7 +1270,9 @@
       }
       showTab(h === "#stories" ? "stories"
         : (h === "#report" || h.startsWith("#rep-")) ? "report"
-        : h === "#price" ? "price" : "feed");
+        : h === "#price" ? "price"
+        : h === "#feed" ? "feed"
+        : "report");                                             // B5: 디폴트 첫 화면 = 리포트(빈/미지 해시)
     }
     tabFeed.addEventListener("click", () => { location.hash = "#feed"; });
     tabStories.addEventListener("click", () => { location.hash = "#stories"; });
@@ -1098,6 +1282,10 @@
 
     initSources();
     routeFromHash();
+    window.__nsBooted = true;      // B5: 모듈이 여기까지 실행됨 → 부트 워치독 폴백 무력화(import 실패만 폴백 발동)
+    // B5: 디폴트가 리포트라 스토리 탭을 안 열면 사이드바 스토리 목록이 안 채워진다.
+    // 스토리를 1회 백그라운드 로드해 목차를 완성한다(storiesLoaded=true로 탭 방문 시 중복 로드 방지).
+    if (!storiesLoaded) { storiesLoaded = true; loadStories(true); }
 
     // 자동경신: 5분마다 활성 탭 데이터 재로드(헤더 "5분마다 갱신" 약속 이행).
     // 스토리 상세를 연 상태면 스토리 재로드 스킵(사용자 방해 방지), 백그라운드 탭이면 스킵(불필요한 read 절감).
