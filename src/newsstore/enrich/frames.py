@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from .gemini import LLMError
 from .model_config import model_for
@@ -66,14 +66,14 @@ def build_market_prompt(stories: list[dict]) -> str:
     개별 렌즈가 아니라 자산군을 가로지르는(interconnectivity) 구조적 급소 우선."""
     lines = []
     for s in stories[:MARKET_MAX_STORIES]:
-        latest = _latest_dev_text(s)                     # #4: 타임라인상 최신 전개
-        tail = f" :: 최신전개: {latest[:120]}" if latest else ""
+        arc = dev_arc(s)                                 # 전개 시간순 — 인과·되돌림 신호
+        tail = f" :: 전개(시간순): {arc}" if arc else ""
         lines.append(f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}{tail}')
     return (
         "당신은 전 자산군을 가로지르는 매크로/시스템 리스크 데스크 총괄이다.\n"
         "센티먼트 근사 준거 — 말이 아니라 '비용을 치른 행동(RAS)'. 아래는 오늘 전 자산군 주요 스토리다.\n"
-        "타임라인 원칙: 상충하는 전개(긍정 vs 부정)가 공존하면 타임라인상 확실히 더 최신인 전개를 "
-        "우선한다 — 최신 사실이 이전 내러티브를 갱신한다(각 스토리 '최신전개' 참조).\n"
+        "시간적 인과: 각 스토리 '전개(시간순)'은 →로 오래된→최신. 나중 전개가 앞을 갱신·반박·되돌리면 "
+        "현재(최신) 상태가 기준 — 되돌림(A→B→A 허위→B 되돌림)이 있으면 그 되돌림이 핵심 신호다.\n"
         "임무: 개별 자산군이 아니라 '시장 전체'가 지금 터지면 가장 두려워할 소수·고강도 시나리오를 뽑아라 — "
         "여러 자산군을 하나로 꿰는 구조적 급소(예: 하이퍼스케일러 capex 철회가 반도체·주식·전력을 동시에 "
         "흔드는 급). 자산군 교차로 연결되는(interconnectivity) 것을 우선. 장황 나열 금지, 강도로 골라라.\n"
@@ -85,14 +85,33 @@ def build_market_prompt(stories: list[dict]) -> str:
         '"evidence_dev_ids":["..."]}],"premiums":[...],"watchpoints":[...]}')
 
 
-def _latest_dev_text(story: dict) -> str:
-    """가장 최신 전개(delta_time|time 최대)의 텍스트 — 타임라인 '앞선' 신호(#4 상충 해소용)."""
-    best_t, best_txt = None, ""
-    for d in (story.get("developments") or []):
-        t = d.get("delta_time") or d.get("time")
-        if t is not None and (best_t is None or t > best_t):
-            best_t, best_txt = t, (d.get("text") or "")
-    return best_txt
+_MIN_DT = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _dev_time(d: dict):
+    return d.get("delta_time") or d.get("time")
+
+
+def _fmt_dev_time(t) -> str:
+    try:
+        return t.strftime("%m-%d")                       # datetime(Firestore Timestamp)
+    except AttributeError:
+        return ""
+
+
+def dev_arc(story: dict, n: int = 5) -> str:
+    """스토리 전개를 시간순(오래된→최신)으로 최근 n개 — 시간적 인과·되돌림 추론용.
+    나중 항목이 앞 항목을 갱신/반박/되돌릴 수 있어 '순서 자체가 신호'다(평면 나열 금지)."""
+    devs = [d for d in (story.get("developments") or []) if d.get("text")]
+    try:
+        devs = sorted(devs, key=lambda d: _dev_time(d) or _MIN_DT)   # 오래된→최신
+    except TypeError:
+        pass                                             # 시간 타입 혼합이면 원순서 유지
+    parts = []
+    for d in devs[-n:]:
+        mark, txt = _fmt_dev_time(_dev_time(d)), (d.get("text") or "")[:90]
+        parts.append(f"({mark}) {txt}" if mark else txt)
+    return " → ".join(parts)
 
 
 def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dict | None = None,
@@ -105,8 +124,8 @@ def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dic
     axes_only = {a: (old or {}).get(a) or [] for a in AXES}
     lines = []
     for i, s in enumerate(stories[:FRAME_MAX_INPUT_STORIES]):
-        latest = _latest_dev_text(s)                     # #4: 타임라인상 가장 앞선(최신) 전개
-        tail = f" :: 최신전개: {latest[:120]}" if latest else ""
+        arc = dev_arc(s)                                 # 전개 시간순(오래된→최신) — 인과·되돌림 신호
+        tail = f" :: 전개(시간순): {arc}" if arc else ""
         lines.append(f'{i}. [{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:150]}{tail}')
     market_block = ""
     if market:
@@ -121,10 +140,11 @@ def build_frame_prompt(lens_id: str, old: dict, stories: list[dict], market: dic
         "낙관 논평(말)이 아니라, 스토리 전개(developments)에 담긴 비가역 행동 — capex 감축·"
         "잉여자원 매도·감원·정점 증자·비중 축소 — 을 근거로 삼아라. 서술 톤과 행동의 부호가 "
         "어긋나는 곳(톤↑·행동↓ 또는 그 반대)이 숨은 공포의 시그니처다.\n"
-        "타임라인 원칙(상충 해소): 같은 이슈에 상충하는 전개(긍정 vs 부정)가 공존하면, "
-        "타임라인상 확실히 더 최신인(뒤에 온) 전개를 우선해 그 방향으로 극을 세워라 — 최신 "
-        "사실이 이전 내러티브를 갱신한다(각 스토리의 '최신전개'가 그 신호). 시차가 미세하면 "
-        "한쪽으로 강행하지 말고 양쪽을 병존 처리.\n"
+        "시간적 인과(가장 중요): 각 스토리의 '전개(시간순)'은 →로 오래된→최신이다. 나중 전개가 "
+        "앞 전개를 갱신·반박·되돌리면 **현재(최신) 상태**를 극의 기준으로 삼아라 — 어제 급변이 "
+        "오늘 진정/반전됐으면 '진정/반전'이 현재다(옛 급변을 오늘 것처럼 쓰지 마라). 가장 중요한 "
+        "신호는 종종 **되돌림**이다: 사건 A→여파 B→A가 허위로 판명→B 되돌림이면, 극은 'A 자체'가 "
+        "아니라 'A 허위 판명에 따른 B 되돌림'이어야 한다. 시차가 미세하면 강행 말고 병존.\n"
         "프레임 3축:\n"
         "- risks(아킬레스건): '지금 터진다면 시장이 가장 두려워할' 소수·고강도 시나리오만. "
         "구조적 급소를 과감·깊게 — 지배적 투자 사이클의 철회, 핵심 수요처의 이탈처럼 내러티브 "

@@ -108,9 +108,8 @@ def test_frame_prompt_has_ras_and_structured_output():
     assert "s1" in p                                     # 스토리 id 노출(evidence 인용 근거)
 
 
-def test_frame_prompt_recency_conflict_rule_and_latest_dev():
-    # #4: 상충 내러티브(트럼프 전쟁 긍/부)면 타임라인상 확실히 앞선(최신) 전개 쪽으로 민다.
-    # 프롬프트에 최신 전개 텍스트가 실리고(근거), 최신-우선 규칙이 명시돼야 한다.
+def test_frame_prompt_temporal_arc_and_causal_rule():
+    # 시간적 인과: 전개를 시간순 arc(오래된→최신)로 보여주고, 되돌림/현재상태 규칙을 명시.
     from datetime import timedelta
     t0 = NOW - timedelta(days=3)
     story = {"id": "war1", "title": "트럼프 전쟁", "summary": "긴장 고조",
@@ -118,8 +117,22 @@ def test_frame_prompt_recency_conflict_rule_and_latest_dev():
                  {"text": "낙관: 협상 타결 임박", "delta_time": t0},
                  {"text": "비관: 추가 관세 전격 발표", "delta_time": t0 + timedelta(days=2)}]}
     p = build_frame_prompt("us_policy", OLD, [story])
-    assert "추가 관세 전격 발표" in p                    # 최신 전개(타임라인상 앞선 것) 노출
-    assert "최신" in p and ("상충" in p or "타임라인" in p)  # 최신-우선 해소 규칙 명시
+    assert "협상 타결 임박" in p and "추가 관세 전격 발표" in p       # 전개 arc 전체 노출
+    assert p.index("협상 타결 임박") < p.index("추가 관세 전격 발표")  # 오래된→최신 순서
+    assert "시간순" in p and ("되돌림" in p or "현재" in p)          # 인과·되돌림 규칙 명시
+
+
+def test_dev_arc_orders_oldest_to_newest():
+    from datetime import timedelta
+    from newsstore.enrich.frames import dev_arc
+    t0 = NOW - timedelta(days=5)
+    story = {"developments": [
+        {"text": "C 최신", "delta_time": t0 + timedelta(days=4)},
+        {"text": "A 최초", "delta_time": t0},
+        {"text": "B 중간", "delta_time": t0 + timedelta(days=2)}]}
+    arc = dev_arc(story)
+    assert arc.index("A 최초") < arc.index("B 중간") < arc.index("C 최신")   # 시간순 정렬
+    assert "→" in arc                                                       # arc 구분자
 
 
 def test_frame_prompt_carries_yesterday_and_caps_input():

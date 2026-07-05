@@ -6,9 +6,9 @@ from __future__ import annotations
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
-from .frames import AXES
+from .frames import AXES, dev_arc
 from .gemini import LLMError
 from .model_config import model_for
 
@@ -141,15 +141,12 @@ STORY_DEV_MAX = 4             # 프롬프트에 실을 스토리당 최신 전�
 
 
 def _story_line(s: dict) -> str:
-    """프롬프트용 스토리 한 줄 — 제목 + 요약 + 최신 전개 몇 개. 구체 사실(수치·고유명사)은
-    요약이 아니라 developments 타임라인에 있으므로 생성기·리뷰어가 같은 근거를 보게 한다(#1)."""
+    """프롬프트용 스토리 한 줄 — 제목 + 요약 + 전개 시간순 arc. 구체 사실(수치·고유명사)은
+    요약이 아니라 developments에 있어 생성기·리뷰어가 같은 근거를 보고(#1), 시간순(→)이라
+    나중이 앞을 갱신/되돌리는 인과를 읽게 한다(temporal). 순서 도출은 frames.dev_arc가 SSOT."""
     base = f'[{s["id"]}] {s.get("title", "")} :: {(s.get("summary") or "")[:200]}'
-    devs = [d for d in (s.get("developments") or []) if d.get("text")]
-    devs.sort(key=lambda d: (d.get("delta_time") or d.get("time") or datetime.min.replace(tzinfo=timezone.utc)),
-              reverse=True)                            # 최신 우선
-    if devs:
-        base += " :: 전개: " + " | ".join((d["text"] or "")[:100] for d in devs[:STORY_DEV_MAX])
-    return base
+    arc = dev_arc(s, STORY_DEV_MAX)
+    return base + (f" :: 전개(시간순): {arc}" if arc else "")
 
 
 def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdrop: str,
@@ -164,6 +161,10 @@ def build_section_prompt(lens_id: str, frame: dict, stories: list[dict], backdro
         f"프레임:\n{_json.dumps(axes_only, ensure_ascii=False)}\n"
         f"매크로 참고 맥락: {backdrop or '(없음)'}\n"
         "스토리(각 줄 맨 앞 [id]가 story_id):\n" + "\n".join(lines) + "\n"
+        "시간적 인과(중요): 각 스토리 '전개(시간순)'은 →로 오래된→최신이다. 나중 전개가 앞을 "
+        "갱신·반박·되돌리면 현재(최신) 상태로 판정하라 — 어제 급변이 오늘 진정/반전됐으면 리포트는 "
+        "'진정/반전'이지 옛 급변이 아니다. 되돌림(A→B→A 허위→B 되돌림)이 있으면 그 되돌림을 헤드라인/"
+        "핵심으로. 리포트는 '지금 시점' 스냅샷이다.\n"
         "규칙: 매수·매도·비중 조언 금지(재료만). 트리거 판정은 반드시 해당 story_id 인용 — "
         "인용 스토리에 실제로 담긴 사실만 근거로 삼아라. 스토리에 없는 수치·고유명사·협의/계약 "
         "진전 등을 지어내 트리거 근거로 쓰지 마라(과인용 금지 — grounding 리뷰 기각의 주 원인). "

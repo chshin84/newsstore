@@ -111,6 +111,19 @@ def test_section_prompt_includes_developments():
     assert "아일랜드 당국 누적 1,500 BTC 압수" in p   # 전개가 생성기 입력에 실림
 
 
+def test_section_prompt_temporal_arc_and_causal_rule():
+    # 시간적 인과: 전개를 시간순 arc로 보여주고, 되돌림/현재상태 규칙 명시(평면 스냅샷 방지).
+    from datetime import timedelta
+    t0 = NOW - timedelta(days=2)
+    story = {"id": "s1", "title": "원달러", "summary": "환율",
+             "developments": [{"text": "1550원 급등", "delta_time": t0},
+                              {"text": "1239원으로 진정", "delta_time": t0 + timedelta(days=1)}]}
+    p = build_section_prompt("fx", FRAME, [story], "")
+    assert p.index("1550원 급등") < p.index("1239원으로 진정")     # 오래된→최신 arc
+    assert "시간적 인과" in p and ("되돌림" in p or "현재" in p)    # 인과 규칙
+    assert "스냅샷" in p                                          # 리포트=지금 시점 스냅샷
+
+
 def test_review_prompt_includes_frame_and_developments():
     # #1 근본수정: 리뷰어가 프레임(극 출처)과 스토리 전개를 받아야, 프레임 극을 restate한 항목을
     # '출처 없는 날조'로 오판하지 않는다(아일랜드 1,500 BTC = 프레임 watchpoint 극, 실제 사실).
