@@ -1262,8 +1262,9 @@
         stripEl.innerHTML = `<div class="sempty">불러오는 중…</div>`; }
       await ensureLensLabels();
       try {
-        const q2 = query(collection(db, "stories"), where("status", "==", "open"),
-                         orderBy("last_seen", "desc"), limit(70));   // 필터·dedup 후 ~50 확보 여유
+        // 스토리 탭 = 최근 활동 스토리(open/closed 무관, last_seen 최근순). open 제한 풀어 50까지 채움.
+        // (open==최근24h 활동만이라 12개뿐이던 걸 완화 — 클러스터·리포트 시스템 로직은 여전히 open만 씀)
+        const q2 = query(collection(db, "stories"), orderBy("last_seen", "desc"), limit(70));
         const all = (await getDocs(q2)).docs.map(d => ({ id: d.id, ...d.data() }));
         const now = Date.now();
         const visible = all.filter(s => (Number(s.count) || 0) >= 2);            // 멤버 2+
