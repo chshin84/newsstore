@@ -252,14 +252,16 @@ def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None,
             per_lens[lid] = store.get_stories_for_report(lid, cutoff=cutoff)
     market = _ensure_market_frame(store, client, per_lens, now=now, min_age=min_age)
     n = 0
+    failures: list[dict] = []          # IB3: silent-stale 실패 렌즈 귀속(어제 판 조용히 유지 → stale 원인)
     for lens_id in lens_ids:
         old = store.get_frame(lens_id)
         ua = (old or {}).get("updated_at")
-        if ua is not None and (now - ua) < min_age:    # 신선 → 스킵(콜 0)
+        if ua is not None and (now - ua) < min_age:    # 신선 → 스킵(콜 0, 실패 아님)
             continue
         stories = per_lens[lens_id]
         frame, verdict = _attempt_frame(client, lens_id, old, stories, market)
         if frame is None:
+            failures.append({"lens_id": lens_id, "reason": "attempt_failed"})   # 콜·검증 실패
             continue                                    # 콜·검증 실패 → 어제 판 유지(fail-soft)
         if verdict is not None and not (isinstance(verdict, dict) and verdict.get("passed") is True):
             # diff-grounding 기각 → 실패 사유(notes)를 넣어 워커가 1회만 재작성·재검증·재리뷰(루프 금지)
@@ -267,11 +269,16 @@ def run_frame_pass(store, client, *, lens_ids: list[str], now, window=None,
             log.info("frame pass %s: diff-grounding 기각(%s) — 1회 재생성", lens_id, notes)
             frame, verdict = _attempt_frame(client, lens_id, old, stories, market, reject_notes=notes)
             if frame is None:
+                failures.append({"lens_id": lens_id, "reason": "retry_failed"})  # 재생성 콜·검증 실패
                 continue                                # 재생성 콜·검증 실패 → 어제 판 유지
             if verdict is not None and not (isinstance(verdict, dict) and verdict.get("passed") is True):
                 log.warning("frame pass %s: 재시도도 diff-grounding 기각 — 어제 판 유지", lens_id)
+                failures.append({"lens_id": lens_id, "reason": "retry_rejected"})  # 재시도도 기각
                 continue
         store.save_frame(lens_id, frame, now=now)
         n += 1
-    log.info("frame pass: %d/%d updated", n, len(lens_ids))
+    # IB3: silent-stale 실패 렌즈 발행(_market과 동일 채널 — 메타 프레임 doc). UI가 stale 원인 귀속. 멱등.
+    # generated_at은 report _failures와 동일 필드로 두어 소비자(UI)가 두 채널을 같은 shape로 읽게 한다.
+    store.save_frame("_failures", {"lenses": failures, "generated_at": now}, now=now)
+    log.info("frame pass: %d/%d updated failures=%s", n, len(lens_ids), failures)
     return n

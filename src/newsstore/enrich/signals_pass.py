@@ -106,25 +106,35 @@ def run_signals_pass(store, *, stock_series: dict, price_series: dict,
 
     # ── WB4. 설명 안 되는 움직임 (조사 큐) ────────────────────────────────
     items, robust = [], True
+    # IB2 퍼널: unexplained 후보의 단계별 탈락 카운터(빈 조사큐 원인=조용한 장 vs 과게이팅 규명).
+    # 불변식: scanned == dropped_z + dropped_sample + dropped_volume + dropped_covered + queued.
+    funnel = {"scanned": 0, "dropped_z": 0, "dropped_sample": 0,
+              "dropped_volume": 0, "dropped_covered": 0, "queued": 0}
 
     def _scan(idkey: str, label: str, kind: str, series: list, covered: bool, is_stock: bool):
         nonlocal robust
+        funnel["scanned"] += 1
         stats = _sig.baseline_stats(series)
         if not stats["min_sample_ok"]:           # 데이터 건강(스캔한 모든 심볼) → doc 플래그 강등
             robust = False
         z = _sig.move_z(_sig.latest_return(series), stats)
         if not _sig.is_big_move(z):
+            funnel["dropped_z"] += 1             # z 미달(조용한 장 — 대부분 여기서 탈락)
             return
         # 하드 게이트: 얇은 베이스라인의 z는 신뢰 불가 → 큐에 넣지 않는다(오발화 차단, 리뷰 high).
         if not stats["min_sample_ok"]:
+            funnel["dropped_sample"] += 1        # 표본 부족(얇은 베이스라인)
             return
         volc = _sig.volume_confirmed(series, is_stock=is_stock)
         # 거래량 확인 **필수**(주식·주식지수): True가 아니면(미확인 None·미확 False) 큐 제외.
         # 비주식(FX·수익률지수·선물)=volc None, 거래량 게이트 없음(가격 z만으로 큐, vol_confirmed=null).
         if is_stock and volc is not True:
+            funnel["dropped_volume"] += 1        # 거래량 미확인(주식전용 게이트)
             return
         if covered:                              # 서사가 이미 붙음 → '설명 안 됨' 아님
+            funnel["dropped_covered"] += 1       # 서사 커버리지 있음
             return
+        funnel["queued"] += 1
         rec = _sig.latest_return(series)
         items.append({("ticker" if kind == "stock" else "key"): idkey, "label": label,
                       "kind": kind, "move_z": round(z, 3),
@@ -150,6 +160,8 @@ def run_signals_pass(store, *, stock_series: dict, price_series: dict,
     store.db.collection("signals").document("unexplained_moves").set(
         {"generated_at": now, "items": items, "min_sample_ok": robust, "unverified": True})
     totals["unexplained"] = len(items)
+    totals["funnel"] = funnel                    # IB2 관측(반환용). doc은 매런 덮어써지니 로그로 트렌드 누적.
+    log.info("signals WB4 funnel: %s", funnel)
 
     # ── WB3. 개체 착지 + WB5. 매크로 브레드스 (스토리 doc 필드) ──────────────
     mkt = price_series.get(MARKET_FACTOR_KEY) or []

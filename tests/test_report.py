@@ -354,6 +354,56 @@ def test_run_report_pass_generation_failure_keeps_existing():
     assert store.reports["kr_equity"]["headline"] == "옛것"    # §5(b) 기존 유지
 
 
+def test_run_report_pass_attributes_silent_stale_failure_to_lens():
+    # IB3: LLM 생성 실패(silent-stale)를 lens_id와 함께 _failures에 귀속 발행(_skips 옆).
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    store.reports["kr_equity"] = {"headline": "옛것"}
+    class _Boom:
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사자" in prompt:
+                return {"passed": True, "notes": ""}
+            if "데스크 에디터" in prompt:
+                return {"text": "bd"}
+            from newsstore.enrich.gemini import LLMError
+            raise LLMError("down")                        # 섹션 생성 콜만 실패
+    run_report_pass(store, _Boom(), lens_ids=["kr_equity"], now=NOW)
+    fails = store.reports["_failures"]["lenses"]
+    assert [f["lens_id"] for f in fails] == ["kr_equity"]
+    assert fails[0]["reason"] == "failed_llm"
+    assert store.reports["kr_equity"]["headline"] == "옛것"   # 기존 유지(silent-stale)
+
+
+def test_run_report_pass_validation_failure_attributed():
+    # 결정론 검증 실패도 silent-stale로 귀속(reason=failed_validation).
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    class _BadSection(_LLM):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사자" in prompt:
+                return {"passed": True, "notes": ""}
+            if "데스크 에디터" in prompt:
+                return {"text": "bd"}
+            return {"headline": "", "lead": "x", "sections": []}   # validate_report → None
+    run_report_pass(store, _BadSection(SECTION_OK, {"passed": True}), lens_ids=["kr_equity"], now=NOW)
+    fails = store.reports["_failures"]["lenses"]
+    assert [f["lens_id"] for f in fails] == ["kr_equity"] and fails[0]["reason"] == "failed_validation"
+
+
+def test_run_report_pass_review_reject_not_in_failures():
+    # 리뷰 기각은 fresh doc+배지로 저장되므로 silent-stale 아님 → _failures에 없다(귀속 제외).
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _LLM(SECTION_OK, {"passed": False, "notes": "과인용"})
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert store.reports["_failures"]["lenses"] == []         # 기각은 실패 귀속 아님
+    assert store.reports["kr_equity"]["review"]["passed"] is False   # 배지로 표면화됨
+
+
+def test_run_report_pass_success_publishes_empty_failures():
+    store = _Store({"kr_equity": _stories()}, {"kr_equity": FRAME})
+    llm = _LLM(SECTION_OK, {"passed": True, "notes": ""})
+    run_report_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert store.reports["_failures"]["lenses"] == []         # 멱등 빈 발행
+
+
 def test_section_prompt_includes_reject_notes():
     # 재시도: 직전 리뷰 실패 사유(reject_notes)를 섹션 프롬프트에 실어 재작성하게 한다.
     p = build_section_prompt("kr_equity", FRAME,

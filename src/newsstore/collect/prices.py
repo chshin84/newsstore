@@ -21,24 +21,30 @@ class PriceSymbol:
     key: str            # 내부 id — prices/{key} 문서
     symbol: str         # Yahoo 심볼(예: ^GSPC, ^KQ11, KRW=X, CL=F, 005930.KS)
     label: str
+    group: str | None = None    # 분류(지수·금리·환율·원자재·변동성) — 프로즌 계약, IMP-web 소비. 말미 default(후방호환).
+    order: int | None = None    # yaml 등장 순서(load enumerate) — 무순서 Firestore에서 web이 순서 복원.
 
 
 def load_price_symbols(path: str) -> list[PriceSymbol]:
-    """config/prices.yaml 로드 + fail-loud(키 중복·필수필드 누락)."""
+    """config/prices.yaml 로드 + fail-loud(키 중복·필수필드 누락).
+
+    group은 yaml에서 그대로 읽는다(주석 SSOT를 데이터로 — VIX=변동성·달러지수=환율 명시).
+    order는 load 시 등장 순서(enumerate) — PriceSymbol/저장 dict에 실어 web이 순서 복원."""
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
     rows = raw.get("symbols")
     if not isinstance(rows, list) or not rows:
         raise ValueError(f"{path}: 'symbols' 리스트가 필요하다")
     out, seen = [], set()
-    for r in rows:
+    for i, r in enumerate(rows):
         key, sym = r.get("key"), r.get("symbol")
         if not (isinstance(key, str) and key.strip() and isinstance(sym, str) and sym.strip()):
             raise ValueError(f"{path}: key·symbol 필수 — {r}")
         if key in seen:
             raise ValueError(f"{path}: key 중복 {key!r}")
         seen.add(key)
-        out.append(PriceSymbol(key.strip(), sym.strip(), r.get("label", key)))
+        out.append(PriceSymbol(key.strip(), sym.strip(), r.get("label", key),
+                               r.get("group"), i))
     return out
 
 
@@ -121,7 +127,8 @@ def run_price_pass(store, fetch: Callable[[str], dict], symbols: list[PriceSymbo
         if q is None:
             log.warning("price %s(%s): 무효 응답 — 스킵", s.key, s.symbol)
             continue
-        save(s.key, {**q, "label": s.label, "symbol": s.symbol})
+        save(s.key, {**q, "label": s.label, "symbol": s.symbol,
+                     "group": s.group, "order": s.order})   # 프로즌 계약(IMP-web): 분류·순서 병합
         n += 1
     log.info("price pass: %d/%d saved", n, len(symbols))
     return n

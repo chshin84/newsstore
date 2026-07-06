@@ -140,16 +140,25 @@ def test_price_keys_for_includes_extra_but_primary_unchanged():
     assert topics.price_keys_for(t, "kr_realestate") == []        # 가격 없는 렌즈
 
 
+# 가격 탭 전용(display-only) 매크로 컨텍스트 계열 — 렌즈(signals) 미배선이지만 가격 탭이 전 계열을
+# 렌더하므로 '조용히 썩음' 아님(드리프트 가드 예외). VIX(변동성)·달러지수(dxy)는 등재 시점 실측
+# 스팟체크 통과분(2026-07-06). 신호로 쓰려면 topics.yaml 렌즈 매핑이 필요하나 그건 별도 스코프.
+# 여기 추가는 신중히 — 등재 전 실측 스팟체크(값·신선도)를 통과한 계열만 넣는다(억지 예외 금지).
+DISPLAY_ONLY_PRICE_KEYS = {"vix", "dxy"}
+
+
 def test_all_live_price_keys_consumed_by_a_lens():
-    # WB2 드리프트 가드: prices.yaml의 모든 라이브 계열은 어떤 standing 렌즈에 매핑돼야 한다
-    # (미매핑=영원히 미소비로 조용히 썩음 — fail-loud). us2y·us30y·usdjpy·nasdaq이 이걸로 배선됨.
+    # WB2 드리프트 가드: prices.yaml의 라이브 계열은 어떤 standing 렌즈에 매핑되거나(신호 소비),
+    # 명시적 display-only(가격 탭 소비)여야 한다 — 둘 다 아니면 미소비로 조용히 썩음(fail-loud).
+    # us2y·us30y·usdjpy·nasdaq이 렌즈 매핑으로 배선됨. VIX·달러지수는 display-only로 명시 예외.
     from newsstore.collect.prices import load_price_symbols
     from pathlib import Path
     t = topics.load_topics()
     pkeys = {s.key for s in load_price_symbols(
         str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
     mapped = {k for keys in topics.all_lens_price_keys(t).values() for k in keys}
-    assert pkeys <= mapped, f"prices.yaml 미매핑 계열(고아): {sorted(pkeys - mapped)}"
+    orphans = (pkeys - mapped) - DISPLAY_ONLY_PRICE_KEYS
+    assert not orphans, f"prices.yaml 미매핑·미표시 계열(고아): {sorted(orphans)}"
 
 
 def test_extra_price_keys_exist_in_prices_yaml():
