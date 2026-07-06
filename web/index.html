@@ -401,6 +401,14 @@
     .navtw::before { content:"▸"; }
     .navfolder-h[aria-expanded="true"] .navtw { transform:rotate(90deg); }
     @media (hover:hover) { .navtw:hover { background:var(--pill); color:var(--fg); } }
+    /* 사이드바 스토리 목록 +/- (기본 10개, 10씩 [10,50]) — 경계서 비활성(눌려도 무동작). */
+    .navmore { display:flex; align-items:center; gap:8px; justify-content:center; padding:7px 4px 3px; }
+    .navmore-btn { width:22px; height:22px; border-radius:6px; border:1px solid var(--line); background:var(--btn);
+      color:var(--fg); font-size:calc(13px*var(--fs)); font-weight:700; cursor:pointer; font-family:inherit;
+      display:inline-flex; align-items:center; justify-content:center; line-height:1; }
+    @media (hover:hover) { .navmore-btn:not([disabled]):hover { background:var(--hover); } }
+    .navmore-btn[disabled] { opacity:.35; cursor:default; }
+    .navmore-n { font-size:calc(10.5px*var(--fs)); color:var(--mut); min-width:46px; text-align:center; }
     /* 자식: 디렉토리 은유의 얇은 세로 rail(구조 신호 — 선택 표식 아님, 중립 hairline이라 카드 좌측 컬러보더와 다름) */
     .navfolder-body { display:flex; flex-direction:column; gap:1px;
       margin:1px 0 5px 15px; padding-left:9px; border-left:1px solid var(--line2); }
@@ -1255,7 +1263,7 @@
       await ensureLensLabels();
       try {
         const q2 = query(collection(db, "stories"), where("status", "==", "open"),
-                         orderBy("last_seen", "desc"), limit(40));
+                         orderBy("last_seen", "desc"), limit(70));   // 필터·dedup 후 ~50 확보 여유
         const all = (await getDocs(q2)).docs.map(d => ({ id: d.id, ...d.data() }));
         const now = Date.now();
         const visible = all.filter(s => (Number(s.count) || 0) >= 2);            // 멤버 2+
@@ -1268,7 +1276,7 @@
         }
         const lensLabel = g => LENS_LABELS[g.lensId] || (g.lensId === "_etc" ? "기타" : g.lensId);
         const v2 = currentView() === "v2";                       // WV1: 렌더 진입점이 뷰를 읽는다
-        stripEl.innerHTML = groups.map(g => storyCardHtml(g.main, lensLabel(g), v2 ? storyCardV2(g.main) : "")).join("");   // 섹션별 메인 1개
+        stripEl.innerHTML = groups.slice(0, 50).map(g => storyCardHtml(g.main, lensLabel(g), v2 ? storyCardV2(g.main) : "")).join("");   // 스트립 최대 50개
         // WV4 빈상태: v2인데 어느 스토리에도 증강이 없으면 상세영역에 '준비 중' 안내(v2가 v1과 똑같아 고장처럼 안 보이게)
         if (!bg && v2 && !openStoryId && storiesV2Empty(visible)) detailEl.innerHTML = v2Notice();
         buildStoryNav(groups);                                   // B5: 사이드바 스토리 목록
@@ -1579,6 +1587,7 @@
     const navTree = document.getElementById("navTree");
     const navReportList = document.getElementById("navReportList");
     const navStoryList = document.getElementById("navStoryList");
+    let storyNavShown = 10, lastStoryGroups = [];             // 사이드바 스토리 목록: 기본 10, +/-로 10씩 [10,50]
     const navScrim = document.getElementById("navScrim");
     const sideToggle = document.getElementById("sideToggle");
 
@@ -1591,9 +1600,20 @@
       navReportList.innerHTML = html || `<div class="navempty">리포트 없음</div>`;
     }
     function buildStoryNav(groups) {
-      navStoryList.innerHTML = ((groups || []).map(g =>
-        `<a href="#story-${esc(g.main.id)}" data-story="${esc(g.main.id)}" class="navlink navleaf">${txt(displayHead(g.main)) || "(제목 없음)"}</a>`).join(""))
-        || `<div class="navempty">스토리 없음</div>`;
+      lastStoryGroups = groups || [];
+      const total = Math.min(lastStoryGroups.length, 50);      // 사이드바 최대 50
+      if (storyNavShown > Math.max(10, total)) storyNavShown = Math.max(10, total);   // 데이터 줄면 클램프
+      const shown = Math.min(storyNavShown, total);
+      const links = lastStoryGroups.slice(0, shown).map(g =>
+        `<a href="#story-${esc(g.main.id)}" data-story="${esc(g.main.id)}" class="navlink navleaf">${txt(displayHead(g.main)) || "(제목 없음)"}</a>`).join("");
+      // +/- 컨트롤: 10 초과로 확장 여지가 있을 때만. 최소 10·최대 50, 경계서 비활성(disabled + 핸들러 no-op).
+      const ctrl = total > 10
+        ? `<div class="navmore">
+             <button class="navmore-btn" type="button" data-story-nav="less"${shown <= 10 ? " disabled" : ""} aria-label="10개 줄이기">−</button>
+             <span class="navmore-n">${shown} / ${total}</span>
+             <button class="navmore-btn" type="button" data-story-nav="more"${shown >= Math.min(50, total) ? " disabled" : ""} aria-label="10개 더보기">+</button>
+           </div>` : "";
+      navStoryList.innerHTML = (links + ctrl) || `<div class="navempty">스토리 없음</div>`;
     }
     // WW5: 폴더(리포트·스토리) 펼침/접힘 — 기본 펼침, 상태는 통합 스토어(nav:<folder>)에 persist(WW1과 일관).
     function applyFolder(folder, open) {
@@ -1614,6 +1634,13 @@
     // 트위스티(.navtw)는 펼침만 토글(라우팅 억제), 폴더 헤더 나머지는 탭으로 라우팅(hashchange가 showTab 실행).
     // 자동 펼침은 하지 않는다 — 폴더 상태는 사용자 트위스티만 바꾸고 persist(기본=펼침)해, 접힘 선호가 새로고침에도 유지된다.
     navTree.addEventListener("click", e => {
+      const snb = e.target.closest("[data-story-nav]");       // 사이드바 스토리 +/- (10씩, [10,50], 경계서 무동작)
+      if (snb) { e.stopPropagation();
+        if (snb.hasAttribute("disabled")) return;             // 혹시나 눌려도 무동작
+        const total = Math.min(lastStoryGroups.length, 50);
+        storyNavShown = snb.dataset.storyNav === "more"
+          ? Math.min(50, total, storyNavShown + 10) : Math.max(10, storyNavShown - 10);
+        buildStoryNav(lastStoryGroups); return; }
       const tw = e.target.closest(".navtw");
       if (tw) { e.stopPropagation(); toggleFolder(tw.closest(".navfolder")); return; }
       const fh = e.target.closest(".navfolder-h");
