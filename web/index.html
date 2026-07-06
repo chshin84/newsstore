@@ -1268,7 +1268,9 @@
         const all = (await getDocs(q2)).docs.map(d => ({ id: d.id, ...d.data() }));
         const now = Date.now();
         const visible = all.filter(s => (Number(s.count) || 0) >= 2);            // 멤버 2+
-        const groups = dedupeMains(groupStoriesByLens(visible, now));            // 섹션=렌즈(maxRisk순), 같은 스토리 중복 카드 제거
+        // 스토리 탭 = storyRank 순 평면 목록(렌즈당 1개 제약 없음 — 12에서 멈추던 원인). 각 카드에 대표 렌즈 라벨. 최대 50.
+        const groups = [...visible].sort((a, b) => storyRank(b, now) - storyRank(a, now))
+          .map(s => ({ lensId: (s.lenses && s.lenses[0]) || "_etc", main: s, stories: [s] }));
         storyById.clear(); visible.forEach(s => storyById.set(s.id, s));
         if (!groups.length) {
           stripEl.innerHTML = `<div class="sempty">아직 묶인 스토리가 없어요.<br>기사가 쌓이면 자동으로 묶여 나타납니다.</div>`;
