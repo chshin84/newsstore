@@ -9,12 +9,12 @@ assert.ok(i !== -1 && j !== -1 && j > i, "REPORT-LOGIC 마커 필요(드리프�
 const { assembleReportDoc, reportStatus, crossLinks, dedupCards,
         divergenceChip, convictionPill, normalizeHeadline, dedupEvidence,
         splitReportSections, leadItems, reportNavLenses,
-        moveBand, unexplainedQueue, reportV2Empty } =
+        moveBand, unexplainedQueue, reportV2Empty, dmetaCaption } =
   new Function(html.slice(i, j) +
     "\nreturn { assembleReportDoc, reportStatus, crossLinks, dedupCards," +
     " divergenceChip, convictionPill, normalizeHeadline, dedupEvidence," +
     " splitReportSections, leadItems, reportNavLenses," +
-    " moveBand, unexplainedQueue, reportV2Empty };")();
+    " moveBand, unexplainedQueue, reportV2Empty, dmetaCaption };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -215,6 +215,18 @@ test("reportV2Empty: 큐 없거나 비면 true(빈상태 안내 트리거)", () 
   assert.equal(reportV2Empty(null), true);
   assert.equal(reportV2Empty({ items: [] }), true);
   assert.equal(reportV2Empty({ items: [{ key: "A" }] }), false);
+});
+
+// --- IW2: dmeta 캡션 vs divergence 모순 해소(배지 유무 분기) ---
+test("dmetaCaption: divergence 배지 있으면 '가격 미반영' 단정 생략(모순 제거)", () => {
+  const divHtml = `<span class="divchip">과도한 공포 · EWY -1.2%</span>`;
+  assert.equal(dmetaCaption(divHtml), "");                   // 배지 존재 → 문구 없음
+});
+
+test("dmetaCaption: 배지 없는 카드는 기존 캡션 유지(깨끗한 신호 보존)", () => {
+  assert.equal(dmetaCaption(""), " · 가격 미반영(이슈 중심)");   // divHtml="" (배지 없음)
+  assert.equal(dmetaCaption(null), " · 가격 미반영(이슈 중심)");
+  assert.equal(dmetaCaption(undefined), " · 가격 미반영(이슈 중심)");
 });
 
 console.log(`\nreport_logic: ${pass} passed, ${fail} failed`);

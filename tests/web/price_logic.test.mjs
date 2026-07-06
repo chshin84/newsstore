@@ -6,8 +6,8 @@ const html = readFileSync(new URL("../../web/index.html", import.meta.url), "utf
 const START = "// === PRICE-LOGIC-START", END = "// === PRICE-LOGIC-END";
 const i = html.indexOf(START), j = html.indexOf(END);
 assert.ok(i !== -1 && j !== -1 && j > i, "PRICE-LOGIC 마커 필요(드리프트 가드)");
-const { pctClass, sparkPoints } =
-  new Function(html.slice(i, j) + "\nreturn { pctClass, sparkPoints };")();
+const { pctClass, sparkPoints, groupPriceCards } =
+  new Function(html.slice(i, j) + "\nreturn { pctClass, sparkPoints, groupPriceCards };")();
 
 let pass = 0, fail = 0;
 const test = (n, f) => { try { f(); pass++; } catch (e) { fail++; console.error("FAIL:", n, "\n ", e.message); } };
@@ -39,6 +39,47 @@ test("sparkPoints: 평평한 시계열도 유효(0으로 안 나눔)", () => {
   const pts = sparkPoints([{ c: 50 }, { c: 50 }, { c: 50 }], 100, 20);
   assert.ok(pts.length > 0);                          // rng=0 가드(||1) — NaN 없음
   assert.ok(!pts.includes("NaN"));
+});
+
+// --- IW1: 자산군 그루핑 + order 정렬 + graceful ---
+test("groupPriceCards: group+order → 섹션(라벨=group 그대로), 섹션·카드 order 오름차순", () => {
+  const prices = {
+    ust10: { group: "금리", order: 21, label: "미 10년" },
+    kospi: { group: "지수", order: 11, label: "코스피" },
+    ust2:  { group: "금리", order: 20, label: "미 2년" },
+    spx:   { group: "지수", order: 10, label: "S&P" },
+  };
+  const g = groupPriceCards(prices);
+  assert.equal(g.grouped, true);
+  // 섹션 순서 = 각 group 최소 order(지수=10 < 금리=20) — 웹 하드코딩 없이 order로 도출
+  assert.deepEqual(g.sections.map(s => s.label), ["지수", "금리"]);
+  // 섹션 내 카드 order 오름차순
+  assert.deepEqual(g.sections[0].entries.map(([k]) => k), ["spx", "kospi"]);
+  assert.deepEqual(g.sections[1].entries.map(([k]) => k), ["ust2", "ust10"]);
+});
+
+test("groupPriceCards: group 부재(구형) → graceful 평면(엔트리 원본 보존, 배포순서 무관)", () => {
+  const prices = { a: { label: "A" }, b: { label: "B", order: 3 } };  // group 없음
+  const g = groupPriceCards(prices);
+  assert.equal(g.grouped, false);
+  assert.deepEqual(g.entries.map(([k]) => k), ["a", "b"]);
+});
+
+test("groupPriceCards: 일부만 group → 평면(부분 전개 중 혼합 방어), 빈 group 문자열도 평면", () => {
+  assert.equal(groupPriceCards({ a: { group: "지수" }, b: { label: "B" } }).grouped, false);
+  assert.equal(groupPriceCards({ a: { group: "" } }).grouped, false);   // 빈 문자열은 group 아님
+  assert.equal(groupPriceCards({}).grouped, false);                     // 빈 입력
+  assert.equal(groupPriceCards(null).grouped, false);
+});
+
+test("groupPriceCards: order 부재 카드는 뒤로(Infinity), 동률은 삽입순 유지(안정)", () => {
+  const prices = {
+    x: { group: "환율", label: "X" },            // order 없음 → 뒤
+    y: { group: "환율", order: 5, label: "Y" },
+    z: { group: "환율", order: 5, label: "Z" },  // 동률 → 삽입순(y 다음)
+  };
+  const g = groupPriceCards(prices);
+  assert.deepEqual(g.sections[0].entries.map(([k]) => k), ["y", "z", "x"]);
 });
 
 console.log(`\nprice_logic: ${pass} passed, ${fail} failed`);

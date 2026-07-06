@@ -104,6 +104,9 @@
     .tab.active { color:var(--fg); border-color:var(--accent); box-shadow:inset 0 -2px 0 var(--accent); }
     .tabprice.active { border-color:var(--price); box-shadow:inset 0 -2px 0 var(--price); }   /* 가격 탭=인디고 */
     /* ===== 가격 탭 (값 + 차트만) ===== */
+    .pgroup { margin-bottom:18px; }
+    .pgroup-h { font-size:calc(11px*var(--fs)); font-weight:700; letter-spacing:.02em; color:var(--accent);
+      text-transform:uppercase; margin:0 0 8px; }
     .pcards { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; }
     .pcard { background:var(--btn); border:1px solid var(--line); border-radius:11px; padding:11px 13px; }
     .pc-h { display:flex; align-items:baseline; justify-content:space-between; gap:6px; }
@@ -1045,6 +1048,9 @@
       // WV4: 큐가 비면 true → "v2 준비 중" 안내(v2가 v1과 똑같아 고장처럼 안 보이게).
       return !(queue && queue.items && queue.items.length);
     }
+    // IW2: dmeta 캡션 정합. divergence 배지가 있으면 "가격 미반영(이슈 중심)" 단정을 생략(모순 제거),
+    //   배지 없는 카드는 기존 문구 유지(깨끗한 신호 보존). 입력 = divHtml 문자열(있으면 truthy).
+    function dmetaCaption(divHtml) { return divHtml ? "" : " · 가격 미반영(이슈 중심)"; }
     // === REPORT-LOGIC-END ===
 
     // === PRICE-LOGIC-START (node test 슬라이스; 순수함수만, DOM/외부스코프 금지) ===
@@ -1056,6 +1062,24 @@
       if (cs.length < 2) return "";
       const min = Math.min(...cs), max = Math.max(...cs), rng = (max - min) || 1, step = w / (cs.length - 1);
       return cs.map((c, i) => `${(i * step).toFixed(1)},${(h - ((c - min) / rng) * h).toFixed(1)}`).join(" ");
+    }
+    // IW1: 가격 카드를 자산군(group)으로 묶고 order 오름차순 정렬(웹에 순서 하드코딩 없음 — 백엔드 order로 도출).
+    //   섹션 라벨 = group 문자열 그대로. graceful: 모든 카드에 group이 있어야 grouped, 하나라도 없으면 평면(구형 호환).
+    function _ordVal(p) { const n = Number(p && p.order); return Number.isFinite(n) ? n : Infinity; }
+    function groupPriceCards(prices) {
+      const entries = Object.entries(prices || {});
+      const grouped = entries.length > 0
+        && entries.every(([, p]) => p && typeof p.group === "string" && p.group !== "");
+      if (!grouped) return { grouped: false, entries };
+      // order 오름차순 전역 정렬(동률은 삽입순 유지 — JS sort는 안정). 섹션 순서 = 각 group 최소 order = 첫 등장.
+      const sorted = entries.slice().sort((a, b) => _ordVal(a[1]) - _ordVal(b[1]));
+      const sections = [], idx = {};
+      for (const [key, p] of sorted) {
+        const g = p.group;
+        if (!(g in idx)) { idx[g] = sections.length; sections.push({ label: g, entries: [] }); }
+        sections[idx[g]].entries.push([key, p]);
+      }
+      return { grouped: true, sections };
     }
     // === PRICE-LOGIC-END ===
 
@@ -1495,7 +1519,7 @@
           ${frameToggleHtml}
           ${topHtml}
           ${extraBlock}
-          <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)} · 가격 미반영(이슈 중심)</div>
+          <div class="dmeta">${relTime(gen != null ? new Date(gen) : null)}${dmetaCaption(divHtml)}</div>
         </section>`;
       }).join("");
       // WV3/WV4: v2면 조사 큐를 급부상/신규 근처(최상단)에 얹는다. 큐가 비면 '준비 중' 안내(고장처럼 안 보이게).
@@ -1724,7 +1748,8 @@
     }
     function renderPriceDashboard(prices) {
       // 값 + 차트만. 뉴스와의 정합(over/under-reaction)은 별도 — 여기선 순수 시세.
-      const cards = Object.entries(prices).map(([key, p]) => {
+      // IW1: 자산군(group) 섹션으로 묶어 렌더. 순서·그루핑은 순수 seam(groupPriceCards)이 결정 — order로 도출.
+      const cardHtml = ([key, p]) => {
         const cls = pctClass(p.percent_change);
         const pts = sparkPoints(p.series, 220, 46);
         const chart = pts
@@ -1736,8 +1761,16 @@
           <div class="pc-pct ${cls}">${pctStr(p.percent_change)}</div>
           ${chart}
           <div class="pc-meta">${p.datetime ? esc(String(p.datetime)) : ""}${p.currency ? " · " + esc(p.currency) : ""}</div></div>`;
-      }).join("");
-      priceDocEl.innerHTML = `<div class="pcards">${cards}</div>`;
+      };
+      const g = groupPriceCards(prices);
+      if (!g.grouped) {                                 // graceful: group 부재(구형) → 기존 평면 그리드
+        priceDocEl.innerHTML = `<div class="pcards">${g.entries.map(cardHtml).join("")}</div>`;
+        return;
+      }
+      // 섹션 라벨 = group 문자열 그대로(txt로 이스케이프만). 섹션·카드 순서는 seam이 order로 확정.
+      priceDocEl.innerHTML = g.sections.map(sec =>
+        `<section class="pgroup"><h3 class="pgroup-h">${txt(sec.label)}</h3><div class="pcards">${sec.entries.map(cardHtml).join("")}</div></section>`
+      ).join("");
     }
 
     // ============================ v1↔v2 뷰 상태 (WV1) ============================
