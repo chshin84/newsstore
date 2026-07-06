@@ -3,22 +3,27 @@
 # 목적: 가격 탭(값+차트). 실제 지수·수익률·환율·원자재를 무키로 수집(2026-07-05 전환).
 # Twelve Data(프록시·유료 필요) → Yahoo Finance(실제 지수, 무키, 개별종목·한국지수 커버).
 #
-# 계약: {key(prices/{key} 문서), symbol(Yahoo 심볼), label}.
+# 계약: {key(prices/{key} 문서), symbol(Yahoo 심볼), label, group(분류)}.
+#   group = 지수·금리·환율·원자재·변동성 (주석 SSOT를 데이터로 — load_price_symbols가 읽어 prices/{key}에 실음).
+#   order = load 시 등장 순서(enumerate, 코드에서 부여) — 무순서 Firestore에서 web이 순서 복원. 여기 순서가 SSOT.
 # 수집: run_prices가 query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1mo&interval=1d.
 #   한 콜로 현재값 + 등락 + 30일 시계열(차트). User-Agent 필요. 심볼 추가는 여기만(SSOT).
 # 갭: 국고채 3/10년(한국 국채)은 Yahoo에 없음 → 한국은행 ECOS(별도, 키 필요) 도입 시 추가.
 symbols:
   # ── 지수 ── (코스피200 ^KS200은 Yahoo 데이터 불량[stale·±10% 스윙]이라 제외 — 별도 KR 소스 필요)
-  - {key: kosdaq,   symbol: "^KQ11",  label: 코스닥}
-  - {key: nasdaq,   symbol: "^IXIC",  label: 나스닥}
-  - {key: sp500,    symbol: "^GSPC",  label: "S&P500"}
+  - {key: kosdaq,   symbol: "^KQ11",    label: 코스닥,       group: 지수}
+  - {key: nasdaq,   symbol: "^IXIC",    label: 나스닥,       group: 지수}
+  - {key: sp500,    symbol: "^GSPC",    label: "S&P500",     group: 지수}
   # ── 금리(미국채 수익률 %) ──
-  - {key: us2y,     symbol: "2YY=F",  label: "미국채 2년"}
-  - {key: us10y,    symbol: "^TNX",   label: "미국채 10년"}
-  - {key: us30y,    symbol: "^TYX",   label: "미국채 30년"}
-  # ── 환율 ──
-  - {key: usdkrw,   symbol: "KRW=X",  label: 원/달러}
-  - {key: usdjpy,   symbol: "JPY=X",  label: 엔/달러}
+  - {key: us2y,     symbol: "2YY=F",    label: "미국채 2년",  group: 금리}
+  - {key: us10y,    symbol: "^TNX",     label: "미국채 10년", group: 금리}
+  - {key: us30y,    symbol: "^TYX",     label: "미국채 30년", group: 금리}
+  # ── 환율 ── (달러지수 DX-Y.NYB는 실측 검증됨[2026-07-06: 101.08, 신선]. DX=F 상장폐지·^DXY stale[2019]이라 제외)
+  - {key: usdkrw,   symbol: "KRW=X",    label: 원/달러,      group: 환율}
+  - {key: usdjpy,   symbol: "JPY=X",    label: 엔/달러,      group: 환율}
+  - {key: dxy,      symbol: "DX-Y.NYB", label: 달러지수,     group: 환율}
   # ── 원자재 ──
-  - {key: wti,      symbol: "CL=F",   label: WTI유가}
-  - {key: gold,     symbol: "GC=F",   label: 금}
+  - {key: wti,      symbol: "CL=F",     label: WTI유가,      group: 원자재}
+  - {key: gold,     symbol: "GC=F",     label: 금,           group: 원자재}
+  # ── 변동성 ── (VIX 실측 검증됨[2026-07-06: 16.34, 신선])
+  - {key: vix,      symbol: "^VIX",     label: VIX변동성,    group: 변동성}

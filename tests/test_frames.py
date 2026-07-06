@@ -167,6 +167,65 @@ def test_run_frame_pass_keeps_yesterday_on_review_reject_and_llm_error():
     assert "fx" not in store2.saved                     # 콜 실패 → 폴백(전파 금지, fail-soft)
 
 
+def test_run_frame_pass_attributes_silent_stale_failures(monkeypatch):
+    # IB3: 실패(콜·검증·기각)로 어제 판을 조용히 유지한 렌즈를 _failures에 lens_id+사유로 귀속.
+    monkeypatch.delenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", raising=False)
+    old = {"risks": [{"id": "r1", "text": "기존"}], "premiums": [], "watchpoints": []}
+    rejected = _LLM(frame_resp={"risks": [{"id": "r9", "text": "무근거"}], "premiums": [],
+                                "watchpoints": []},
+                    review_resp={"passed": False, "notes": "근거 없음"})
+    store = _Store({"fx": old})
+    run_frame_pass(store, rejected, lens_ids=["fx"], now=NOW)
+    fails = store.saved["_failures"]["lenses"]
+    assert [f["lens_id"] for f in fails] == ["fx"]      # 기각된 렌즈 귀속
+    assert fails[0]["reason"] == "retry_rejected"       # 재시도도 기각 사유
+
+
+def test_run_frame_pass_attributes_llm_error_failure(monkeypatch):
+    from newsstore.enrich.gemini import LLMError
+    monkeypatch.delenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", raising=False)
+    old = {"risks": [{"id": "r1", "text": "기존"}], "premiums": [], "watchpoints": []}
+    boom = _LLM(frame_resp=LLMError("down"))
+    store = _Store({"fx": old})
+    run_frame_pass(store, boom, lens_ids=["fx"], now=NOW)
+    fails = store.saved["_failures"]["lenses"]
+    assert [f["lens_id"] for f in fails] == ["fx"] and fails[0]["reason"] == "attempt_failed"
+
+
+def test_run_frame_pass_attributes_retry_failed(monkeypatch):
+    # IB3: 1차 기각 → 재생성 콜이 LLMError로 실패(silent-stale) → reason=retry_failed 귀속.
+    from newsstore.enrich.gemini import LLMError
+    from newsstore.enrich.frames import MARKET_ID
+    monkeypatch.delenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", raising=False)
+
+    class _RetryBoom:
+        def __init__(self): self.gen_calls, self.review_calls = 0, 0
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
+            if "심사" in prompt:
+                self.review_calls += 1
+                return {"passed": False, "notes": "기각"}       # 1차 기각 → 재생성 유도
+            self.gen_calls += 1
+            if self.gen_calls == 1:
+                return {"risks": [{"id": "r9", "text": "1차"}], "premiums": [], "watchpoints": []}
+            raise LLMError("regen down")                        # 재생성 콜 실패 → retry_failed
+    old = {"risks": [{"id": "r1", "text": "어제"}], "premiums": [], "watchpoints": []}
+    store = _Store({"fx": old, MARKET_ID: _FRESH_MARKET})
+    run_frame_pass(store, _RetryBoom(), lens_ids=["fx"], now=NOW)
+    fails = store.saved["_failures"]["lenses"]
+    assert [f["lens_id"] for f in fails] == ["fx"] and fails[0]["reason"] == "retry_failed"
+
+
+def test_run_frame_pass_no_failures_publishes_empty(monkeypatch):
+    # 성공한 렌즈는 _failures에 없다(멱등 빈 발행 — 전 런의 stale 귀속을 지운다).
+    monkeypatch.delenv("NEWSSTORE_FRAME_MIN_AGE_HOURS", raising=False)
+    llm = _LLM(frame_resp={"risks": [{"id": "r1", "text": "새 극"}], "premiums": [],
+                           "watchpoints": []},
+               review_resp={"passed": True, "notes": ""})
+    store = _Store()
+    run_frame_pass(store, llm, lens_ids=["kr_equity"], now=NOW)
+    assert store.saved["_failures"]["lenses"] == []     # 실패 없음 → 빈 배열
+
+
 def test_build_market_prompt_and_injection():
     from newsstore.enrich.frames import build_market_prompt, MARKET_ID
     # 시장 프레임 프롬프트: 전 렌즈 스토리로 '시장 전체가 가장 두려워할 것'을 RAS로.

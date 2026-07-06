@@ -20,6 +20,62 @@ def test_load_real_prices_yaml():
     assert all(isinstance(s, PriceSymbol) and s.symbol for s in syms)
 
 
+ALLOWED_GROUPS = {"지수", "금리", "환율", "원자재", "변동성"}
+
+
+def test_real_prices_yaml_every_symbol_has_valid_group():
+    # 프로즌 계약(IMP-web): 모든 심볼이 명시 group을 갖고, 허용 집합 안이다(주석 SSOT를 데이터로).
+    syms = load_price_symbols(str(REPO / "config" / "prices.yaml"))
+    for s in syms:
+        assert s.group in ALLOWED_GROUPS, f"{s.key} group={s.group!r} 미허용"
+
+
+def test_real_prices_yaml_order_is_yaml_sequence():
+    # order = yaml 등장 순서(enumerate). web이 무순서 Firestore에서 순서 복원하는 근거.
+    syms = load_price_symbols(str(REPO / "config" / "prices.yaml"))
+    assert [s.order for s in syms] == list(range(len(syms)))   # 0..n-1 연속(불변식)
+
+
+def test_real_prices_yaml_registers_vix_and_dollar_index():
+    # 실측 스팟체크 통과분 등재(2026-07-06): VIX=변동성·달러지수(DX-Y.NYB)=환율.
+    syms = {s.key: s for s in load_price_symbols(str(REPO / "config" / "prices.yaml"))}
+    assert syms["vix"].symbol == "^VIX" and syms["vix"].group == "변동성"
+    assert syms["dxy"].symbol == "DX-Y.NYB" and syms["dxy"].group == "환율"
+
+
+def test_load_reads_group_and_assigns_order(tmp_path):
+    p = tmp_path / "g.yaml"
+    p.write_text("symbols:\n  - {key: a, symbol: X, label: A, group: 지수}\n"
+                 "  - {key: b, symbol: Y, label: B, group: 환율}\n", encoding="utf-8")
+    syms = load_price_symbols(str(p))
+    assert (syms[0].group, syms[0].order) == ("지수", 0)
+    assert (syms[1].group, syms[1].order) == ("환율", 1)
+
+
+def test_load_symbol_without_group_is_none_backward_compat(tmp_path):
+    # 후방호환: group 미기재면 None(additive — web은 undefined로 graceful).
+    p = tmp_path / "n.yaml"
+    p.write_text("symbols:\n  - {key: a, symbol: X, label: A}\n", encoding="utf-8")
+    syms = load_price_symbols(str(p))
+    assert syms[0].group is None and syms[0].order == 0
+
+
+def test_price_symbol_positional_three_args_still_construct():
+    # frozen 후방호환: 기존 3-인자 위치생성(테스트·호출부)이 그대로 동작(group·order 말미 default).
+    s = PriceSymbol("sp500", "^GSPC", "S&P500")
+    assert s.group is None and s.order is None
+
+
+def test_run_price_pass_merges_group_and_order_into_saved():
+    # 프로즌 계약: 저장 dict에 group(str)·order(int) 병합(IMP-web 소비).
+    syms = [PriceSymbol("sp500", "^GSPC", "S&P500", "지수", 0),
+            PriceSymbol("vix", "^VIX", "VIX변동성", "변동성", 1)]
+    store = _Store()
+    run_price_pass(store, lambda s: _yc([100.0, 101.0], price=101.0), syms)
+    assert store.saved["sp500"]["group"] == "지수" and store.saved["sp500"]["order"] == 0
+    assert store.saved["vix"]["group"] == "변동성" and store.saved["vix"]["order"] == 1
+
+
 def test_load_fails_loud_on_dup_key(tmp_path):
     p = tmp_path / "d.yaml"
     p.write_text("symbols:\n  - {key: a, symbol: X, label: A}\n  - {key: a, symbol: Y, label: B}\n",

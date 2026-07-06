@@ -554,7 +554,9 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
         top_k_ids |= {s["id"] for s in top}
 
     def _one(doc_id, lens_id, frame, top, price_ctx="", price=None, criteria=None) -> str:
-        """한 렌즈 리포트 생성. 반환 'reported'|'failed'(집계는 호출부 — 스레드 안전).
+        """한 렌즈 리포트 생성. 반환 'reported'|'failed_llm'|'failed_validation'(집계는 호출부 — 스레드 안전).
+        failed_*는 silent-stale(기존 doc 유지·발행 없음)이라 실패 렌즈 귀속 대상(IB3). 리뷰 기각은
+        fresh doc+conviction 배지로 저장돼 'reported'로 분류(귀속 제외).
         price_ctx=이 자산 실제 가격(뉴스 지연 보정 교차검증). price={"key","doc"}=divergence 배지(A1)용
         원 가격. store.save_report만 부수효과."""
         try:
@@ -562,11 +564,11 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
                                        timeout=90.0, model=model_for("report_section"))
         except LLMError as e:
             log.warning("report %s: 생성 실패 — 기존 유지(§5b): %s", doc_id, e)
-            return "failed"
+            return "failed_llm"
         v = validate_report(raw, frame=frame, input_story_ids={s["id"] for s in top})
         if v is None:
             log.warning("report %s: 결정론 검증 실패 — 기존 유지", doc_id)
-            return "failed"
+            return "failed_validation"
         review = _review(client, v, top, frame, price_ctx)   # frame=극 출처(#1), price=가격 출처
         r = 2 if review["passed"] else 0                      # 리뷰 통과 방식(conviction 신호 — _one 시점 캡처)
         if not review["passed"]:
@@ -604,18 +606,32 @@ def run_report_pass(store, client, *, lens_ids: list[str], now, window=None,
     pmap = price_by_lens or {}
     units = [(lid, lid, store.get_frame(lid), top, pctx.get(lid, ""), pmap.get(lid))
              for lid, top in selected.items()]
+
+    failures: list[dict] = []          # IB3: silent-stale 실패 렌즈 귀속(lens_id + 사유)
+
+    def _account(status: str, lens_id: str) -> None:
+        if status == "reported":
+            totals["reported"] += 1
+        else:                          # failed_llm | failed_validation — silent-stale(귀속·발행)
+            totals["failed"] += 1
+            failures.append({"lens_id": lens_id, "reason": status})
+
     with ThreadPoolExecutor(max_workers=min(conc, max(1, len(units)))) as ex:
-        for r in ex.map(lambda u: _one(*u), units):
-            totals[r] += 1
+        results = list(ex.map(lambda u: _one(*u), units))   # units 순서 보존 → lens_id 귀속 zip
+    for u, status in zip(units, results):
+        _account(status, u[1])         # u[1]=lens_id
 
     # 급부상 — 전 렌즈 top-K 확정 후(§3.5 순서 의존)
     all_stories = {s["id"]: s for ss in per_lens.values() for s in ss}
     rising = select_rising(list(all_stories.values()), top_k_ids=top_k_ids, now=now)
     if len(rising) >= REPORT_MIN_STORIES:
-        totals[_one("rising", "rising", {}, rising, price_ctx="", price=None,
-                    criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)")] += 1
+        # rising은 실 렌즈가 아닌 의사(pseudo) 렌즈 — 실패 시 lens_id="rising"으로 귀속(소비자는 이미 특수 취급).
+        _account(_one("rising", "rising", {}, rising, price_ctx="", price=None,
+                      criteria="최근 24h 델타 밀도 상위 + 타 리포트 top-K 미등장(결정론)"), "rising")
     # 스킵 신호 발행(§4) — UI가 "아직 생성 전/오늘 스토리 부족" vs "갱신 지연"을 구분.
     # 스킵 0건이어도 빈 배열로 덮어써 전 런의 스킵 잔재를 제거한다(멱등).
     store.save_report("_skips", {"lenses": skipped, "generated_at": now})
-    log.info("report pass: %s", totals)
+    # IB3: silent-stale 실패 렌즈 발행(_skips 옆) — UI가 "갱신 지연(stale)" 원인을 귀속. 멱등 덮어쓰기.
+    store.save_report("_failures", {"lenses": failures, "generated_at": now})
+    log.info("report pass: %s failures=%s", totals, failures)
     return totals

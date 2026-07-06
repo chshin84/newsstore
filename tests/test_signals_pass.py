@@ -187,6 +187,37 @@ def test_wb4_requires_volume_confirmation_for_stock(store):
     assert "MSFT" not in {it.get("ticker") for it in doc["items"]}
 
 
+def test_wb4_funnel_counters_conserve_and_attribute(store):
+    # IB2: 퍼널 카운터가 탈락 단계를 귀속하고, 불변식(scanned=Σdrops+queued)을 지킨다(매직넘버 없음).
+    now, totals = _run(store)
+    f = totals["funnel"]
+    assert set(f) == {"scanned", "dropped_z", "dropped_sample",
+                      "dropped_volume", "dropped_covered", "queued"}
+    assert f["scanned"] == (f["dropped_z"] + f["dropped_sample"] + f["dropped_volume"]
+                            + f["dropped_covered"] + f["queued"])          # 보존 불변식
+    assert f["queued"] == totals["unexplained"]                            # 큐 = 발행 items 수
+    assert f["scanned"] > 0                                                # 뭔가는 스캔됨
+
+
+def test_wb4_funnel_volume_drop_is_stock_only(store):
+    # 주식전용 거래량 게이트: 급등이나 거래량 평평인 주식은 dropped_volume에 귀속(비주식은 이 게이트 없음).
+    now = datetime.now(timezone.utc)
+    ss, ps, pl = _build_series(now, novol_big_tickers={"MSFT"})
+    totals = run_signals_pass(store, stock_series=ss, price_series=ps, price_label=pl, now=now)
+    assert totals["funnel"]["dropped_volume"] >= 1        # 거래량 미확인 주식이 이 단계로 탈락
+
+
+def test_wb4_funnel_covered_drop_attributes_narrative_coverage(store):
+    # 서사 커버된 급등(005930)은 dropped_covered에 귀속(‘설명 안 됨’ 아님).
+    _seed_story(store, "sB", entities=["삼성전자"], lenses=["kr_equity"],
+                first_seen=datetime.now(timezone.utc) - timedelta(days=3),
+                last_seen=datetime.now(timezone.utc) - timedelta(hours=1))
+    now = datetime.now(timezone.utc)
+    ss, ps, pl = _build_series(now, big_tickers={"005930"})
+    totals = run_signals_pass(store, stock_series=ss, price_series=ps, price_label=pl, now=now)
+    assert totals["funnel"]["dropped_covered"] >= 1       # 삼성 급등이 서사 커버라 커버리지 탈락
+
+
 def test_signals_pass_is_nondestructive_to_story(store):
     # 비파괴/additive: landing/breadth만 추가하고 기존 cluster/summary 필드는 보존(merge=True).
     _run(store)
