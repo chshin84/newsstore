@@ -43,3 +43,45 @@ services:
     env_file:
       - .env
     command: python -m newsstore.entrypoints.run_collect --force
+
+  sync:                          # 로컬 레이더 작업장 — Firestore → data/local.db 증분 동기화
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+      args:
+        INSTALL_DEV: "false"
+        INSTALL_RADAR: "true"
+    image: newsstore-radar
+    volumes:
+      - ".:/app"
+    env_file:
+      - .env
+    command: python -m newsstore.entrypoints.run_radar --mode sync
+
+  prices:                        # 로컬 레이더 작업장 — watchlist 일봉 적재(data/prices.db)
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+      args:
+        INSTALL_DEV: "false"
+        INSTALL_RADAR: "true"
+    image: newsstore-radar
+    volumes:
+      - ".:/app"
+    env_file:
+      - .env
+    command: python -m newsstore.entrypoints.run_radar --mode prices
+
+  radar:                         # 로컬 레이더 작업장 — 일보 조립(radar_out/YYYY-MM-DD.md)
+    build:
+      context: .
+      dockerfile: infra/Dockerfile
+      args:
+        INSTALL_DEV: "false"
+        INSTALL_RADAR: "true"
+    image: newsstore-radar
+    volumes:
+      - ".:/app"
+    env_file:
+      - .env
+    command: python -m newsstore.entrypoints.run_radar --mode radar

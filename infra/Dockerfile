@@ -11,6 +11,8 @@ ARG INSTALL_GCP=false
 # Step-2 Processor(Job#2) 이미지는 INSTALL_ENRICH=true 로 빌드 → google-genai 포함.
 # 수집기 이미지는 false(린 유지). 동일 이미지로 두 Job을 돌리려면 둘 다 true.
 ARG INSTALL_ENRICH=false
+# 로컬 레이더 작업장(sync/prices/radar) 이미지는 INSTALL_RADAR=true 로 빌드 → yfinance 포함.
+ARG INSTALL_RADAR=false
 
 # 의존성 먼저 (캐시). requirements.lock을 constraints로 걸어 재현 가능 빌드.
 COPY pyproject.toml ./
@@ -21,6 +23,7 @@ RUN pip install --upgrade pip && \
     if [ "$INSTALL_DEV" = "true" ]; then EXTRAS="dev" ; fi ; \
     if [ "$INSTALL_GCP" = "true" ]; then EXTRAS="${EXTRAS:+$EXTRAS,}gcp" ; fi ; \
     if [ "$INSTALL_ENRICH" = "true" ]; then EXTRAS="${EXTRAS:+$EXTRAS,}enrich" ; fi ; \
+    if [ "$INSTALL_RADAR" = "true" ]; then EXTRAS="${EXTRAS:+$EXTRAS,}radar" ; fi ; \
     if [ -n "$EXTRAS" ]; then \
       pip install -e ".[$EXTRAS]" -c infra/requirements.lock ; \
     else \
