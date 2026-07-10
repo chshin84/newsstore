@@ -207,6 +207,40 @@ gcloud alpha monitoring policies create --policy-from-file=/tmp/job-fail-policy.
 - 확인: `gcloud alpha monitoring policies list --format="value(displayName,enabled)"`. 콘솔 Monitoring → Alerting에도 보임.
 - 보강(선택): 잡이 **아예 안 돈** 경우(스케줄러 자체 실패)는 위 지표로 안 잡힌다 — execution 부재 자체를 보려면 `--mode` 잡별 last-success heartbeat(미래 #13 후속) 또는 스케줄러 실패 로그 알림을 추가.
 
+## H. 클라우드 컷 절차 (로컬 레이더 작업장 전환 시)
+로컬 레이더 작업장(`docs/superpowers/specs/2026-07-10-local-radar-workbench-design.md`)이 자리잡으면 클라우드 인리치/분석 5개 패스를 정지하고 수집기만 유지한다. 로컬 sync는 프로덕션 Firestore를 **무인증 REST(`runQuery`)로 공개 읽기**하는 전제 위에 서 있으므로, 컷을 실행하기 전에 그 전제가 살아 있는지 스모크로 확인한다.
+
+**컷 실행 전 게이트**: 프로덕션 `items`에 무인증 `runQuery` 1페이지 스모크(`curl POST https://firestore.googleapis.com/v1/projects/<프로젝트>/databases/(default)/documents:runQuery` — `limit 3`)가 200을 반환하는지 확인한다. 실패하면 sync 전제(공개 읽기 REST)가 깨진 것이므로 컷을 멈추고 조사한다.
+
+**절차**(스펙 §8):
+1. `gcloud scheduler jobs pause newsstore-enrich-10min | newsstore-summary-hourly | newsstore-lens-10min | newsstore-score-10min | newsstore-article-10min`(5건 — collector `newsstore-5min`은 유지).
+2. frames/report 잡·스케줄러는 애초에 만들지 않는다(기존 미배포 상태 유지 — 이전 배포 체크리스트의 해당 항목 폐기).
+3. `web/index.html` 변경분(피드 탭 기본·스토리/리포트 탭 숨김) Hosting 재배포(§B).
+4. `firestore.rules`는 무변경(items·stories·meta 공개 읽기 — sync가 사용).
+5. 재개 절차(전 단계 가역): pause한 잡 resume + Hosting 롤백 + **로컬 `local.db` 전체 재동기화**(정지 기간 밖 문서 갱신이 증분 창을 벗어나므로 — 캐시라 재구축이 안전하다).
+
+## I. 로컬 레이더 작업장 운영
+로컬 전용 패키지 `src/newsstore/radar/`가 Firestore를 SQLite로 동기화하고 순수 산수로 레이더 신호·종목 스테이션·일보를 산출한다(신규 LLM 콜 0). 상세 설계는 `docs/superpowers/specs/2026-07-10-local-radar-workbench-design.md`.
+
+**데일리 커맨드**:
+```
+docker compose run --rm sync && docker compose run --rm prices; docker compose run --rm radar
+```
+prices가 실패해도(예: 휴장·소스 파손) radar는 진행한다(`;`로 이어 결측 표기 우선).
+
+**산출·원장 위치**:
+- 일보: `radar_out/`
+- 판단 원장(게이트·판단·리뷰): `journal/journal.jsonl`
+- 게이트 시드: `radar/gates.yaml`
+- 프레임(리스크/프리미엄/관찰점) 시드: `radar/frames.json`
+
+**백테스트**:
+```
+docker compose run --rm radar python -m newsstore.entrypoints.run_radar --mode backtest
+```
+
+**알려진 정상 신호**: 3일 이상 연휴(설·추석)에는 prices의 "신규 0행 3일 연속" 크래시가 예정대로 발생한다. 이것은 소스 파손이 아니라 휴장이며, 다음 거래일 재실행에서 자동으로 해소된다(거래일 판정기를 별도로 만들지 않은 YAGNI의 수용 비용 — 스펙 §3.2).
+
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 **저장은 그대로 두고 `web/index.html`(뷰)에서** 처리(키워드 필터·제목 정규화 dedup). 튜닝·되돌리기 쉬움. DB레벨 변경은 사용자가 명시 요청 시.
 - **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`src/newsstore/collect/body_fetch.py` — 한경 `.article-body`; 임팩트 뉴스일수록 풀본문이 완성도↑). **무차별 크롤링(전체 사이트 긁기)은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 설계 SSOT: `docs/superpowers/specs/2026-06-28-body-enrichment-korean-design.md`. 본문 부족 소스는 피드 추가도 병행.

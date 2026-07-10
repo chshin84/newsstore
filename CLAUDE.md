@@ -23,6 +23,7 @@
 - 코드 원칙 상세: `docs/coding-principles.md`
 - 오답노트(해결 교훈, append-only): `docs/solved_problems.md` · 백로그·이슈: **GitHub Issues**
 - 서브에이전트 컨텍스트 주입: `docs/subagent-context.md`
+- **로컬 레이더 작업장**: 스펙 docs/superpowers/specs/2026-07-10-local-radar-workbench-design.md · 원장 radar/·journal/ · 일보 radar_out/
 
 ## 관습 (항상)
 - **문제·할일 발견 시** → **GitHub Issue**로 등록(손유지 백로그 파일 금지 — 썩는다). **사용자에게도 알릴 것.** 🔴(사용자 결정 필요)는 문서에 묻지 말고 **즉시 surface**.
