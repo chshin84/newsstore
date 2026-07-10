@@ -1,0 +1,7 @@
+# 그래프 드리프트(신호2) 어휘. taxonomy.yaml entities에서 도출한 11종 + 수동 추가.
+# 승격 후보는 신호3(어휘 창발)이 일보에 표기하고, 채택은 사용자가 이 파일에 append한다.
+derived_from_taxonomy: true
+manual:
+  - 엔비디아
+  - HBM
+  - ADR
