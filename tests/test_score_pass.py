@@ -21,7 +21,7 @@ def _summarize(store, sid, text="sum"):
 
 
 class _LLM:
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         return {"risk": 2, "impact": 1, "risk_reason": "r", "impact_reason": "i"}
 
 
@@ -71,7 +71,7 @@ def test_incremental_skips_then_rescores(store):
 
 
 class _Boom:
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         from newsstore.enrich.gemini import LLMError
         raise LLMError("down")
 
@@ -90,7 +90,7 @@ def test_score_story_propagates_non_llm_bug():
     from newsstore.enrich.scorer import score_story
 
     class _Bug:                              # 코드 버그(비-LLMError)는 전파(FAIL-LOUD)
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             raise ValueError("programming bug")
     with pytest.raises(ValueError):
         score_story({"title": "t", "summary": "s"}, members=None, client=_Bug())

@@ -56,24 +56,126 @@ def test_lens_labels():
     assert set(labels) == topics.valid_ids(t)          # 모든 렌즈 포함(누락 없음)
 
 
-def test_report_lenses_derived_excludes_watch_and_sector():
-    # 리포트 대상 = watch·sector 외 렌즈 전부(스펙 §3.5 — 손 목록 금지, 도출이 SSOT)
+def test_report_lenses_are_assets_only():
+    # 리포트 대상 = 금융 자산(type=standing)만 — 리스크·경제·정치·정책 리포트 제외(사용자 결정).
+    # 비자산 뉴스는 리포트로 만들지 않고 context로 자산 리포트에 녹인다(context_lens_ids).
     t = topics.load_topics()
     ids = topics.report_lens_ids(t)
-    assert "kr_equity" in ids and "fx" in ids and "risk" in ids
-    assert not any(i.startswith("watch_") for i in ids)
-    assert not any(i.startswith("sector_") for i in ids)
+    assert "kr_equity" in ids and "fx" in ids and "crypto" in ids and "kr_realestate" in ids
+    assert "risk" not in ids                               # 리스크 제외
+    assert "kr_econ" not in ids and "us_econ" not in ids   # 경제 제외
+    assert "kr_policy" not in ids and "us_policy" not in ids  # 정치·정책 제외
+    assert all(topics.lens_type(t, i) == "standing" for i in ids)  # 전부 자산(standing)
+    assert not any(i.startswith(("watch_", "sector_")) for i in ids)
     # 불변식: 대상 렌즈는 전부 report_group을 가진다(fail-loud — 누락 시 여기서 터짐)
-    for lens in t["lenses"]:
-        if lens["id"] in ids:
-            assert lens.get("report_group"), f"{lens['id']}: report_group 누락"
+    for lid in ids:
+        assert topics.load_topics() and any(
+            l["id"] == lid and l.get("report_group") for l in t["lenses"]), f"{lid}: report_group 누락"
 
 
-def test_report_groups_ordered_mapping():
-    # 그룹 → 렌즈 목록(yaml 등장 순서 보존). UI 앵커 도출용.
+def test_watch_tickers_yahoo_symbol_mapping():
+    # 종목 히스토리 수집 대상 — 한국 티커(숫자)는 .KS, 미국은 그대로.
+    t = topics.load_topics()
+    by = {w["ticker"]: w for w in topics.watch_tickers(t)}
+    assert by["005930"]["symbol"] == "005930.KS" and by["005930"]["label"] == "삼성전자"
+    assert by["NVDA"]["symbol"] == "NVDA"
+    assert len(by) >= 10                                # 10개 watch 종목
+
+
+def test_price_key_mapping_for_crossvalidation():
+    # 렌즈→가격키 매핑(교차검증). 가격 있는 자산만, 없으면 None(스킵).
+    t = topics.load_topics()
+    assert topics.price_key_for(t, "fx") == "usdkrw"
+    assert topics.price_key_for(t, "us_equity") == "sp500"
+    assert topics.price_key_for(t, "oil_energy") == "wti"
+    assert topics.price_key_for(t, "precious_metals") == "gold"
+    assert topics.price_key_for(t, "kr_realestate") is None      # 가격 없음 → 스킵
+    # 매핑된 가격키는 config/prices.yaml에 실재해야 한다(드리프트 가드)
+    from newsstore.collect.prices import load_price_symbols
+    from pathlib import Path
+    pkeys = {s.key for s in load_price_symbols(str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
+    for l in t["lenses"]:
+        pk = l.get("price_key")
+        assert pk is None or pk in pkeys, f"{l['id']}: price_key {pk!r}가 prices.yaml에 없음"
+
+
+def test_context_lens_ids_includes_nonasset_for_foldin():
+    # context = 시장프레임·백드롭 입력 풀 — 비자산(리스크·경제·정치·정책) 스토리를 자산 리포트로
+    # 녹이려면(#2) 이 풀에 남아야 한다. watch·sector만 제외.
+    t = topics.load_topics()
+    ctx = topics.context_lens_ids(t)
+    assert {"risk", "kr_econ", "us_econ", "kr_policy", "us_policy"} <= set(ctx)  # 비자산 포함
+    assert set(topics.report_lens_ids(t)) <= set(ctx)     # 리포트 대상 ⊆ context
+    assert not any(i.startswith(("watch_", "sector_")) for i in ctx)
+
+
+def test_report_groups_assets_only():
+    # 그룹 → 렌즈 목록(yaml 등장 순서 보존). UI 앵커 도출용. 자산 그룹만(비자산 그룹 제외).
     t = topics.load_topics()
     groups = topics.report_groups(t)
     assert groups["주식"] == ["kr_equity", "us_equity"]
     assert set(groups["원자재"]) == {"oil_energy", "precious_metals", "commodities"}
+    assert "리스크" not in groups and "경제" not in groups and "정치·정책" not in groups
     flat = [lid for lids in groups.values() for lid in lids]
-    assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 전 대상 렌즈가 정확히 1그룹
+    assert sorted(flat) == sorted(topics.report_lens_ids(t))   # 자산 렌즈가 정확히 1그룹
+
+
+def test_watch_lenses_expose_keywords_for_entity_resolve():
+    # signals.entity_resolve가 keywords로 결정론 매칭 — watch_lenses는 keywords를 노출한다.
+    t = topics.load_topics()
+    by = {w["ticker"]: w for w in topics.watch_lenses(t)}
+    assert "엔비디아" in by["NVDA"]["keywords"] and "NVIDIA" in by["NVDA"]["keywords"]
+    assert by["005930"]["symbol"] == "005930.KS"                  # watch_tickers와 동일 도출
+    # watch_tickers는 watch_lenses의 keywords 뺀 뷰(SSOT 도출)
+    assert {w["ticker"] for w in topics.watch_tickers(t)} == set(by)
+
+
+def test_price_keys_for_includes_extra_but_primary_unchanged():
+    # WB2: signals는 1차+부가 계열 전부, 리포트(price_key_for)는 1차만(불변).
+    t = topics.load_topics()
+    assert topics.price_key_for(t, "us_equity") == "sp500"        # 리포트 1차 불변
+    assert topics.price_keys_for(t, "us_equity") == ["sp500", "nasdaq"]
+    assert topics.price_keys_for(t, "us_rates") == ["us10y", "us2y", "us30y"]
+    assert topics.price_keys_for(t, "fx") == ["usdkrw", "usdjpy"]
+    assert topics.price_keys_for(t, "kr_realestate") == []        # 가격 없는 렌즈
+
+
+# 가격 탭 전용(display-only) 매크로 컨텍스트 계열 — 렌즈(signals) 미배선이지만 가격 탭이 전 계열을
+# 렌더하므로 '조용히 썩음' 아님(드리프트 가드 예외). VIX(변동성)·달러지수(dxy)는 등재 시점 실측
+# 스팟체크 통과분(2026-07-06). 신호로 쓰려면 topics.yaml 렌즈 매핑이 필요하나 그건 별도 스코프.
+# 여기 추가는 신중히 — 등재 전 실측 스팟체크(값·신선도)를 통과한 계열만 넣는다(억지 예외 금지).
+DISPLAY_ONLY_PRICE_KEYS = {"vix", "dxy"}
+
+
+def test_all_live_price_keys_consumed_by_a_lens():
+    # WB2 드리프트 가드: prices.yaml의 라이브 계열은 어떤 standing 렌즈에 매핑되거나(신호 소비),
+    # 명시적 display-only(가격 탭 소비)여야 한다 — 둘 다 아니면 미소비로 조용히 썩음(fail-loud).
+    # us2y·us30y·usdjpy·nasdaq이 렌즈 매핑으로 배선됨. VIX·달러지수는 display-only로 명시 예외.
+    from newsstore.collect.prices import load_price_symbols
+    from pathlib import Path
+    t = topics.load_topics()
+    pkeys = {s.key for s in load_price_symbols(
+        str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
+    mapped = {k for keys in topics.all_lens_price_keys(t).values() for k in keys}
+    orphans = (pkeys - mapped) - DISPLAY_ONLY_PRICE_KEYS
+    assert not orphans, f"prices.yaml 미매핑·미표시 계열(고아): {sorted(orphans)}"
+
+
+def test_extra_price_keys_exist_in_prices_yaml():
+    # 부가 계열도 1차 price_key와 같은 드리프트 가드(prices.yaml 실재).
+    from newsstore.collect.prices import load_price_symbols
+    from pathlib import Path
+    t = topics.load_topics()
+    pkeys = {s.key for s in load_price_symbols(
+        str(Path(__file__).resolve().parents[1] / "config" / "prices.yaml"))}
+    for l in t["lenses"]:
+        for k in (l.get("extra_price_keys") or []):
+            assert k in pkeys, f"{l['id']}: extra_price_key {k!r}가 prices.yaml에 없음"
+
+
+def test_report_group_order_equities_then_rates_then_rest():
+    # WB4: 조립 순서 = 주식(한국·미국) → 금리·채권(한국·미국) → 나머지. SSOT=topics.yaml 등장 순서.
+    # 순서 pin(회귀 가드) — 계약 shape(정확히 1그룹·누락 없음)은 test_report_groups_assets_only가 지킴.
+    t = topics.load_topics()
+    order = list(topics.report_groups(t).keys())
+    assert order[:2] == ["주식", "금리·채권"]                 # 앞 두 그룹 고정, 나머지는 뒤

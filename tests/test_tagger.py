@@ -40,7 +40,7 @@ def test_build_prompt_injects_vocab_ssot():
 
 class _FakeClient:
     def __init__(self, resp): self.resp = resp; self.calls = 0
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         self.calls += 1
         return self.resp
     def embed(self, text, *, timeout=30.0): ...
@@ -63,7 +63,7 @@ def test_tag_items_fewer_results_fills_empty():
 
 
 class _RaisingClient:
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         raise LLMError("non-JSON response")
     def embed(self, text, *, timeout=30.0): ...
 

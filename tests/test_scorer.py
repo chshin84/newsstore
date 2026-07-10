@@ -61,7 +61,7 @@ class _FakeLLM:
     def __init__(self, resp):
         self.resp, self.seen = resp, None
 
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         self.seen = prompt
         return self.resp
 
@@ -91,7 +91,7 @@ def test_score_story_failsoft_on_llm_error():
     from newsstore.enrich.gemini import LLMError
 
     class _Boom:
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             raise LLMError("down")          # LLM 장애만 fail-soft
     out = score_story({"title": "x", "summary": "s", "developments": []},
                       members=None, client=_Boom())

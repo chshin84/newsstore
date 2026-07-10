@@ -6,7 +6,7 @@ class _LLM:
     def __init__(self, verdict="DIFFERENT", boom=False):
         self.verdict, self.boom, self.calls = verdict, boom, 0
 
-    def complete(self, prompt, *, timeout=30.0):
+    def complete(self, prompt, *, timeout=30.0, model=None):
         self.calls += 1
         if self.boom:
             raise RuntimeError("down")
@@ -44,6 +44,76 @@ def test_assign_gray_band_llm_error_failsoft_new():
     c = EventClusterer(embed=lambda t: [[0.0, 0.0]], llm=llm)
     s = Story(id="s1", title="x", centroid_sum=(1.0, 0.0))
     assert c.assign(_art("a", [0.83, 1.0]), [s]) is None
+
+
+import logging
+
+
+def _decision_lines(caplog):
+    return [r.message for r in caplog.records if r.message.startswith("assign_decision")]
+
+
+def test_assign_telemetry_logs_det_hi_without_changing_shape(caplog):
+    # IB1: 결정론 합류 결정에 텔레메트리 1줄 발행. 반환 shape(str) 불변·LLM콜0.
+    llm = _LLM()
+    c = EventClusterer(embed=lambda t: [[0.0, 0.0]], llm=llm)
+    s = Story(id="s1", title="x", centroid_sum=(1.0, 0.0))
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        result = c.assign(_art("a", [1.0, 0.0]), [s])
+    assert result == "s1" and llm.calls == 0            # 판정·shape 불변
+    lines = _decision_lines(caplog)
+    assert len(lines) == 1 and "gate=det_hi" in lines[0] and "llm=na" in lines[0]
+    assert "result=join" in lines[0] and "cands=1" in lines[0]
+
+
+def test_assign_telemetry_logs_below_lo(caplog):
+    c = EventClusterer(embed=lambda t: [[0.0, 0.0]], llm=_LLM())
+    s = Story(id="s1", title="x", centroid_sum=(1.0, 0.0))
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        assert c.assign(_art("a", [0.0, 1.0]), [s]) is None
+    (line,) = _decision_lines(caplog)
+    assert "gate=below_lo" in line and "result=new" in line
+
+
+def test_assign_telemetry_logs_no_candidate(caplog):
+    c = EventClusterer(embed=lambda t: [[1.0, 0.0]], llm=_LLM())
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        assert c.assign(_art("a", [1.0, 0.0]), []) is None   # open_stories 없음
+    (line,) = _decision_lines(caplog)
+    assert "gate=no_cand" in line and "cands=0" in line and "result=new" in line
+
+
+def test_assign_telemetry_logs_grayband_merge_and_split(caplog):
+    s = Story(id="s1", title="x", centroid_sum=(1.0, 0.0))
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        c_same = EventClusterer(embed=lambda t: [[0.0, 0.0]], llm=_LLM("SAME"))
+        assert c_same.assign(_art("a", [0.83, 1.0]), [s]) == "s1"
+    merge_lines = [l for l in _decision_lines(caplog) if "llm=merge" in l]
+    assert merge_lines and "gate=grayband" in merge_lines[0] and "result=join" in merge_lines[0]
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        c_diff = EventClusterer(embed=lambda t: [[0.0, 0.0]], llm=_LLM("DIFFERENT"))
+        assert c_diff.assign(_art("a", [0.83, 1.0]), [s]) is None
+    split_lines = [l for l in _decision_lines(caplog) if "gate=grayband" in l]
+    assert split_lines and "llm=split" in split_lines[0] and "result=new" in split_lines[0]
+
+
+def test_assign_telemetry_grayband_llm_error_marks_fallback(caplog):
+    s = Story(id="s1", title="x", centroid_sum=(1.0, 0.0))
+    c = EventClusterer(embed=lambda t: [[0.0, 0.0]], llm=_LLM(boom=True))
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        assert c.assign(_art("a", [0.83, 1.0]), [s]) is None
+    grayband = [l for l in _decision_lines(caplog) if "gate=grayband" in l]
+    assert grayband and "fallback=llm_error" in grayband[0] and "result=new" in grayband[0]
+
+
+def test_assign_telemetry_grayband_no_llm_marks_no_llm(caplog):
+    s = Story(id="s1", title="x", centroid_sum=(1.0, 0.0))
+    c = EventClusterer(embed=lambda t: [[0.0, 0.0]])       # llm 미주입
+    with caplog.at_level(logging.INFO, logger="newsstore.enrich.clustering"):
+        assert c.assign(_art("a", [0.83, 1.0]), [s]) is None
+    grayband = [l for l in _decision_lines(caplog) if "gate=grayband" in l]
+    assert grayband and "llm=na" in grayband[0] and "fallback=no_llm" in grayband[0]
 
 
 def test_assign_fallback_embed_input_is_title_plus_body():

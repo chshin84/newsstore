@@ -6,7 +6,7 @@ CUT = NOW - timedelta(hours=1)
 
 
 class _LLM:
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         return {"headline": "H", "lead": "L", "article": ["b1", "b2"]}
 
 
@@ -52,7 +52,7 @@ def test_nondestructive_keeps_developments_when_summary_added_later(store):
 
 
 class _Boom:
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         from newsstore.enrich.gemini import LLMError
         raise LLMError("down")              # LLM 장애만 fail-soft
 

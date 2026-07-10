@@ -41,7 +41,8 @@
 - **`articled_count`** (int) · **`articled_at`** (datetime) — incremental 가드(`summary_count`·`scored_count`와 동일 per-pass 컨벤션).
 
 ### `frames` (report 패스 프레임 단계가 기록)
-`frames/{lens_id}`: `{risks[{id,text}], premiums[{id,text}], watchpoints[{id,text}], updated_at}`.
+`frames/{lens_id}`: `{risks[{id,text,achilles_kind,evidence_dev_ids}], premiums[...], watchpoints[...], updated_at}`.
+극의 `achilles_kind`(`words_deeds`|`structural`|null — 센티먼트 준거: RAS 말-행동 괴리로 잡은 극/구조적 이월극)와 `evidence_dev_ids`(근거 story_id, 환각 드롭)는 **additive**(소비자는 id/text만 읽어 하위호환). 설계: `docs/superpowers/specs/2026-07-04-sentiment-frame-design.md`.
 갱신 시 이전 판을 `frames_history/{lens_id}/snapshots/{date}`에 보관(additive). 실패 런은 어제 판 유지(updated_at 미갱신 = 지연 신호).
 
 ### `reports` (report 패스가 기록, 공개 read)

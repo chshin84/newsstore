@@ -48,26 +48,35 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
   --freshness=5m --format="value(textPayload)" | Select-String "feed\(s\) failed|collected .* new item"
 ```
 
-## B. 사이트 재배포 (web/index.html 변경 시)
-Firebase CLI/Node 없이 **Hosting REST API**로 배포 (PowerShell):
+## B. 사이트 재배포 (web/ 변경 시)
+Firebase CLI/Node 없이 **Hosting REST API**로 배포 (PowerShell).
+> ⚠️ **Hosting 릴리스는 파일 전체 스냅샷이다.** populateFiles에 넣은 파일만 새 릴리스에 존재하고, 빠뜨린 파일은 **404로 사라진다**(이전 릴리스가 갖고 있어도 무관). `index.html`은 `./config.js`(Firebase 웹 설정)를 import하므로 **둘 다** 올려야 한다 — 하나만 올리면 config.js 404 → Firebase 초기화 실패 → 피드/리포트 무한 로딩(2026-07-04 실제 사고). 그래서 아래는 `web/` 배포 대상 **전체**를 자동으로 올린다(파일 추가 시 `$deployFiles`만 갱신).
 ```powershell
 $g="C:\Users\ho381\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
 $tok=(& $g auth print-access-token).Trim()
 $H=@{Authorization="Bearer $tok"; "x-goog-user-project"="daily-recap-498506"}
 $site="https://firebasehosting.googleapis.com/v1beta1/projects/daily-recap-498506/sites/daily-recap-498506"
-$raw=[IO.File]::ReadAllBytes("D:\projects\newsstore\web\index.html")
-$ms=New-Object IO.MemoryStream
-$gz=New-Object IO.Compression.GzipStream($ms,[IO.Compression.CompressionMode]::Compress)
-$gz.Write($raw,0,$raw.Length); $gz.Close(); $gzb=$ms.ToArray()
-$hash=([Security.Cryptography.SHA256]::Create().ComputeHash($gzb)|%{$_.ToString("x2")}) -join ""
+# 배포 대상 전체 (URL경로 → 로컬파일). 새 정적파일 추가 시 여기만 늘린다.
+$deployFiles=@{ "/index.html"="D:\projects\newsstore\web\index.html"; "/config.js"="D:\projects\newsstore\web\config.js" }
+$gzmap=@{}; $hashmap=@{}
+foreach($p in $deployFiles.Keys){
+  $raw=[IO.File]::ReadAllBytes($deployFiles[$p])
+  $ms=New-Object IO.MemoryStream
+  $gz=New-Object IO.Compression.GzipStream($ms,[IO.Compression.CompressionMode]::Compress)
+  $gz.Write($raw,0,$raw.Length); $gz.Close(); $gzb=$ms.ToArray()
+  $gzmap[$p]=$gzb; $hashmap[$p]=(([Security.Cryptography.SHA256]::Create().ComputeHash($gzb)|%{$_.ToString("x2")}) -join "")
+}
 $ver=Invoke-RestMethod -Method POST -Uri "$site/versions" -Headers $H -ContentType "application/json" -Body "{}"
-$pop=Invoke-RestMethod -Method POST -Uri "https://firebasehosting.googleapis.com/v1beta1/$($ver.name):populateFiles" -Headers $H -ContentType "application/json" -Body (@{files=@{"/index.html"=$hash}}|ConvertTo-Json)
-if($pop.uploadRequiredHashes){Invoke-WebRequest -Method POST -Uri "$($pop.uploadUrl)/$hash" -Headers $H -ContentType "application/octet-stream" -Body $gzb|Out-Null}
+$pop=Invoke-RestMethod -Method POST -Uri "https://firebasehosting.googleapis.com/v1beta1/$($ver.name):populateFiles" -Headers $H -ContentType "application/json" -Body (@{files=$hashmap}|ConvertTo-Json)
+foreach($need in $pop.uploadRequiredHashes){
+  $p=($hashmap.GetEnumerator()|Where-Object{$_.Value -eq $need}).Key
+  Invoke-WebRequest -Method POST -Uri "$($pop.uploadUrl)/$need" -Headers $H -ContentType "application/octet-stream" -Body $gzmap[$p]|Out-Null
+}
 Invoke-RestMethod -Method PATCH -Uri "https://firebasehosting.googleapis.com/v1beta1/$($ver.name)?updateMask=status" -Headers $H -ContentType "application/json" -Body '{"status":"FINALIZED"}'|Out-Null
 Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -Headers $H -ContentType "application/json" -Body "{}"|Out-Null
-"deployed -> https://daily-recap-498506.web.app"
+"deployed ($($deployFiles.Keys -join ', ')) -> https://daily-recap-498506.web.app"
 ```
-배포 후 브라우저는 **Ctrl+F5**(캐시).
+배포 후 브라우저는 **Ctrl+F5**(캐시). 검증: `Invoke-WebRequest .../config.js`가 200인지, 사이트 콘솔에 404 없는지.
 
 ## C. 보안 규칙 변경 (firestore.rules)
 `firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기.
@@ -163,6 +172,7 @@ gcloud scheduler jobs create http newsstore-summary-hourly --location=asia-north
   - **기본값 근거**: 운영 측정에서 스토리 최근접쌍 코사인이 중앙 0.657·p95 0.767이라, 이전 0.55/0.75(이란+코스피 차용값)는 거의 모든 비교가 LLM 판정 구간에 걸려 호출이 과도했다. 0.62/0.80으로 올려 결정론 구간을 넓혔다. 추가 조정은 위 env로.
 - dual score 게이트 튜닝(#7, env): `NEWSSTORE_SCORE_MIN_MEMBERS`(비금융자산/emergent를 채점하는 최소 멤버수, 기본 2). standing/watch 렌즈는 게이트 면제(상시 채점).
   - **측정(값 결정 전)**: `stories`의 `risk`/`impact` 분포·게이트 통과율을 떠서 임계를 정한다. 루브릭(0~3 의미)·REF_WINDOW·EVENT_SANITY_DAYS는 코드 상수(라이브 분포 보고 후속 조정).
+- **LLM 모델 변경**: usage별 모델은 `config/models.yaml`(SSOT — 워커=flash-lite, 추론·리뷰어=3.5-flash)이 정의. 변경 → **processor 재빌드+6잡 갱신**(§E, report 포함). 비상시 재빌드 없이: `gcloud run jobs update <job> --update-env-vars=GEMINI_MODEL=<model>`(전역 오버라이드 — 그 잡의 모든 usage에 적용).
 - 태그 어휘 범위 측정(#8): `enrich.tag_report.tag_coverage(items_tags, vocab)`로 태그 빈도·무태그율·어휘밖(out_of_vocab) 태그를 본 뒤 통제 어휘(`config/taxonomy.yaml`) 범위를 정한다. 라이브 집계 예:
   ```python
   from newsstore.store.factory import make_store
@@ -213,6 +223,7 @@ gcloud alpha monitoring policies create --policy-from-file=/tmp/job-fail-policy.
 **컷 실행 전 게이트**: 프로덕션 `items`에 무인증 `runQuery` 1페이지 스모크(`curl POST https://firestore.googleapis.com/v1/projects/<프로젝트>/databases/(default)/documents:runQuery` — `limit 3`)가 200을 반환하는지 확인한다. 실패하면 sync 전제(공개 읽기 REST)가 깨진 것이므로 컷을 멈추고 조사한다.
 
 **절차**(스펙 §8):
+0. **인벤토리 재확인(중요)**: 아래 pause 목록은 2026-07-10 시점 문서 기준이며, 이후 배포(가격 수집·signals 등)로 실제 잡 구성이 앞서 있을 수 있다. `gcloud scheduler jobs list --location=asia-northeast3`로 실물을 조회한 뒤 **규칙으로 판정**하라 — 유지: 피드 수집(collector)·가격 수집(prices 계열), 정지: LLM(Gemini) 콜을 유발하는 인리치/분석 잡 전부("피드·가격만 남기고 다 꺼둔다" — 2026-07-10 사용자 결정).
 1. `gcloud scheduler jobs pause newsstore-enrich-10min | newsstore-summary-hourly | newsstore-lens-10min | newsstore-score-10min | newsstore-article-10min`(5건 — collector `newsstore-5min`은 유지).
 2. frames/report 잡·스케줄러는 애초에 만들지 않는다(기존 미배포 상태 유지 — 이전 배포 체크리스트의 해당 항목 폐기).
 3. `web/index.html` 변경분(피드 탭 기본·스토리/리포트 탭 숨김) Hosting 재배포(§B).

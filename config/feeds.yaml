@@ -48,6 +48,12 @@ feeds:
   - {feed_id: bz_sotd,       url: "https://www.benzinga.com/topic/stock-of-the-day/feed", source: Benzinga, asset_hint: us_stock, poll_minutes: 60, body_mode: summary, tier: wire}
   - {feed_id: bz_afterhours, url: "https://www.benzinga.com/after-hours-center/feed",    source: Benzinga, asset_hint: us_stock, poll_minutes: 60, body_mode: summary, tier: wire}
   - {feed_id: bz_bonds,      url: "https://www.benzinga.com/markets/bonds/feed",         source: Benzinga, asset_hint: us_bond,  poll_minutes: 60, body_mode: summary, tier: wire}
+  # ── 미국·글로벌 종합 경제지 (2026-07-06 curl 실측: HTTP·items·desc 확인. 인도지 Economic Times·Business Standard는 추적 자산 밖이라 제외) ──
+  - {feed_id: cnbc,          url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", source: CNBC, asset_hint: "us_market,global", language: en, poll_minutes: 30, body_mode: summary}   # 30 items · per-item desc
+  - {feed_id: yahoo_finance, url: "https://finance.yahoo.com/news/rssindex",               source: Yahoo Finance, asset_hint: us_stock, language: en, poll_minutes: 30, body_mode: headline}   # 50 items · 헤드라인만
+  - {feed_id: forbes_biz,    url: "https://www.forbes.com/business/feed/",                 source: Forbes, asset_hint: global, language: en, poll_minutes: 60, body_mode: summary}   # 25 items · per-item desc
+  - {feed_id: fortune,       url: "https://fortune.com/feed",                             source: Fortune, asset_hint: global, language: en, poll_minutes: 60, body_mode: full}   # content:encoded 전문(301→200)
+  - {feed_id: seekingalpha,  url: "https://seekingalpha.com/market_currents.xml",         source: Seeking Alpha, asset_hint: us_market, language: en, poll_minutes: 60, body_mode: headline}   # market currents · 저volume(7)
   # ── 크립토 전용 ──
   - {feed_id: coindesk,      url: "https://www.coindesk.com/arc/outboundfeeds/rss/", source: CoinDesk, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   - {feed_id: cointelegraph, url: "https://cointelegraph.com/rss",                   source: Cointelegraph, asset_hint: crypto, poll_minutes: 60, body_mode: summary}

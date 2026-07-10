@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from ..contracts.ports import LLMClient
 from .gemini import LLMError
 from .milestone import assign_delta_times, prior_texts
+from .model_config import model_for
 
 log = logging.getLogger("newsstore.enrich.summarizer")
 
@@ -131,7 +132,8 @@ def summarize_story(members_all: list[dict], client: LLMClient, *, now=None,
     omitted = len(members_all) - n
     raw = client.generate_json(
         build_summary_prompt(members_fed, omitted=omitted,
-                             prior_developments=prior_developments), timeout=30.0)
+                             prior_developments=prior_developments), timeout=30.0,
+        model=model_for("summary"))
     v = validate_summary(raw, n_members=n)
     if v is None:
         return None

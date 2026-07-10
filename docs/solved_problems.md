@@ -11,7 +11,7 @@
 - **Firebase REST**: 헤더 `x-goog-user-project: daily-recap-498506` 없으면 403.
 - **인라인 주석 금지**: `.gitignore`/`.env`/`--env-file`은 줄끝 `# 주석`을 값/패턴에 섞음 → 주석은 별도 줄.
 - **프로덕션을 테스트에 맞춰 약화 금지**: 테스트 더블이 부실하면 *테스트*를 고쳐라(프로덕션 `client.close()`를 guard로 무르게 X).
-- **Cloud Run Job 클론**: 새 Job을 `--args`만으로 생성하면 이미지 ENTRYPOINT가 덮여 *"container exited abnormally / exec likely failed"*로 죽는다. 기존 Job을 `gcloud run jobs describe --format=export` → name·mode만 sed 치환 → **`gcloud alpha run jobs replace`**(beta엔 `replace` 없음)로 적용해야 command(`python`)+args(`-m run_enrich --mode X`)+env(`GOOGLE_CLOUD_PROJECT`)까지 정확히 복제됨.
+- **Cloud Run Job 클론**: 새 Job을 `--args`만으로 생성하면 이미지 CMD가 args로 덮이는데 Dockerfile은 ENTRYPOINT가 없어(`CMD ["python","-m",...]`) args가 곧 실행 커맨드가 됨 → `-m`을 프로그램으로 exec하려다 *"container exited abnormally / exec likely failed"*로 죽는다(newsstore-prices 최초 생성서 재발, 2026-07-04). **단순 처방: create/update에 `--command=python`을 명시**하고 `--args=-m,newsstore.entrypoints.run_X`로 준다(그러면 `command=python`+`args=-m;...`). 복잡 복제가 필요하면 `describe --format=export` → name·mode sed → **`gcloud alpha run jobs replace`**(beta엔 `replace` 없음). 참고: `--args="^;^-m;..."` 커스텀 구분자는 리딩 `;`가 빈 arg를 만들 수 있으니 `--args=-m,mod` 콤마형이 안전.
 - **office gcloud 인증 위치**: 호스트 gcloud가 아니라 **docker 볼륨 `gcloud-cfg`**에 상주(`deploy-office.ps1`가 거기에 저장). 모든 호출은 `/work/ePrism-SSL-ROOT-CA.crt`를 컨테이너에 cp+`update-ca-certificates` 후 동작 — **`docker run`에 `-v "D:/projects/newsstore":/work` 마운트를 빼먹으면 CA 못 심어 SSL 실패**(빈 결과·가짜 0이 나옴, 데이터 없음으로 오인 금지).
 - **Firebase Hosting 버전=전체 스냅샷**: `populateFiles`에 바뀐 파일만 넣으면 나머지(예 `config.js`)가 빠져 사이트가 깨진다. `web/` **전 파일**(index.html+config.js) 모두 포함해 배포. 순서 = create version → populateFiles → 업로드 → finalize → **release**.
 - **Cloud Scheduler→Run Job 호출**: `run.googleapis.com/v2/.../jobs/X:run`은 **oauthToken**(scope `cloud-platform`)으로 호출(oidc 아님). `--oauth-service-account-email=newsstore-job@…`.
@@ -21,6 +21,7 @@
 - **머지 후 이미지 재빌드 필수 (배포 전)**: 코드를 main에 머지해도 `processor:latest` 이미지가 그대로면 **라이브 Job이 옛 코드를 돌린다** → 새 `--mode`(예 `score`)가 `invalid choice`로 죽음. **머지 → `gcloud builds submit` 재빌드 → `jobs update --image` → execute** 순서를 지켜라.
 - **사내(ePrism MITM) gcloud SSL**: 최신 gcloud(urllib3 v2 strict)가 프록시 인증서 AKI 부재를 거부(`Missing Authority Key Identifier`) → 로컬·Cloud Shell 모두 차단, CA 추가로 안 풀림. **우회: `scripts/deploy-office.ps1`**(옛 gcloud 402 컨테이너 + ePrism CA + `core/custom_ca_certs_file` + Cloud Run Jobs는 `beta` 트랙 + Job용 SA `newsstore-job@`로 secret 접근). 집(MITM 없음)에선 평범하게 됨.
 - **PowerShell→bash 루프변수 깨짐**: `bash -c "for J in ...; do gcloud ... \$J; done"`를 PowerShell에서 호출하면 `$J`가 안 풀려 인자가 밀림(`Invalid resource name [ --image=...]`). → 루프 대신 **명시적 커맨드 나열**.
+- **LLM grounding 리뷰어 오탐 = 리뷰어 입력 부실(생성기보다 적게 봄)**: 리포트 리뷰어가 "아일랜드 1,500BTC 압수"를 '출처 없는 날조'로 기각했으나 **실제 사실**(크립토 프레임 watchpoint 극). 원인 ① 리뷰어가 요약 150자만 받고 생성기는 200자 → 리뷰어가 **덜 봄** ② 구체 사실(수치·고유명사)은 요약이 아니라 스토리 `developments`에 있는데 **둘 다 전개 미전달** ③ 리뷰어가 **프레임을 아예 못 받아** 정당한 극 restate(watchpoints)를 날조로 오판. → **리뷰어 입력 = 생성기 입력 이상 + 출력이 근거하는 모든 출처(여기선 standing 프레임 극)를 명시적으로 제공**. 공유 `_story_line`(제목+요약+최신 전개)으로 생성기·리뷰어 대칭, `build_review_prompt(frame)`로 프레임을 2차 출처로 인정. 결과 10/10 통과(오탐 0). **일반화(domain-llm-runtime): grounding 리뷰어에는 판정 대상이 근거로 삼을 수 있는 컨텍스트를 남김없이 줘라 — 덜 주면 정당한 출력을 환각으로 죽인다.** 그리고 FAIL-LOUD 배지(검증 실패)를 성급히 억누르지 않은 덕에 이 입력 결함을 추적할 수 있었다(배지=진단 흔적).
 
 ## 환경 / 툴링
 - **로컬 Python 없음** — 호스트 `python`은 Windows Store 스텁. → **Docker 전용 개발**(개발 원칙 7). 모든 실행·테스트는 Docker.
@@ -87,3 +88,6 @@
 - **requirements.lock을 pip `-c`(constraints)로 쓰면 전이 의존성이 비고정** — constraints는 설치되는 것만 핀하고 목록에 없는 전이는 자유 해석. → 재현성이 목적이면 **전체 `pip freeze`로 재생성**(도커 안: `pip install -e '.[extras]' && pip freeze --exclude-editable`).
 - **compose 서비스가 `image:`만 참조하고 아무도 빌드하지 않으면 절차 문서가 거짓이 된다** — `build:` 블록을 함께 배선해 머리말 절차만으로 실행 가능하게.
 - **fake store가 실계약 필드를 빼먹어 datetime 직렬화 크래셔가 테스트를 통과** — 리포트 탭 구현에서 fake가 `updated_at` 없는 프레임만 줘서 `json.dumps(frame)`의 TypeError(프로덕션 첫 런 잡 전체 사망)를 287개 테스트가 못 잡음(최종 리뷰가 Docker 재현으로 발견). → 다음엔 **저장 계약이 심는 모든 필드를 fake에도 심고**, 프롬프트/직렬화 경로는 **에뮬레이터 왕복 실물로 1개 이상** 테스트한다("mock이 프로덕션 계약을 약화" gotcha의 직렬화 변형).
+
+## 2026-07-04 리포트 탭 배포
+- **Firebase Hosting 배포는 파일 전체 스냅샷 — index.html만 올리면 config.js가 404로 증발** — operations.md §B 스크립트가 `/index.html` 하나만 populateFiles에 넣어서, 재배포 순간 이전 릴리스의 `/config.js`(index.html이 import하는 Firebase 웹 설정)가 새 릴리스에서 사라짐 → 모듈 import 404 → Firebase 미초기화 → 피드·리포트 무한 "불러오는 중". 사이트는 HTTP 200이라 얕은 검증은 통과(스모크가 첫화면만 봄). → 다음엔 **Hosting은 배포 대상 전체를 한 릴리스에 올린다**(§B를 `web/` 전 파일 루프로 수정 완료). 검증도 **config.js 200 + 콘솔 404 없음 + 피드 실제 렌더(카드 수>0)**까지 봐야 한다(첫화면 200으로 "됐다" 금지). 진단은 브라우저 콘솔/네트워크가 SSOT — 단, Playwright 세션 캐시가 옛 404를 하드캐싱하니 캐시-우회 fetch나 새 클라(PowerShell curl)로 서버 실상태를 봐라.

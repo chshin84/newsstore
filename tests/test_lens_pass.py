@@ -31,7 +31,7 @@ def test_lens_pass_empty_story_no_lenses(store):
 
 
 class _FakeLLM:
-    def generate_json(self, prompt, *, timeout=30.0):
+    def generate_json(self, prompt, *, timeout=30.0, model=None):
         return {"lenses": ["risk", "oil_energy"]}
 
 
@@ -57,7 +57,7 @@ def test_lens_pass_llm_empty_verdict_saved(store):
     # LLM의 정상 무선택 판정([])은 prior로 덮지 않고 그대로 저장한다 — 덮으면
     # Stage1 키워드 오탐 제거(LLM 도입 목적)가 무력화된다.
     class _EmptyLLM:
-        def generate_json(self, prompt, *, timeout=30.0):
+        def generate_json(self, prompt, *, timeout=30.0, model=None):
             return {"lenses": []}
     store.upsert_items([_item("e", asset_hint="crypto", language="en")])
     store.create_story("s5", title="btc", vec=[1.0], member_id="e", entities=[], now=NOW)

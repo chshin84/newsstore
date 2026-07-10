@@ -11,6 +11,7 @@ import os
 
 from . import topics
 from .gemini import LLMError
+from .model_config import model_for
 
 log = logging.getLogger("newsstore.enrich.scorer")
 
@@ -103,7 +104,7 @@ def score_story(story: dict, members: list | None, client, *, timeout: float = 3
         return None                     # 멤버 0 + 요약 없음 → 스킵(크래시 금지)
     try:
         raw = client.generate_json(build_score_prompt(story.get("title", ""), body),
-                                   timeout=timeout)
+                                   timeout=timeout, model=model_for("score"))
     except LLMError as e:               # LLM 장애만 fail-soft(로깅) — 코드 버그는 전파(FAIL-LOUD)
         log.warning("score skip story %s (LLM): %s", story.get("id"), e)
         return None

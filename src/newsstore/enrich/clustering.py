@@ -296,22 +296,37 @@ class EventClusterer:
                 raise ValueError(f"임베딩 차원 불일치: article {len(vec)} vs story {len(cs)}")
             cands.append((_cosine(vec, cs), s))
         if not cands:
+            # IB1 텔레메트리: 결정 직전 평문 구조화 로그(Cloud Logging grep 집계·인프라0·LLM콜0).
+            logger.info("assign_decision cands=0 top1_cos=na gate=no_cand llm=na fallback=na result=new")
             return None                                 # 후보 없음 → 신규
         best_cos, best = max(cands, key=lambda t: (t[0], t[1].id))   # 결정론 tiebreak
 
         if best_cos >= self._hi:
+            logger.info("assign_decision cands=%d top1_cos=%.4f gate=det_hi llm=na fallback=na result=join",
+                        len(cands), best_cos)
             return best.id                              # 결정론 합류
         if best_cos < self._lo:
+            logger.info("assign_decision cands=%d top1_cos=%.4f gate=below_lo llm=na fallback=na result=new",
+                        len(cands), best_cos)
             return None                                 # 결정론 신규
-        if self._llm is not None:                       # gray-band — LLM 전용 게이트
+        llm_state, fallback = "na", "none"              # gray-band — LLM 전용 게이트
+        if self._llm is not None:
             a = _Doc(str(getattr(article, "id", "")), getattr(article, "title", "") or "",
                      getattr(article, "body", "") or "", (), None)
             b = _Doc(best.id, best.title or "", "", (), None)
             try:
                 if _llm_same_event(self._llm, a, b):
+                    logger.info("assign_decision cands=%d top1_cos=%.4f gate=grayband llm=merge fallback=none result=join",
+                                len(cands), best_cos)
                     return best.id
+                llm_state = "split"                     # DIFFERENT → 보수적 신규
             except Exception as exc:                    # 외부 LLM 장애 → 보수적 신규(Fail-soft)
                 logger.warning("assign gray-band LLM 호출 실패 → 보수적 신규: %s", exc)
+                llm_state, fallback = "split", "llm_error"
+        else:
+            fallback = "no_llm"                         # LLM 미주입 → 보수적 신규
+        logger.info("assign_decision cands=%d top1_cos=%.4f gate=grayband llm=%s fallback=%s result=new",
+                    len(cands), best_cos, llm_state, fallback)
         return None                                     # 부재/DIFFERENT/장애 → 신규
 
 
