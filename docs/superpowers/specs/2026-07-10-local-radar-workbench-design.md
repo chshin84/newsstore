@@ -120,7 +120,7 @@ gates:
     on_refute: "도착 뉴스 구획만 드롭(다른 구획 무영향)"
     status: pending
 ```
-계약: status는 pending → confirmed|refuted|void로 반드시 닫히며, **전이 시 `judged_by: user` 필드 필수**(검증기 강제 — 결정⑨a). 판정일 3일 경과 pending은 radar 실행이 일보 머리에 경고로 올린다. 기계 참조는 frames→gates 단방향(gate_id)만이며 검증기는 frames의 gate_id가 gates.yaml에 실재하는지 검사한다. on_confirm/on_refute는 사람용 액션 서술이다(기계 해석·참조 무결성 검사 대상 아님).
+계약: status는 pending → confirmed|refuted|void로 반드시 닫히며, **전이 시 `judged_by: user` 필드 필수**(검증기 강제 — 결정⑨a). 판정일 3일 경과 pending은 radar 실행이 일보 머리에 경고로 올린다. 기계 참조는 frames→gates 단방향(gate_id)만이며 검증기는 frames의 gate_id가 gates.yaml에 실재하는지 검사한다. on_confirm/on_refute는 사람용 액션 서술이다(기계 해석·참조 무결성 검사 대상 아님). 게이트에는 선택 필드 targets(watchlist id 리스트)를 둘 수 있다 — 종목 스테이션의 "오늘의 게이트" 구획이 이 필드로 필터한다(스키마 검증: 리스트 타입).
 
 ### 3.4 `journal/journal.jsonl` — 판단 원장 (append-only)
 ```jsonl
