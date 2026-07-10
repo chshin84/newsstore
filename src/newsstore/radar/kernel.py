@@ -17,6 +17,22 @@ from newsstore.enrich.lens_classify import classify_stage1
 
 _ws = re.compile(r"\s+")
 STOPWORDS = {"및", "등", "의", "를", "은", "는", "이", "가", "와", "과", "에", "도"}
+# 영어 기능어 — 첫 실데이터 일보(2026-07-10)에서 신호3·4가 on/as/Is/Why/After 류에
+# 침수된 실측 결함의 수정. 내용어(AI·Stock 등)는 남긴다 — 추가 조정은 백테스트 캘리브레이션의 몫.
+STOPWORDS_EN = {
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "as", "is", "are",
+    "was", "were", "be", "been", "it", "its", "this", "that", "these", "those",
+    "what", "why", "how", "when", "where", "here", "there", "with", "for", "by",
+    "from", "after", "before", "while", "will", "would", "can", "could", "has",
+    "have", "had", "but", "not", "no", "so", "if", "than", "then", "into", "about",
+    "over", "under", "out", "up", "down", "says", "said", "say", "amid", "his",
+    "her", "their", "our", "your", "my", "off", "all", "more", "most",
+}
+
+
+def _norm_token(t: str) -> str:
+    """라틴 토큰은 소문자로 접어 대소문자 변형('After'/'after')의 이중 집계를 막는다."""
+    return t.lower() if t.isascii() else t
 
 
 def dedup(rows: list[dict]) -> list[dict]:
@@ -90,8 +106,9 @@ def _tokens(title: str):
     1글자 토큰('덫')이 먼저 탈락하면 '변동성 덫' 같은 구가 구조적으로 검출 불가가 되고,
     탈락 토큰을 건너뛴 가짜 인접쌍이 생기기 때문(재리뷰 critical — 스펙 §5의 '1글자 제외'는
     유니그램에만 적용된다는 부록을 Task 8 커밋에서 스펙에 한 줄 추가한다)."""
-    raw = [t for t in re.split(r"[^0-9A-Za-z가-힣]+", title or "") if t]
-    unigrams = [t for t in raw if len(t) >= 2 and t not in STOPWORDS]
+    raw = [_norm_token(t) for t in re.split(r"[^0-9A-Za-z가-힣]+", title or "") if t]
+    unigrams = [t for t in raw if len(t) >= 2 and t not in STOPWORDS
+                and t not in STOPWORDS_EN]
     bigrams = [" ".join(p) for p in zip(raw, raw[1:])]
     return unigrams + bigrams
 

@@ -58,3 +58,14 @@ def test_signal3_bigram_emerges():
     base_days = [["평온한 시장"]] * 30
     res = kernel.emerging_terms(titles_now, base_days, w_days=1)
     assert any(t == "변동성 덫" for t, _c, _z in res)            # 바이그램 검출
+
+
+def test_signal3_english_function_words_filtered_and_case_folded():
+    """첫 실데이터 일보에서 실측된 침수 결함의 회귀 가드 — 영어 기능어는 걸러지고
+    라틴 내용어는 소문자로 접혀 한 키로 집계된다."""
+    titles_now = ["Why Is the Stock Up After All", "why is Stock up after rally"] * 2
+    base_days = [["평온한 시장"]] * 30
+    res = kernel.emerging_terms(titles_now, base_days, w_days=1)
+    terms = {t: c for t, c, _z in res}
+    assert "why" not in terms and "after" not in terms and "is" not in terms
+    assert terms.get("stock", 0) == 4
