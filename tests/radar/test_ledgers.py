@@ -60,6 +60,16 @@ def test_journal_review_verdict_basis_schema(tmp_path):
     ledgers.append_journal(str(p), dict(narr, user_approved=True))
 
 
+def test_journal_review_requires_plan_id_and_date(tmp_path):
+    p = tmp_path / "j.jsonl"
+    basis = {"kind": "price", "metric": "close", "value": 1, "source": "prices.db"}
+    with pytest.raises(ValueError, match="plan_id"):
+        ledgers.append_journal(str(p), {"type": "review", "date": "2026-08-01", "verdict_basis": basis})
+    with pytest.raises(ValueError, match="date"):
+        ledgers.append_journal(str(p), {"type": "review", "plan_id": "p1", "verdict_basis": basis})
+    assert not p.exists() or p.read_text(encoding="utf-8") == ""
+
+
 def test_frames_v2_local_contract():
     def pole(i, status="active"):
         return {"id": f"p{i}", "label": f"L{i}", "evidence": "e", "test": "t",

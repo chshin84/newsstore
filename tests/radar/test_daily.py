@@ -60,6 +60,15 @@ def test_baseline_coverage_guard_reports_missing(tmp_path):
     assert "결측: 기준선" in md                                    # 부분 백필 → 신호 결측 표기
 
 
+def test_signal2_edge_uses_watchlist_aliases(tmp_path):
+    """스펙 §5: 신호2 간선 어휘 = radar_vocab + watchlist aliases. "SK하이닉스"는
+    watchlist에만 있고 radar_vocab엔 없다 — vocab만 쓰면 HBM과 짝지어질 수 없다."""
+    items_db, prices_db = _ctx(tmp_path, with_prices=True)
+    localdb.upsert_items(items_db, [_mk(9999, "2026-07-10T05:00:00Z", "SK하이닉스 HBM 공급")])
+    md = daily.build_report(items_db, prices_db, today="2026-07-10")
+    assert "HBM — SK하이닉스 (금주 신규)" in md
+
+
 def test_overdue_gate_warning_in_header(tmp_path):
     items_db, prices_db = _ctx(tmp_path)
     md = daily.build_report(items_db, prices_db, today="2026-09-01")

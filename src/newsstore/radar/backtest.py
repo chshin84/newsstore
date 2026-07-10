@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from . import kernel, localdb, match
+from . import kernel, localdb, match, watchlist
 
 # 스펙 §9 사전 등록 타깃 10종 — 실행 시점에 고르지 않는다.
 TARGET_TERMS = ["엔드게임", "사이드카", "서킷브레이커", "변동성의 덫", "반사성",
@@ -105,7 +105,7 @@ def signal2_weekly_volume(db, *, weeks: int, as_of: str) -> list[int]:
     """주별 신규 간선 수 — '월 3건 미만이면 필드 뷰 강등'(스펙 §5) 판정 근거.
     입력은 _rows_by_day(실제 body 포함) — 프로덕션 cooccur_edges와 동일 재료."""
     byday = _rows_by_day(db)
-    vocab = match.load_vocab()
+    vocab = match.with_watchlist_aliases(match.load_vocab(), watchlist.load_watchlist())
     week_rows: dict[tuple, list[dict]] = {}
     for d, rs in byday.items():
         if not d or d > as_of:

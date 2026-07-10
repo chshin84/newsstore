@@ -46,3 +46,16 @@ def load_vocab(path: str = "config/radar_vocab.yaml") -> list[str]:
     if len(vocab) != len(set(vocab)):
         raise ValueError("radar_vocab: 중복 어휘")
     return vocab
+
+
+def with_watchlist_aliases(vocab: list[str], entries: list[dict]) -> list[str]:
+    """간선 어휘(신호2·신호4) = vocab + watchlist 전 항목 aliases 평탄화(스펙 §5).
+    중복 제거·순서 보존(vocab 우선, watchlist는 등장 순)."""
+    out = list(vocab)
+    seen = set(out)
+    for e in entries:
+        for a in e.get("aliases") or []:
+            if a not in seen:
+                out.append(a)
+                seen.add(a)
+    return out

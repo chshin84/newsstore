@@ -116,7 +116,7 @@ def build_report(items_db, prices_db, *, today: str,
     gates = ledgers.load_gates(gates_path)
     frames = ledgers.load_frames(frames_path, gate_ids={g["id"] for g in gates})
     journal = ledgers.load_journal(journal_path)
-    vocab = match.load_vocab(vocab_path)
+    vocab = match.with_watchlist_aliases(match.load_vocab(vocab_path), entries)
     rows = kernel.dedup(localdb.load_items(items_db))
 
     out = [f"# 레이더 일보 {today} (KST 기준)", ""]

@@ -59,6 +59,9 @@ def _validate_entry(e: dict) -> None:
             if not e.get(k):
                 raise ValueError(f"journal plan: 필수 필드 {k} 결측 — 시한 없는 판단은 채점 불가")
     elif e.get("type") == "review":
+        for k in ("plan_id", "date"):
+            if not e.get(k):
+                raise ValueError(f"journal review: 필수 필드 {k} 결측")
         vb = e.get("verdict_basis")
         if not isinstance(vb, dict):
             raise ValueError("journal review: verdict_basis는 구조화 필드여야 한다(자유 문자열 금지 — 결정⑨a)")

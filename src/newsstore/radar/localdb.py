@@ -73,7 +73,8 @@ def upsert_prices(db, rows: list[dict], *, source: str) -> None:
            VALUES (?,?,?,?,?,?,?,?,?,datetime('now'),NULL)
            ON CONFLICT(ticker,date) DO UPDATE SET open=excluded.open, high=excluded.high,
              low=excluded.low, close=excluded.close, adj_close=excluded.adj_close,
-             volume=excluded.volume, source=excluded.source, fetched_at=excluded.fetched_at""",
+             volume=excluded.volume, source=excluded.source, fetched_at=excluded.fetched_at,
+             flagged=NULL""",
         [(r["ticker"], r["date"], r["open"], r["high"], r["low"], r["close"],
           r["adj_close"], r["volume"], source) for r in rows])
     db.commit()

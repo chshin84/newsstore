@@ -37,3 +37,17 @@ def test_prices_upsert_and_flag(tmp_path):
     localdb.flag_price(db, "000660.KS", "2026-07-09", "high<low")
     assert len(localdb.load_closes(db, "000660.KS", include_flagged=True)) == 1
     assert localdb.load_closes(db, "000660.KS") == []
+
+
+def test_flag_cleared_by_correction_upsert(tmp_path):
+    """정정값 upsert는 flagged를 리셋한다(자가 치유 — ingest가 upsert 직후 재검사)."""
+    db = localdb.connect_prices(str(tmp_path / "prices.db"))
+    rows = [{"ticker": "000660.KS", "date": "2026-07-09", "open": 100, "high": 110,
+             "low": 90, "close": 105, "adj_close": 105, "volume": 1000}]
+    localdb.upsert_prices(db, rows, source="yfinance")
+    localdb.flag_price(db, "000660.KS", "2026-07-09", "high<low")
+    assert localdb.load_closes(db, "000660.KS") == []
+    corrected = [{"ticker": "000660.KS", "date": "2026-07-09", "open": 100, "high": 112,
+                  "low": 90, "close": 106, "adj_close": 106, "volume": 1000}]
+    localdb.upsert_prices(db, corrected, source="yfinance")
+    assert localdb.load_closes(db, "000660.KS") == [("2026-07-09", 106.0)]
