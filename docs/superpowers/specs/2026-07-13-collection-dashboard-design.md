@@ -13,8 +13,9 @@ newsstore가 수집하는 각 데이터 종류가 **최근 정상적으로 들�
 
 ## 배경·제약 (합의된 결정)
 
-- **읽기 경로 = 컬렉션 공개 read + 클라이언트 직접 쿼리(풀 드릴다운).** 사용자가 택함. 단 **바운드 쿼리**로만(전체 스캔 금지).
-- **🔴 공개 read의 실제 리스크(사용자 재확인 필요 — 축소 표기 금지):** 컬렉션 공개 read는 대시보드 UI 경로에 국한되지 않는다. 누구든 공개 `web/config.js`의 웹 apiKey로 Firestore 클라이언트를 붙여 `index_members` 3문서로 ~600 유니버스를 열거하고, 종목별 doc-id 범위 쿼리를 페이지네이션해 **income·balance·cashflow·ratios·estimates·price_targets 등 FMP Premium 전량을 스크래이핑**할 수 있다. 즉 Firestore가 사실상 **무인증 FMP Premium 벌크 미러**가 된다. "바운드 쿼리"는 Firestore 요청/비용만 제한할 뿐 **재배포(전량 수집)를 막지 못한다.** 그리고 한 번 노출되면 크롤·아카이브 캐시로 **회수 불가(비가역)**, FMP 약관의 재배포 제한 위반 소지도 있다(조항 미확인). 클라이언트 **write는 계속 금지**(Admin SDK만). — 대안은 Firebase Auth 게이트(비공개, 스크래이핑 차단)다. 이 리스크를 알고도 공개 read를 유지할지 사용자가 재확인해야 한다.
+- **읽기 경로 = Firebase Auth(구글 로그인) + 이메일 허용목록 게이트 + 클라이언트 직접 쿼리(바운드).** 완전 공개가 아니다 — **허용목록에 오른 이메일로 로그인한 사용자만** read. "이메일로 링크를 받은 사람만 접근"을 이렇게 구현한다(사용자 선택). 이 결정이 앞선 공개-read 스크래이핑 리스크(무인증 FMP 벌크 미러)를 **해소**한다.
+- **접근 통제 구현:** ① Firebase 콘솔에서 구글 로그인 provider 활성화. ② 허용 이메일을 `config/allowlist` 문서(`{emails:[...]}`)에 둔다 — 비공개(클라이언트 read 금지), 규칙이 `get()`으로 서버측에서만 읽는다. 사람 추가/취소 = 이 목록 한 줄(규칙 재배포 불요). ③ `firestore.rules`가 데이터 read를 `request.auth != null && request.auth.token.email in allowlist`로 게이트. **write는 전부 금지 유지**(Admin SDK만). 백엔드·서버 없음.
+- **잔여 리스크(정직히):** 허용된 소수는 여전히 데이터를 볼·긁을 수 있다(신뢰 그룹). 그러나 공개 노출(비가역)이 아니고 **개별 부여·취소 가능**하다. 전제: 방문자는 허용된 이메일의 구글 계정으로 로그인해야 한다(구글 계정 없는 수신자는 이메일 링크 방식으로 대체 — 설정 더 듦).
 - **비용(실측):** 이 대시보드가 호스팅·읽기에 더하는 비용은 사실상 $0이다. Firebase Hosting은 정적 파일 서빙이라 데이터량과 무관(페이지 ~150 KB, 무료 전송 360 MB/일 = 하루 ~2,400 로드). Firestore 읽기는 바운드 설계로 세션당 ~100~150회(무료 50,000회/일). 비용이 드는 곳은 수집 레이어의 저장·쓰기이고 그건 TTL이 잡는다 — 대시보드 소관 아님.
 - **컬렉션 규약 SSOT:** `docs/firestore-contract.md`. 모든 문서에 `fetched_at`(수집 시각)이 있고, 팩터/재무 문서 id는 `{symbol}__{YYYYMMDD}` 결정론 키다. 이 두 성질이 대시보드 쿼리의 토대다.
 
@@ -22,6 +23,7 @@ newsstore가 수집하는 각 데이터 종류가 **최근 정상적으로 들�
 
 - **별도 페이지 `web/dashboard.html`.** 기존 `index.html`(뉴스 리더)은 손대지 않는다. 관심사가 다르고(`FOCUSED`) index.html은 이미 크다.
 - Firebase 설정은 기존 `web/config.js`를 재사용한다(웹 apiKey는 비밀 아님 — 규칙이 데이터를 보호). Firestore JS SDK(모듈, CDN) 직접 사용, 기존 index.html과 동일 패턴.
+- **접근 게이트:** 대시보드는 Firebase Auth 구글 로그인을 요구한다 — 진입 시 미로그인이면 "구글로 로그인" 화면만, 로그인(허용목록 통과) 후 데이터를 렌더한다. Auth SDK(모듈 CDN)만 추가하고 백엔드는 없다. index.html(공개 뉴스 리더)은 로그인 불요 — 게이트는 이 페이지에만.
 - 순수 로직(신선도·지연 판정·포맷·그룹핑)은 테스트 가능한 함수로 분리해 `web/dashboard.html` 안 `<script type="module">`에 두되, node 테스트가 import할 수 있게 `web/dashboard_logic.mjs`로 뽑는다(기존 `web/*.js` 로직 분리 관행과 동일). index.html은 이 파일을 쓰지 않는다.
 
 ## 화면 1 — 수집 상태 카드
@@ -79,7 +81,12 @@ newsstore가 수집하는 각 데이터 종류가 **최근 정상적으로 들�
 - **샘플**은 상태 카드용으로 컬렉션당 최신 1~2건이면 충분(전체 스캔 금지).
 - `count()` 집계는 쓰지 않는다(대용량에서 read가 누적) — 신선도+유니버스 크기+샘플로 수집상황을 판단.
 
-**`firestore.rules` 변경(공개 read 확장):** 현재 공개 read 기준선은 `items`·`meta`·`prices`에 더해 **레거시 `fundamentals`**(구 배열형 컬렉션 — 지금은 `income`/`balance`/`cashflow`로 대체돼 write되지 않음)도 아직 열려 있다(리뷰 지적). 이 스테일 `fundamentals` 규칙은 **제거**한다. 그리고 드릴다운·상태가 읽는 컬렉션을 **read 허용**으로 추가한다: `price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`. **write는 전부 금지 유지**(Admin SDK만 — 공개 read여도 클라이언트 write는 막혀 미러만 가능, 변조 불가). 이는 `firestore-contract.md`가 "팩터=다운스트림 전용, 비공개"로 적어둔 것을 뒤집는 결정이므로, 계약 문서의 reader/공개read 항목도 이 스펙에 맞춰 갱신한다(레거시 `fundamentals` 스키마 행도 함께 정리).
+**`firestore.rules` 변경(2층 — 공개 + 인증 게이트):**
+- **공개 유지:** `items`·`meta`·`prices`는 기존 공개 read 그대로. 공개 뉴스 리더 `index.html`이 읽고, RSS·시세 스냅샷이라 FMP 재배포 제약 밖이다.
+- **인증+허용목록 게이트(FMP 데이터):** 팩터/스트림 컬렉션(`price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`)은 `allow read: if request.auth != null && request.auth.token.email in get(/databases/$(db)/documents/config/allowlist).data.emails`. 허용목록에 오른 이메일로 로그인해야만 read. `config/allowlist` 자체는 클라이언트 read 금지(규칙 `get()`만 접근 — 이메일 PII 비노출).
+- **레거시 `fundamentals` 규칙 제거**(컬렉션 폐기 — income/balance/cashflow가 대체).
+- **write는 전부 금지**(Admin SDK만).
+`firestore-contract.md`의 reader/공개read 항목도 이 2층 모델로 갱신한다(팩터=인증 게이트, 레거시 `fundamentals` 행 정리).
 
 **인덱스:** 위 전략상 신규 복합 인덱스는 없다. `firestore.indexes.json`은 무변경. (단일필드·doc-id 자동 인덱스만 사용.)
 
@@ -96,6 +103,7 @@ newsstore가 수집하는 각 데이터 종류가 **최근 정상적으로 들�
 ## 비기능 (항상)
 
 - **비밀:** 새 비밀 없음. FMP_API_KEY는 백엔드 전용이라 이 페이지엔 안 온다. 웹 apiKey는 비밀 아님.
+- **인증·접근:** Firebase Auth 구글 로그인은 무료 구간(월 수만 활성 인증까지 무료). `config/allowlist`는 이메일(PII)이라 클라이언트 read 금지 — 규칙 `get()`만 접근. 로그인 상태 유지·로그아웃 버튼 제공. 허용목록에서 이메일을 지우면 즉시 접근 취소(다음 규칙 평가부터).
 - **비용:** 위 실측대로 무료 구간. `count()` 회피·바운드 쿼리로 유지.
 - **드리프트 가드:** 카드 그룹핑·기대 주기 테이블은 `dashboard_logic.mjs` 한 곳(SSOT). 계약에 컬렉션이 늘면 이 테이블과 `firestore.rules` read 목록을 함께 늘린다(스펙에 명시).
 - **스타일:** 기존 `index.html`의 다크 테마·카드 룩을 따른다(구현 시 frontend-design 참조).
@@ -105,4 +113,6 @@ newsstore가 수집하는 각 데이터 종류가 **최근 정상적으로 들�
 - **티커 조인 키**(`firestore-contract.md` gotcha #3): 뉴스 items에 `tickers[]` + alias 사전 복원은 별도 소과제. 이 대시보드는 그것과 무관하게 동작한다(드릴다운은 팩터 컬렉션의 `symbol`로만 조인).
 - PIT 시계열 재구성(유니버스 역산)은 다운스트림 몫 — 대시보드는 현재 구성 + 변경 로그만 보여준다.
 
-<!-- spec-review: escalated -->
+<!-- 공개 read → Firebase Auth 이메일 허용목록 게이트로 전환(사용자 결정, escalate 해소). 인증 게이트는 리뷰어 선호 방향. -->
+<!-- spec-review: passed -->
+
