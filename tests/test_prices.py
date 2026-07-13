@@ -5,12 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from datetime import date
-
 from newsstore.collect.prices import (load_price_symbols, PriceSymbol,
                                       bars_from_fmp_intraday, bars_from_yahoo_intraday,
-                                      bars_from_treasury, run_price_pass, _bar_id,
-                                      week_windows, run_intraday_backfill)
+                                      bars_from_treasury, run_price_pass, _bar_id)
 
 REPO = Path(__file__).resolve().parents[1]
 FIX = REPO / "tests" / "fixtures"
@@ -360,48 +357,3 @@ def test_run_price_pass_one_failure_does_not_block_others():
     n = run_price_pass(store, fetchers,
                        [PriceSymbol("kosdaq", "^KQ11", "코스닥", "지수", 0, "yahoo"), SP])
     assert set(store.saved) == {"sp500"}                      # 한 심볼 실패가 나머지를 막지 않음
-
-
-# ─────────────────────────────── week_windows (5분봉 1년 백필 페이지네이션) ───────────────────────────────
-
-def test_week_windows_covers_lookback_newest_first():
-    ws = week_windows(14, date(2026, 7, 13))
-    assert ws[0] == ("2026-07-07", "2026-07-13")          # 최신 주(≤7일)
-    assert all(a <= b for a, b in ws)                     # from ≤ to
-    assert all((date.fromisoformat(b) - date.fromisoformat(a)).days <= 6 for a, b in ws)  # 각 창 ≤7일
-    assert min(a for a, _ in ws) == "2026-06-29"          # lookback 하한(today-14)까지 덮음
-    assert len(ws) == 3
-
-
-def test_week_windows_one_year_has_about_52_windows():
-    ws = week_windows(365, date(2026, 7, 13))
-    assert 52 <= len(ws) <= 54                            # 1년 ≈ 52~53주(경계 포함)
-
-
-def test_run_intraday_backfill_dedups_across_windows():
-    store = _Store()
-    def fw(sym, frm, to):                                 # 어느 창이든 같은 바 반환
-        return _fmp_intra([("2026-07-10 10:00:00", 100.0)])
-    n = run_intraday_backfill(store, fw, [SP], [("a", "b"), ("c", "d")], fetched_at=FA)
-    assert n == 1                                         # 2창 같은 바 → 새 바 1개(멱등 dedup)
-    assert len(store.bars) == 1
-
-
-def test_run_intraday_backfill_iterates_symbols_times_windows():
-    store = _Store()
-    seen = []
-    def fw(sym, frm, to):
-        seen.append((sym, frm, to))
-        return _fmp_intra([(f"2026-07-10 10:00:00", 100.0 + len(seen))])
-    run_intraday_backfill(store, fw, [SP, WTI], week_windows(14, date(2026, 7, 13)), fetched_at=FA)
-    assert len(seen) == 2 * 3                             # 2 심볼 × 3 창
-
-
-def test_run_intraday_backfill_one_failure_does_not_block_others():
-    store = _Store()
-    def fw(sym, frm, to):
-        if sym == "^GSPC":
-            raise RuntimeError("net")
-        return _fmp_intra([("2026-07-10 10:00:00", 50.0)])
-    n = run_intraday_backfill(store, fw, [SP, WTI], [("a", "b")], fetched_at=FA)
-    assert n == 1 and {b["key"] for b in store.bars.values()} == {"wti"}

@@ -155,8 +155,3 @@ def test_run_factor_pass_iterates_universe_times_specs():
     counts = run_factor_pass(store, fetch, ["AAPL", "MSFT"], [INCOME, PROFILE],
                              capture_date=CAP, fetched_at=FA)
     assert counts == {"income": 2, "profiles": 2}              # 2 심볼 × 2 스펙
-
-
-def test_prices_eod_spec_backfills_10y():
-    spec = next(s for s in SPECS if s.key == "prices_eod")
-    assert spec.lookback_days is not None and spec.lookback_days >= 3650   # ~10년치 from

@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import httpx
 import yaml
@@ -72,12 +72,7 @@ def main(argv=None) -> int:
     def fetch_delisted():    return _get("delisted-companies", {})
 
     def fetch_spec(spec, symbol):                    # per-symbol 스펙 fetch(엔진이 호출)
-        params = {"symbol": symbol, **spec.params}
-        if spec.lookback_days:                       # 깊은 history(예: prices_eod 10년) — from/to 부여
-            today = datetime.now(timezone.utc).date()
-            params["from"] = (today - timedelta(days=spec.lookback_days)).isoformat()
-            params["to"] = today.isoformat()
-        return _get(spec.endpoint, params)
+        return _get(spec.endpoint, {"symbol": symbol, **spec.params})
 
     try:
         with make_store() as store:

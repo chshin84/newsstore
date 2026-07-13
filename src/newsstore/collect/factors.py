@@ -28,7 +28,6 @@ class FactorSpec:
     cadence: str                    # "daily" | "weekly" — 엔트리포인트가 선택
     params: dict = field(default_factory=dict)   # 심볼 외 고정 파라미터(period=annual 등)
     date_field: str = "date"        # history에서 행의 날짜 필드
-    lookback_days: int | None = None  # history에서 from=today-이만큼(일). None=FMP 기본. 엔트리포인트가 from/to 부여.
 
 
 # 계약(docs/firestore-contract.md §1·§2)을 코드로 — 이 리스트가 수집 대상 SSOT.
@@ -38,8 +37,7 @@ SPECS: list[FactorSpec] = [
     FactorSpec("income", "income-statement", "history", "weekly", {"period": "annual"}),
     FactorSpec("balance", "balance-sheet-statement", "history", "weekly", {"period": "annual"}),
     FactorSpec("cashflow", "cash-flow-statement", "history", "weekly", {"period": "annual"}),
-    FactorSpec("prices_eod", "historical-price-eod/dividend-adjusted", "history", "daily",
-               lookback_days=3653),   # 10년치 배당조정 일봉 OHLC(from=today-10yr). FMP 기본(~5yr)보다 깊게.
+    FactorSpec("prices_eod", "historical-price-eod/dividend-adjusted", "history", "daily"),
     FactorSpec("market_cap", "historical-market-capitalization", "history", "weekly"),
     FactorSpec("grades_history", "grades-historical", "history", "weekly"),
     # §1 백필 가능 — snapshot(현재값)
