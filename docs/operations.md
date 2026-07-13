@@ -17,15 +17,15 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 | 종류 | 이름 |
 |------|------|
 | GCP 프로젝트 | `daily-recap-498506` (asia-northeast3) |
-| Firestore | `(default)` Native — 컬렉션 `items`, `feed_state`, `meta`, `prices`, `fundamentals` |
+| Firestore | `(default)` Native — 컬렉션 `items`·`feed_state`·`meta`·`prices`·`price_bars` + 팩터 계약 컬렉션(`income`·`ratios`·`prices_eod`·… — docs/firestore-contract.md) |
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
 | Cloud Run Job | `newsstore-collector` — 뉴스 수집(`run_collect`) |
-| Cloud Run Job | `newsstore-prices` — 가격 수집(`run_prices`, secret `fmp-api-key`) |
-| Cloud Run Job | `newsstore-fundamentals` — 펀더멘털 수집(`run_fundamentals`, secret `fmp-api-key`) |
+| Cloud Run Job | `newsstore-prices` — 가격 5분봉(`run_prices`, secret `fmp-api-key`) |
+| Cloud Run Job | `newsstore-factors` — 팩터·펀더멘털 수집(`run_factors`, secret `fmp-api-key`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) — 수집기 |
-| Cloud Scheduler | `newsstore-prices-hourly` (예 `10 * * * *`) — 가격 |
-| Cloud Scheduler | `newsstore-fundamentals-daily` (예 `30 6 * * *`) — 펀더멘털 |
-| Secret Manager | `fmp-api-key` (prices·fundamentals Job에 `--update-secrets`로 주입; SA에 secretAccessor) |
+| Cloud Scheduler | `newsstore-prices-5min` (`*/5 * * * *`) — 가격 5분봉 |
+| Cloud Scheduler | `newsstore-factors-weekly` (예 `30 6 * * 0`) — 팩터·펀더멘털 (배당조정 EOD는 daily로 별도) |
+| Secret Manager | `fmp-api-key` (prices·factors Job에 `--update-secrets`로 주입; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
 | Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |
@@ -33,13 +33,13 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 ---
 
 ## A. 수집기 재배포 (config/feeds.yaml 또는 수집기 코드 변경 시)
-`config/feeds.yaml`은 이미지에 `COPY` 되므로 **반드시 재빌드 후 Job 갱신**해야 반영된다. 세 수집 Job(collector·prices·fundamentals)이 같은 이미지를 쓰므로, 코드 변경 시 이미지 1개를 재빌드하고 세 Job 모두를 새 이미지로 갱신한다.
+`config/feeds.yaml`은 이미지에 `COPY` 되므로 **반드시 재빌드 후 Job 갱신**해야 반영된다. 세 수집 Job(collector·prices·factors)이 같은 이미지를 쓰므로, 코드 변경 시 이미지 1개를 재빌드하고 세 Job 모두를 새 이미지로 갱신한다.
 ```
 # 1) 이미지 재빌드 ([gcp] 타깃 = google-cloud-firestore 포함)
 gcloud builds submit --config infra/cloudbuild.yaml \
   --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest .
 # 2) 세 Job을 새 이미지 digest로 재고정
-for j in newsstore-collector newsstore-prices newsstore-fundamentals; do
+for j in newsstore-collector newsstore-prices newsstore-factors; do
   gcloud run jobs update "$j" \
     --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest \
     --region=asia-northeast3
@@ -82,7 +82,7 @@ Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -H
 배포 후 브라우저는 **Ctrl+F5**(캐시). 검증: 사이트 콘솔에 404 없는지.
 
 ## C. 보안 규칙 변경 (firestore.rules)
-`firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기. 공개 read 컬렉션은 `items`·`meta`·`prices`·`fundamentals`, `feed_state`는 비공개다.
+`firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기. 공개 read 컬렉션은 `items`·`meta`·`prices`(웹 확인 UI). 팩터 컬렉션과 `price_bars`는 다운스트림 전용(공개 read 아님), `feed_state`는 비공개다.
 
 ## D. 복합 인덱스 추가
 ```
@@ -94,11 +94,11 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 현재 인덱스: `source+published_at`(소스 필터). 가격·펀더멘털은 문서 키 직접 조회라 복합 인덱스가 없다.
 
 ## E. 가격·펀더멘털 수집 재배포 (FMP)
-가격(`run_prices`)·펀더멘털(`run_fundamentals`)은 **수집기와 같은 이미지**를 쓰고 CMD만 다르다. 코드 변경 반영은 §A의 재빌드 → 세 Job 이미지 갱신으로 함께 처리된다. 아래는 각 잡의 수동 실행·확인이다.
+가격(`run_prices`)·펀더멘털(`run_factors`)은 **수집기와 같은 이미지**를 쓰고 CMD만 다르다. 코드 변경 반영은 §A의 재빌드 → 세 Job 이미지 갱신으로 함께 처리된다. 아래는 각 잡의 수동 실행·확인이다.
 ```
 # 수동 1회 실행
 gcloud run jobs execute newsstore-prices --region=asia-northeast3 --wait
-gcloud run jobs execute newsstore-fundamentals --region=asia-northeast3 --wait
+gcloud run jobs execute newsstore-factors --region=asia-northeast3 --wait
 # 확인 (수집 수 / FMP·Yahoo 소스 / 상식범위 플래그)
 gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-prices"' \
   --freshness=10m --format="value(textPayload)"
@@ -111,7 +111,7 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 - **저장**: 5분봉 완전 스트림은 `price_bars`에 바 1개=문서 1개로 적재(새 바만 write), 웹 확인용 최신 스냅샷은 `prices/{key}`에 갱신한다. `price_bars`는 문서가 가장 빨리 늘어 TTL(§F)이 특히 중요하다.
 
 ## F. TTL 정책 (content 컬렉션 30일 만료)
-`items`·`prices`·`price_bars`·`fundamentals`는 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 30일, 나머지는 저장 시각 + 30일). **`feed_state`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`. 현재 상태 확인:
+모든 content 컬렉션(`items`·`prices`·`price_bars` + 팩터 계약 컬렉션)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 30일, 나머지는 저장 시각 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
 ```
 gcloud firestore fields ttl list --collection-group=items
 ```
@@ -119,7 +119,7 @@ gcloud firestore fields ttl list --collection-group=items
 ## G. 잡 실패 알림 (Cloud Monitoring)
 **왜:** Cloud Scheduler는 잡을 `:run`으로 **시작**시키고 HTTP 200(=시작 수락)만 받는다. 잡이 시작 직후 죽어도 스케줄러는 초록(성공)으로 보여 **조용한 실패**가 된다(Fail-Loud 위반). → Cloud Run Job **실패 실행 수>0**이면 알림.
 
-지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 세 잡(collector·prices·fundamentals) 공통 적용(job_name 필터 없이 전체).
+지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 세 잡(collector·prices·factors) 공통 적용(job_name 필터 없이 전체).
 
 ```bash
 # 1) 알림 채널(이메일) — 1회. 채널 ID를 받아둔다.

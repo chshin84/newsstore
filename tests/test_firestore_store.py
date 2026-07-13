@@ -82,12 +82,36 @@ def test_save_price_roundtrip_and_ttl(store):
     assert store.get_price("missing") == {}
 
 
-def test_save_fundamental_roundtrip_and_ttl(store):
-    store.save_fundamental("AAPL", {"income": [{"revenue": 1}], "balance": [], "cashflow": []})
-    got = store.get_fundamental("AAPL")
-    assert got["income"] == [{"revenue": 1}]
-    assert "expire_at" in got            # store가 호출자 무관하게 TTL 주입
-    assert store.get_fundamental("MSFT") == {}
+# --- 팩터·펀더멘털 계약: 제네릭 컬렉션 적재(save_docs/filter_new_ids_in/save_snapshot) ---
+
+def test_save_docs_batch_and_ttl_and_get(store):
+    store.save_docs("income", [{"id": "AAPL__20250927", "symbol": "AAPL", "revenue": 391},
+                               {"id": "AAPL__20240928", "symbol": "AAPL", "revenue": 383}])
+    got = store.get_docs("income", field="symbol", value="AAPL")
+    assert {d["revenue"] for d in got} == {391, 383}
+    d = store.db.collection("income").document("AAPL__20250927").get().to_dict()
+    assert "expire_at" in d and "id" not in d          # store가 TTL 주입, id는 문서키라 필드로 안 남김
+    assert store.save_docs("income", []) == 0
+
+
+def test_filter_new_ids_in_returns_only_unstored(store):
+    store.save_docs("c1", [{"id": "x", "v": 1}])
+    assert store.filter_new_ids_in("c1", ["x", "y", "z"]) == ["y", "z"]   # 저장된 x 제외, 순서 보존
+    assert store.filter_new_ids_in("c1", []) == []
+
+
+def test_save_docs_is_idempotent_on_same_id(store):
+    store.save_docs("income", [{"id": "AAPL__20250927", "symbol": "AAPL", "revenue": 391}])
+    store.save_docs("income", [{"id": "AAPL__20250927", "symbol": "AAPL", "revenue": 391}])
+    assert len(store.get_docs("income", field="symbol", value="AAPL")) == 1   # 중복 문서 안 쌓임
+
+
+def test_save_snapshot_overwrites_and_ttl(store):
+    store.save_snapshot("profiles", "AAPL", {"sector": "Technology"})
+    store.save_snapshot("profiles", "AAPL", {"sector": "Tech2"})            # 덮어쓰기
+    got = store.get_snapshot("profiles", "AAPL")
+    assert got["sector"] == "Tech2" and "expire_at" in got
+    assert store.get_snapshot("profiles", "MSFT") == {}
 
 
 # --- price_bars(5분봉 완전 스트림): 적재·dedup·조회·바 날짜 기준 TTL ---

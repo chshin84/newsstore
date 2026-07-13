@@ -81,21 +81,20 @@ gcloud firestore indexes composite create --collection-group=items \
 ```
 
 ## 7. TTL 정책 (content 컬렉션 30일 만료 — 비용 통제)
-`items`·`prices`·`price_bars`·`fundamentals`는 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(`items`·`prices`·`fundamentals`는 저장 시각 + 30일, `price_bars`는 바 날짜 + 30일). **`feed_state`엔 TTL을 걸지 않는다**(폴링 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉 완전 스트림)는 문서 수가 가장 빠르게 늘어 TTL이 특히 중요하다.
+모든 content 컬렉션은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(대부분 저장 시각 + 30일, `price_bars`만 바 날짜 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타는 만료 대상이 아니다 — 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉)와 `prices_eod`(배당조정 EOD 백필)가 문서 수가 가장 빨라 TTL이 특히 중요하다. 컬렉션마다 한 번씩 정책을 건다:
 ```
-gcloud firestore fields ttl update expire_at --collection-group=items \
-  --enable-ttl --project=<PROJECT_ID>
-gcloud firestore fields ttl update expire_at --collection-group=prices \
-  --enable-ttl --project=<PROJECT_ID>
-gcloud firestore fields ttl update expire_at --collection-group=price_bars \
-  --enable-ttl --project=<PROJECT_ID>
-gcloud firestore fields ttl update expire_at --collection-group=fundamentals \
-  --enable-ttl --project=<PROJECT_ID>
+for c in items prices price_bars \
+         income balance cashflow ratios prices_eod market_cap grades_history \
+         profiles estimates price_targets grades_consensus \
+         index_members index_changes delisted ; do
+  gcloud firestore fields ttl update expire_at --collection-group=$c \
+    --enable-ttl --project=<PROJECT_ID>
+done
 ```
-(콘솔 → Firestore → TTL에서도 컬렉션 그룹별 `expire_at` 필드를 지정할 수 있다.)
+(콘솔 → Firestore → TTL에서도 컬렉션 그룹별 `expire_at` 필드를 지정할 수 있다. 새 컬렉션을 계약에 추가하면 이 목록도 함께 늘린다.)
 
-## 8. 가격·펀더멘털 수집 Job (FMP)
-가격(`run_prices`)·펀더멘털(`run_fundamentals`)은 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — **Secret Manager**로 주입한다(커밋/이미지/로그 금지). 같은 collector 이미지를 쓰고 CMD만 다르다.
+## 8. 가격·팩터 수집 Job (FMP)
+가격(`run_prices`, 5분봉)·팩터(`run_factors`, 재무제표·비율·조정가·컨센서스·PIT유니버스)는 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — **Secret Manager**로 주입한다(커밋/이미지/로그 금지). 같은 collector 이미지를 쓰고 CMD만 다르다. 팩터는 cadence로 나눈다 — `--cadence daily`(배당조정 EOD), `--cadence weekly`(나머지 + 유니버스 갱신).
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
 printf '%s' "<FMP_API_KEY>" | gcloud secrets create fmp-api-key --data-file=- --replication-policy=automatic
@@ -107,21 +106,24 @@ gcloud run jobs create newsstore-prices \
   --service-account=$SA --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --update-secrets=FMP_API_KEY=fmp-api-key:latest \
   --command=python --args=-m,newsstore.entrypoints.run_prices --max-retries=1 --task-timeout=600
-# (c) 펀더멘털 수집 Job
-gcloud run jobs create newsstore-fundamentals \
+# (c) 팩터 수집 Job (cadence는 스케줄러가 --args로 넘긴다 — 아래 (d))
+gcloud run jobs create newsstore-factors \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
   --service-account=$SA --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --update-secrets=FMP_API_KEY=fmp-api-key:latest \
-  --command=python --args=-m,newsstore.entrypoints.run_fundamentals --max-retries=1 --task-timeout=600
-# (d) 스케줄러(예: 가격 시간당, 펀더멘털 일 1회). 수집기 패턴과 동일한 :run 호출
-gcloud scheduler jobs create http newsstore-prices-hourly --location=<REGION> \
-  --schedule="10 * * * *" \
+  --command=python --args=-m,newsstore.entrypoints.run_factors,--cadence,weekly --max-retries=1 --task-timeout=1800
+# (d) 스케줄러: 가격 5분봉(*/5), 팩터 daily(EOD)·weekly. 수집기 패턴과 동일한 :run 호출.
+#     팩터의 daily/weekly는 Job override로 cadence를 바꿔 실행한다(--update-job-args 또는 별도 Job).
+gcloud scheduler jobs create http newsstore-prices-5min --location=<REGION> \
+  --schedule="*/5 * * * *" \
   --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-prices:run" \
   --http-method=POST --oauth-service-account-email=$SA
-gcloud scheduler jobs create http newsstore-fundamentals-daily --location=<REGION> \
-  --schedule="30 6 * * *" \
-  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-fundamentals:run" \
+gcloud scheduler jobs create http newsstore-factors-weekly --location=<REGION> \
+  --schedule="30 6 * * 0" \
+  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-factors:run" \
   --http-method=POST --oauth-service-account-email=$SA
+# 배당조정 EOD는 매일: cadence=daily로 실행하는 별도 Job(newsstore-factors-daily, --args ...,--cadence,daily)을
+# 같은 패턴으로 만들어 "0 22 * * 1-5"(장마감 후) 스케줄에 건다.
 ```
 
 ## 9. 사이트 배포 (Firebase Hosting, REST)

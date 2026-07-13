@@ -38,11 +38,21 @@ class Store(Protocol):
     def get_price(self, key: str) -> dict:
         """prices/{key}. 없으면 {}."""
         ...
-    def save_fundamental(self, symbol: str, data: dict) -> None:
-        """fundamentals/{symbol} 최신 스냅샷 set(income/balance/cashflow). store가 expire_at TTL 주입."""
+    # 팩터·펀더멘털 계약(다운스트림 seam) — 제네릭 컬렉션 적재. store가 expire_at(수집 시각+30일) 주입.
+    def save_docs(self, collection: str, docs: list[dict]) -> int:
+        """collection에 문서 배치 set(각 doc는 'id' 보유). 반환=쓴 수."""
         ...
-    def get_fundamental(self, symbol: str) -> dict:
-        """fundamentals/{symbol}. 없으면 {}."""
+    def filter_new_ids_in(self, collection: str, ids: list[str]) -> list[str]:
+        """collection에 아직 없는 id만(입력 순서 보존)."""
+        ...
+    def save_snapshot(self, collection: str, doc_id: str, data: dict) -> None:
+        """현재값 스냅샷 한 문서 덮어쓰기(profiles·index_members 등)."""
+        ...
+    def get_snapshot(self, collection: str, doc_id: str) -> dict:
+        """collection/{doc_id}. 없으면 {}."""
+        ...
+    def get_docs(self, collection: str, *, field: str | None = None, value=None) -> list[dict]:
+        """collection 문서 조회(field 지정 시 where 필터, 아니면 전체)."""
         ...
 
     def filter_new_bar_ids(self, ids: list[str]) -> list[str]:

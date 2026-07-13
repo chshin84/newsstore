@@ -77,16 +77,53 @@ class FirestoreStore:
         snap = self.db.collection("prices").document(key).get()
         return (snap.to_dict() or {}) if snap.exists else {}
 
-    def save_fundamental(self, symbol: str, data: dict) -> None:
-        """fundamentals/{symbol} 최신 스냅샷 set(income/balance/cashflow). 통째 덮어쓰기.
-        TTL expire_at은 호출자가 안 넣어도 store가 보장(단일 통제점)."""
+    # ── 팩터·펀더멘털 계약(다운스트림 seam) — 제네릭 컬렉션 적재 ──
+    # 계약의 14개 컬렉션은 구조가 같다(심볼별 날짜 문서 / 현재값 스냅샷)이라 컬렉션명을
+    # 받는 제네릭 메서드로 통일한다. TTL은 컨베이어 모델대로 수집 시각 + 30일(백필 행도
+    # 지금 수집하면 30일 산다). 계약 SSOT: docs/firestore-contract.md.
+
+    def save_docs(self, collection: str, docs: list[dict]) -> int:
+        """collection에 문서 배치 set(각 doc는 'id' 보유). 반환=쓴 수.
+        TTL expire_at = 수집 시각 + 30일(store 단일 통제점). set이라 멱등(같은 id 덮어씀)."""
+        if not docs:
+            return 0
+        exp = datetime.now(timezone.utc) + _TTL
+        col = self.db.collection(collection)
+        n = 0
+        for i in range(0, len(docs), 500):           # Firestore batch ≤500 op
+            batch = self.db.batch()
+            for d in docs[i:i + 500]:
+                doc = {k: v for k, v in d.items() if k != "id"}
+                doc["expire_at"] = exp
+                batch.set(col.document(d["id"]), doc)
+                n += 1
+            batch.commit()
+        return n
+
+    def filter_new_ids_in(self, collection: str, ids: list[str]) -> list[str]:
+        """collection에 아직 없는 id만(입력 순서 보존) — 백필 히스토리에서 새 행만 write."""
+        if not ids:
+            return []
+        col = self.db.collection(collection)
+        refs = [col.document(i) for i in ids]
+        existing = {s.id for s in self.db.get_all(refs) if s.exists}
+        return [i for i in ids if i not in existing]
+
+    def save_snapshot(self, collection: str, doc_id: str, data: dict) -> None:
+        """현재값 스냅샷 한 문서 덮어쓰기(profiles·index_members·index_changes). TTL 주입."""
         doc = dict(data)
         doc["expire_at"] = datetime.now(timezone.utc) + _TTL
-        self.db.collection("fundamentals").document(symbol).set(doc)
+        self.db.collection(collection).document(doc_id).set(doc)
 
-    def get_fundamental(self, symbol: str) -> dict:
-        snap = self.db.collection("fundamentals").document(symbol).get()
+    def get_snapshot(self, collection: str, doc_id: str) -> dict:
+        snap = self.db.collection(collection).document(doc_id).get()
         return (snap.to_dict() or {}) if snap.exists else {}
+
+    def get_docs(self, collection: str, *, field: str | None = None, value=None) -> list[dict]:
+        """collection 문서 조회(field 지정 시 where 필터, 아니면 전체). 소비자·테스트용."""
+        col = self.db.collection(collection)
+        stream = col.where(field, "==", value).stream() if field is not None else col.stream()
+        return [s.to_dict() or {} for s in stream]
 
     def filter_new_bar_ids(self, ids: list[str]) -> list[str]:
         """price_bars에 아직 없는 바 id만(입력 순서 보존) — 새 바만 write해 5분 주기 write 비용을

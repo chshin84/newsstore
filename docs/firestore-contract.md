@@ -11,9 +11,7 @@
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
 | `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 **최신 스냅샷**(값+최근 시계열) — 웹 확인용 |
 | `price_bars` | prices Job | 다운스트림 | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
-| `fundamentals` | fundamentals Job | web UI | 있음(`expire_at`) | 티커별 재무제표(FMP) — 아래 팩터 계약의 seed |
-
-> 위는 현재 구현된 수집 표면이다. 다운스트림 백테스트용 **팩터·펀더멘털 수집 계약**(ratios·재무제표·배당조정가·컨센서스 스냅샷·PIT 유니버스 등)은 이 문서 하단 「팩터·펀더멘털 수집 계약」 절이 SSOT다 — 아직 구현 전, 목표 계약이다.
+> 위는 뉴스·시세 수집 표면이다. 다운스트림 백테스트용 **팩터·펀더멘털 수집**(ratios·재무제표·배당조정가·컨센서스 스냅샷·PIT 유니버스 등 ~17개 컬렉션)은 이 문서 하단 「팩터·펀더멘털 수집 계약」 절이 SSOT이며, `entrypoints/run_factors`로 **구현돼 있다**.
 
 ## TTL 규칙 (1개월, 비용 통제)
 
@@ -63,7 +61,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - `get_feed_state`, `set_feed_state`, `count`, `filter_new_ids`, `set_meta`.
 - `save_price(key, data)`, `get_price(key)` — 스냅샷. TTL(`expire_at`) 주입.
 - `filter_new_bar_ids(ids)`, `save_bars(bars)`, `get_bars(key)` — price_bars 스트림. `save_bars`가 바 날짜 기준 TTL 주입.
-- `save_fundamental(symbol, data)`, `get_fundamental(symbol)` — TTL 주입.
+- `save_docs(collection, docs)`, `filter_new_ids_in(collection, ids)`, `save_snapshot(collection, doc_id, data)`, `get_snapshot`, `get_docs` — 팩터·펀더멘털 계약의 제네릭 적재(하단 절). `expire_at`(수집 시각+30일) 주입.
 - `close`/`__enter__`/`__exit__`.
 
 ## 필터 (비-LLM 규칙, 수집 경로에 배선됨)
@@ -154,6 +152,11 @@ FMP는 이 값들의 "과거 어느 날의 값"을 주지 않는다. **오늘부
 
 다운스트림은 뉴스와 팩터를 **티커로 조인**한다. 그러려면 newsstore 뉴스 `items`가 티커로 해석 가능해야 하는데, 현재는 `asset_hint`만 있고 해석된 티커가 없다. 티커 태깅은 무-LLM 규칙(alias 사전 매칭)으로 되살릴 수 있다 — 이번 수집-전용 전환에서 삭제한 `watchlist.yaml`(티커+alias)이 바로 그 어휘였다. **별도 소과제로 남긴다**: `items`에 `tickers[]` 필드 추가 + 티커-alias SSOT 복원. 이 계약(팩터 데이터)과 독립적으로 진행 가능하다.
 
-## 현재 상태와의 관계 (구현 Phase로 넘길 것)
+## 구현 (Phase 1 — 완료)
 
-지금 코드의 `fundamentals/{symbol}`(고정 5티커, income/balance/cashflow 배열)은 이 계약의 seed다. 구현 Phase에서 (1) 유니버스를 constituent 도출로 넓히고, (2) 재무제표를 위 per-period 개별 문서 컬렉션(`income`·`balance`·`cashflow`)으로 재구성하며, (3) 위 나머지 컬렉터를 추가한다. 이 절이 그 구현의 목표 계약이다.
+이 계약은 `entrypoints/run_factors`로 구현돼 있다.
+- **유니버스 도출**: `collect/universe.py`가 `config/factors.yaml`의 인덱스(sp500·nasdaq·dowjones) 현재 구성종목에서 티커를 도출하고(하드코딩 없음), `index_members`·`index_changes`·`delisted`를 적재한다.
+- **수집 엔진**: `collect/factors.py`의 선언적 `SPECS`(계약의 per-symbol 컬렉션 SSOT) + 제네릭 엔진이 universe × 스펙을 돌며 shape별(history/asof/snapshot)로 적재한다. 응답은 FMP 스키마 그대로 저장한다.
+- **주기**: `run_factors --cadence daily|weekly|all`. `daily`=배당조정 EOD, `weekly`=나머지(재무제표·비율·시총·프로파일·§2 as-of 스냅샷)+유니버스 갱신.
+- **store**: 제네릭 `save_docs`/`filter_new_ids_in`(history dedup)·`save_snapshot`이 `expire_at`(수집 시각+30일) TTL을 주입한다.
+- 실 FMP + 에뮬레이터 엔드투엔드로 11개 컬렉터 전부 검증(2856 문서/2종목, 오류 0).

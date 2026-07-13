@@ -1,0 +1,11 @@
+# 팩터·펀더멘털 수집 대상 (SSOT) — 소비자: entrypoints/run_factors.py
+#
+# 유니버스는 종목을 하드코딩하지 않고 아래 인덱스의 현재 구성종목에서 도출한다(collect/universe.py).
+# 계약(컬렉션·필드·TTL·주기)의 SSOT는 docs/firestore-contract.md.
+#   indices     : 유니버스를 이룰 인덱스(FMP 엔드포인트 접두). 현재 = S&P500 ∪ Nasdaq-100 ∪ Dow.
+#   max_symbols : 유니버스 상한(0=무제한). 초기 검증·비용 통제용 — 사전순 앞에서 자른다.
+indices:
+  - sp500
+  - nasdaq
+  - dowjones
+max_symbols: 0
