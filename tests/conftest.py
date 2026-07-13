@@ -17,7 +17,7 @@ def fsclient():
         pytest.skip("Firestore emulator not running (set FIRESTORE_EMULATOR_HOST)")
     from google.cloud import firestore
     db = firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "test"))
-    for col in ("items", "feed_state", "meta", "prices", "fundamentals", "t"):
+    for col in ("items", "feed_state", "meta", "prices", "price_bars", "fundamentals", "t"):
         for d in db.collection(col).stream():
             d.reference.delete()
     return db

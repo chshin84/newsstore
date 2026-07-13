@@ -1,18 +1,23 @@
-"""가격 데이터 수집 — FMP + Yahoo 하이브리드로 지수·수익률·환율·원자재를 prices/{key}에 저장.
+"""가격 데이터 수집 — FMP + Yahoo 하이브리드로 5분봉(인트라데이) 스트림을 수집한다.
 
-목적: 가격 탭(값+차트). SSOT는 config/prices.yaml. HTTP는 주입(테스트 fake) — 이 모듈은
-응답 파싱·오케스트레이션만. 소스는 심볼별로 셋 중 하나다(config가 SSOT):
-  - fmp          : FMP quote + historical-price-eod(일봉). 대다수 지수·환율·원자재·변동성.
-  - fmp_treasury : FMP treasury-rates에서 수익률 도출(year2/year10/year30). 미국채가 권위 소스.
-  - yahoo        : Yahoo Finance chart(무키, UA만). FMP Premium 미커버 3종(kosdaq·dxy·wti) 폴백.
+목적: 다운스트림 적재용 원천 5분봉 스트림 + 웹 확인용 최신 스냅샷. SSOT는 config/prices.yaml.
+HTTP는 주입(테스트 fake) — 이 모듈은 응답 파싱·오케스트레이션만. 소스는 심볼별로 셋 중 하나다:
+  - fmp          : FMP historical-chart/5min(인트라데이 OHLCV). 지수·환율·원자재·변동성.
+  - fmp_treasury : FMP treasury-rates에서 수익률 도출(year2/10/30). 미국채는 5분봉이 없어 **일봉 1바/일**.
+  - yahoo        : Yahoo Finance chart(interval=5m, 무키·UA). FMP Premium 미커버 3종(kosdaq·dxy·wti) 폴백.
 엔트리포인트(run_prices)가 FMP client(헤더 apikey)와 Yahoo client(UA)를 배선한다.
 
-market-data-integrity: 값·등락은 라이브 시세가 아니라 시계열에서 도출(stale 라이브를 close로 쓰면
-다일간 등락 오답 — parse_yahoo_chart 주석 참조). 저장 dict에 신선도(fetched_at)·소스(source)·상식범위
-플래그(flags, 비파괴)를 실어 조용히 틀린 데이터를 검문소가 잡게 한다. 만료(expire_at)는 store가 주입.
+저장(두 갈래):
+  - price_bars/{key}__{ts} : 바 하나당 문서(완전 스트림). 새 바만 write(filter_new_bar_ids로 dedup).
+    멱등 — 겹쳐 받은 바는 같은 id라 재적재 안 함. expire_at(TTL 30일)은 store가 바 날짜에서 주입.
+  - prices/{key}           : 최신 스냅샷(값+최근 시계열) — 웹 확인 UI가 읽는다. 매 패스 덮어쓰기.
+
+market-data-integrity: 각 5분봉의 close는 그 봉 자체의 종가라 stale-라이브 오답이 없다. 스냅샷에는
+신선도(fetched_at)·상식범위 flags(비파괴)를 실어 조용히 틀린 데이터를 검문소가 잡게 한다.
 """
 from __future__ import annotations
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -26,7 +31,7 @@ ALLOWED_SOURCES = {"fmp", "fmp_treasury", "yahoo"}   # config/prices.yaml source
 
 @dataclass(frozen=True)
 class PriceSymbol:
-    key: str            # 내부 id — prices/{key} 문서
+    key: str            # 내부 id — prices/{key} 문서, price_bars id 접두
     symbol: str         # 소스 심볼(fmp: ^GSPC·USDKRW·GCUSD, yahoo: ^KQ11·CL=F, treasury: 표시용)
     label: str
     group: str | None = None            # 분류(지수·금리·환율·원자재·변동성) — 프로즌 계약, IMP-web 소비.
@@ -66,9 +71,9 @@ def load_price_symbols(path: str) -> list[PriceSymbol]:
     return out
 
 
-SERIES_MAX_POINTS = 30           # 차트에 실을 일봉 수(값+차트 = 이 시계열 하나로 도출)
+SNAPSHOT_MAX_POINTS = 60         # 스냅샷 차트에 실을 최근 봉 수(웹 확인용 — 5분봉 60개 ≈ 5시간)
 
-# 상식범위 가이드(§2 market-data-integrity) — %등락이 넘으면 삭제하지 않고 비파괴 플래그만 단다.
+# 상식범위 가이드(market-data-integrity) — %등락이 넘으면 삭제하지 않고 비파괴 플래그만 단다.
 # 지수는 ±15%, 환율은 ±5%. 금리·원자재·변동성은 정상 스윙이 커 임계를 두지 않는다.
 RANGE_PCT_LIMIT = {"지수": 15.0, "환율": 5.0}
 
@@ -80,120 +85,96 @@ def _fnum(v):
         return None
 
 
-def _epoch_to_date(t) -> str | None:
-    try:
-        return datetime.fromtimestamp(int(t), tz=timezone.utc).strftime("%Y-%m-%d")
-    except (TypeError, ValueError, OSError, OverflowError):
-        return None
-
-
-def _iso_date(v) -> str | None:
-    """FMP date('2026-07-10' 또는 '2026-07-10 16:00:00')에서 날짜 부분만."""
-    return v.split(" ")[0] if isinstance(v, str) and v.strip() else None
-
-
 def _now_iso() -> str:
     """신선도(fetched_at) — 조회 시각(UTC ISO). 스케줄러가 조용히 멈춰도 낡은 값을 걸러내게."""
     return datetime.now(timezone.utc).isoformat()
 
 
-def _derive(series: list[dict], *, fallback_close=None, fallback_dt=None,
-            currency=None) -> dict | None:
-    """시계열(오래된→최신)에서 값·등락을 도출해 저장 계약 dict를 만든다(소스 무관 공통).
-    close=series[-1], 전일=series[-2]. 시계열이 비면 fallback(라이브 시세)로 값만 채운다."""
-    close = series[-1]["c"] if series else fallback_close
-    if close is None:
+def _epoch_to_iso(t) -> str | None:
+    try:
+        return datetime.fromtimestamp(int(t), tz=timezone.utc).isoformat()
+    except (TypeError, ValueError, OSError, OverflowError):
         return None
-    prev = series[-2]["c"] if len(series) >= 2 else None
-    change = (close - prev) if prev is not None else None
-    pct = ((close - prev) / prev * 100.0) if prev not in (None, 0) else None
-    return {"close": close, "change": change, "percent_change": pct,
-            "datetime": (series[-1]["t"] if series else fallback_dt),
-            "currency": currency, "series": series}
 
 
-def parse_yahoo_chart(raw, *, max_points: int = SERIES_MAX_POINTS) -> dict | None:
-    """Yahoo Finance chart API 응답 파싱 → 현재값·등락 + 차트 시계열(값+차트 겸용). yahoo 폴백 전용.
-    chart.result[0]: meta.regularMarketPrice(=현재값), meta.chartPreviousClose(직전),
-    timestamp[]·indicators.quote[0].close[](일봉). series=오래된→최신 {t(날짜),c}.
-    에러/무result/무close → None(fail-soft, 저장 안 함)."""
+def _bar_id(key: str, dt_str: str) -> str:
+    """price_bars 문서 id — {key}__{숫자만 뽑은 타임스탬프}. 결정론이라 겹쳐 받아도 멱등."""
+    digits = re.sub(r"\D", "", dt_str or "")[:14]     # YYYYMMDDHHMMSS(일봉이면 뒤가 짧다)
+    return f"{key}__{digits}"
+
+
+def _bar(s: PriceSymbol, dt_str: str, *, fetched_at: str,
+         o=None, h=None, l=None, c=None, v=None) -> dict:
+    """price_bars 문서 1건(바 1개). 소스 무관 공통 shape. datetime은 소스 문자열을 보존한다
+    (다운스트림이 해석 — FMP 인트라데이는 거래소 로컬시각, Yahoo/treasury는 UTC/날짜)."""
+    bar = {"id": _bar_id(s.key, dt_str), "key": s.key, "symbol": s.symbol,
+           "label": s.label, "group": s.group, "order": s.order,
+           "source": s.source, "datetime": dt_str, "close": c,
+           "fetched_at": fetched_at}
+    for name, val in (("open", o), ("high", h), ("low", l), ("volume", v)):
+        if val is not None:
+            bar[name] = val
+    return bar
+
+
+def bars_from_fmp_intraday(raw, s: PriceSymbol, *, fetched_at: str) -> list[dict]:
+    """FMP historical-chart/5min 응답 → 시간순(오래된→최신) 바 리스트.
+    raw=[{date,open,high,low,close,volume}] (FMP는 최신순). 무close 봉은 드롭(fail-soft)."""
+    rows = raw if isinstance(raw, list) else []
+    bars = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        c, dt = _fnum(row.get("close")), row.get("date")
+        if c is None or not (isinstance(dt, str) and dt.strip()):
+            continue
+        bars.append(_bar(s, dt.strip(), fetched_at=fetched_at,
+                         o=_fnum(row.get("open")), h=_fnum(row.get("high")),
+                         l=_fnum(row.get("low")), c=c, v=_fnum(row.get("volume"))))
+    bars.sort(key=lambda b: b["datetime"])           # ISO 문자열 사전순 = 시간순
+    return bars
+
+
+def bars_from_yahoo_intraday(raw, s: PriceSymbol, *, fetched_at: str) -> list[dict]:
+    """Yahoo Finance chart(interval=5m) 응답 → 시간순 바 리스트. yahoo 폴백 전용.
+    chart.result[0]: timestamp[]·indicators.quote[0].{open,high,low,close,volume}. epoch→UTC ISO."""
     if not isinstance(raw, dict):
-        return None
+        return []
     res = ((raw.get("chart") or {}).get("result")) if isinstance(raw.get("chart"), dict) else None
     if not isinstance(res, list) or not res or not isinstance(res[0], dict):
-        return None
+        return []
     r0 = res[0]
-    meta = r0.get("meta") or {}
     ts = r0.get("timestamp") or []
-    quote0 = (((r0.get("indicators") or {}).get("quote") or [{}])[0] or {})
-    quotes = quote0.get("close") or []
-    # 거래량(WB1): 같은 콜에 실려온다. **주식만 의미**(FX·수익률지수·선물은 호출자가 무시).
-    # 없으면 series 점에 'v' 키 자체를 안 실어(additive·비파괴 — 기존 소비자 무영향).
-    volumes = quote0.get("volume") or []
-    series = []
-    for i, (t, c) in enumerate(zip(ts, quotes)):
-        cv, dt = _fnum(c), _epoch_to_date(t)
-        if cv is not None and dt is not None:
-            pt = {"t": dt, "c": cv}
-            vv = _fnum(volumes[i]) if i < len(volumes) else None   # i는 ts 인덱스와 정렬(null close만 드롭)
-            if vv is not None:
-                pt["v"] = vv
-            series.append(pt)
-    series = series[-max_points:]                    # 최근 N일(오래된→최신 유지)
-    # 값·등락 모두 시계열에서 도출 — 값=series[-1](차트 끝점과 일치), 전일=series[-2].
-    # ⚠️ regularMarketPrice(라이브)를 close로 쓰면 시계열이 stale일 때 다일간 등락이 되고
-    #    (^KS200 사례 -10%), meta.chartPreviousClose는 range=1mo에선 '한 달 전'이라 둘 다 안 씀.
-    return _derive(series, fallback_close=_fnum(meta.get("regularMarketPrice")),
-                   fallback_dt=_epoch_to_date(meta.get("regularMarketTime")),
-                   currency=meta.get("currency"))
-
-
-def parse_fmp_quote_history(quote_json, hist_json, *, max_points: int = SERIES_MAX_POINTS) -> dict | None:
-    """FMP quote + historical-price-eod 응답 파싱 → 현재값·등락 + 차트 시계열.
-    hist_json=[{symbol,date,close,volume,...}] (또는 /light의 price) — FMP는 **최신순**이라
-    날짜로 오름차순 정렬해 series(오래된→최신)를 만든다. 값·등락은 시계열에서 도출(§2).
-    시계열이 비면 quote의 라이브 price로 값만 폴백. 무close → None(fail-soft)."""
-    quote = (quote_json[0] if isinstance(quote_json, list) and quote_json
-             and isinstance(quote_json[0], dict) else {})
-    rows = hist_json if isinstance(hist_json, list) else []
-    series = []
-    for row in rows:
-        if not isinstance(row, dict):
+    q0 = (((r0.get("indicators") or {}).get("quote") or [{}])[0] or {})
+    closes, opens = q0.get("close") or [], q0.get("open") or []
+    highs, lows, vols = q0.get("high") or [], q0.get("low") or [], q0.get("volume") or []
+    bars = []
+    for i, t in enumerate(ts):
+        c = _fnum(closes[i]) if i < len(closes) else None
+        dt = _epoch_to_iso(t)
+        if c is None or dt is None:                  # 휴장 구간 null close는 드롭
             continue
-        c = _fnum(row.get("close"))
-        if c is None:
-            c = _fnum(row.get("price"))          # /light 응답은 close 대신 price
-        dt = _iso_date(row.get("date"))
-        if c is None or dt is None:
-            continue
-        pt = {"t": dt, "c": c}
-        v = _fnum(row.get("volume"))
-        if v is not None:
-            pt["v"] = v
-        series.append(pt)
-    series.sort(key=lambda p: p["t"])            # FMP 최신순 → 오래된→최신(ISO 날짜 사전순=시간순)
-    series = series[-max_points:]
-    return _derive(series, fallback_close=_fnum(quote.get("price")),
-                   fallback_dt=_epoch_to_date(quote.get("timestamp")), currency=None)
+        pick = lambda arr: _fnum(arr[i]) if i < len(arr) else None
+        bars.append(_bar(s, dt, fetched_at=fetched_at,
+                         o=pick(opens), h=pick(highs), l=pick(lows), c=c, v=pick(vols)))
+    bars.sort(key=lambda b: b["datetime"])
+    return bars
 
 
-def parse_fmp_treasury(raw, treasury_key: str, *, max_points: int = SERIES_MAX_POINTS) -> dict | None:
-    """FMP treasury-rates 응답에서 한 만기(treasury_key)의 수익률 시계열을 뽑아 값·등락 도출.
-    raw=[{date,month1,...,year2,year10,year30}] — 각 행에서 treasury_key 필드를 취해 series 구성.
-    수익률은 % 단위이며 값·등락은 시계열에서 도출. 무행/무값 → None(fail-soft)."""
+def bars_from_treasury(raw, s: PriceSymbol, *, fetched_at: str) -> list[dict]:
+    """FMP treasury-rates → 일봉 1바/일(수익률 %). 미국채는 5분봉이 없어 날짜 단위.
+    raw=[{date,year2,...}] — 각 행에서 treasury_key 필드를 close로. 무값 드롭(fail-soft)."""
     rows = raw if isinstance(raw, list) else []
-    series = []
+    bars = []
     for row in rows:
         if not isinstance(row, dict):
             continue
-        c = _fnum(row.get(treasury_key))
-        dt = _iso_date(row.get("date"))
-        if c is None or dt is None:
+        c, dt = _fnum(row.get(s.treasury_key)), row.get("date")
+        if c is None or not (isinstance(dt, str) and dt.strip()):
             continue
-        series.append({"t": dt, "c": c})
-    series.sort(key=lambda p: p["t"])            # 날짜 오름차순(오래된→최신)
-    series = series[-max_points:]
-    return _derive(series, currency=None)
+        bars.append(_bar(s, dt.strip(), fetched_at=fetched_at, c=c))
+    bars.sort(key=lambda b: b["datetime"])
+    return bars
 
 
 def _range_flags(group, pct) -> list[str]:
@@ -204,45 +185,65 @@ def _range_flags(group, pct) -> list[str]:
     return []
 
 
+def _snapshot(bars: list[dict], s: PriceSymbol, *, fetched_at: str) -> dict:
+    """웹 확인용 최신 스냅샷 — 값·등락은 최근 봉에서 도출, series=최근 N봉(값+차트 겸용).
+    bars는 시간순(오래된→최신)이라고 가정. 빈 리스트면 None."""
+    recent = bars[-SNAPSHOT_MAX_POINTS:]
+    close = recent[-1]["close"]
+    prev = recent[-2]["close"] if len(recent) >= 2 else None
+    change = (close - prev) if prev is not None else None
+    pct = ((close - prev) / prev * 100.0) if prev not in (None, 0) else None
+    series = [{"t": b["datetime"], "c": b["close"], **({"v": b["volume"]} if "volume" in b else {})}
+              for b in recent]
+    return {"close": close, "change": change, "percent_change": pct,
+            "datetime": recent[-1]["datetime"], "currency": None, "series": series,
+            "label": s.label, "symbol": s.symbol, "group": s.group, "order": s.order,
+            "source": s.source, "fetched_at": fetched_at,
+            "flags": _range_flags(s.group, pct)}
+
+
 _UNSET = object()   # treasury-rates는 한 콜로 전 만기를 주므로 pass당 한 번만 fetch(캐시 센티널)
 
 
 def run_price_pass(store, fetchers: dict, symbols: list[PriceSymbol],
                    *, delay_s: float = 0.0) -> int:
-    """각 심볼을 source별로 fetch→parse→store.save_price(key, ...). 반환=저장 수.
+    """각 심볼을 source별로 fetch→바 추출→(새 바만) price_bars 적재 + prices/{key} 스냅샷 갱신.
+    반환 = 이번 패스에 새로 적재한 바 수.
 
-    fetchers = {"fmp_quote": fn(symbol), "fmp_history": fn(symbol),
-                "fmp_treasury": fn(), "yahoo": fn(symbol)} — HTTP 주입(테스트 fake).
-    저장 dict = 파서 계약 + label·symbol·group·order + source·fetched_at·flags(§2). expire_at은 store가 주입.
+    fetchers = {"fmp_intraday": fn(symbol), "fmp_treasury": fn(), "yahoo_intraday": fn(symbol)} — HTTP 주입.
     개별 심볼 실패(에러 응답·파싱 실패)는 스킵(fail-soft, 비파괴 — 기존 값 유지).
     delay_s: 콜 간 지연(레이트리밋 대응 — 엔트리포인트가 주입)."""
     treasury_raw = _UNSET
-    n = 0
+    fetched_at = _now_iso()
+    total_new = 0
     for i, s in enumerate(symbols):
         if delay_s and i:
             time.sleep(delay_s)
         try:
             if s.source == "yahoo":
-                q = parse_yahoo_chart(fetchers["yahoo"](s.symbol))
+                bars = bars_from_yahoo_intraday(fetchers["yahoo_intraday"](s.symbol), s,
+                                                fetched_at=fetched_at)
             elif s.source == "fmp":
-                q = parse_fmp_quote_history(fetchers["fmp_quote"](s.symbol),
-                                            fetchers["fmp_history"](s.symbol))
+                bars = bars_from_fmp_intraday(fetchers["fmp_intraday"](s.symbol), s,
+                                              fetched_at=fetched_at)
             elif s.source == "fmp_treasury":
                 if treasury_raw is _UNSET:
                     treasury_raw = fetchers["fmp_treasury"]()   # pass당 1회(전 만기 공유)
-                q = parse_fmp_treasury(treasury_raw, s.treasury_key)
+                bars = bars_from_treasury(treasury_raw, s, fetched_at=fetched_at)
             else:                                                # load_price_symbols가 막지만 방어적으로
                 raise ValueError(f"unknown source {s.source!r}")
         except Exception as e:                       # 네트워크/타임아웃/응답 이상 — 그 심볼만 스킵
             log.warning("price fetch %s(%s, %s) 실패: %s", s.key, s.symbol, s.source, e)
             continue
-        if q is None:
-            log.warning("price %s(%s, %s): 무효 응답 — 스킵", s.key, s.symbol, s.source)
+        if not bars:
+            log.warning("price %s(%s, %s): 무효 응답/무 바 — 스킵", s.key, s.symbol, s.source)
             continue
-        store.save_price(s.key, {**q, "label": s.label, "symbol": s.symbol,
-                                 "group": s.group, "order": s.order,   # 프로즌 계약(IMP-web): 분류·순서 병합
-                                 "source": s.source, "fetched_at": _now_iso(),
-                                 "flags": _range_flags(s.group, q.get("percent_change"))})
-        n += 1
-    log.info("price pass: %d/%d saved", n, len(symbols))
-    return n
+        # 완전 스트림: 새 바만 적재(멱등 — 겹쳐 받은 바는 같은 id라 재적재 안 함).
+        new_ids = set(store.filter_new_bar_ids([b["id"] for b in bars]))
+        saved = store.save_bars([b for b in bars if b["id"] in new_ids])
+        total_new += saved
+        # 웹 확인용 최신 스냅샷(값+최근 시계열) 갱신.
+        store.save_price(s.key, _snapshot(bars, s, fetched_at=fetched_at))
+        log.info("price %s: +%d new bar(s) (of %d fetched)", s.key, saved, len(bars))
+    log.info("price pass: %d new bar(s) saved across %d symbols", total_new, len(symbols))
+    return total_new

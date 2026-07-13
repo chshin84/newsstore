@@ -5,11 +5,24 @@ from ..contracts.classify import classify_kind   # 순수 triage(키워드 매�
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
+_BARS = "price_bars"
 
 # content 데이터의 보존 기간(1개월). Firestore TTL 정책이 각 문서의 expire_at을
 # 가리켜 만료시킨다(비용 통제). feed_state에는 절대 넣지 않는다 — 증분 수집 커서가
 # 유실되면 재수집이 어긋난다.
 _TTL = timedelta(days=30)
+
+
+def _bar_expire_at(dt_str) -> datetime:
+    """price_bars TTL — 바 날짜(datetime 필드) + 30일. 시·분은 만료에 무의미(코스 30일)라
+    날짜 부분만 파싱한다. 파싱 불가면 수집 시각 기준으로 폴백(조용히 안 지워지게)."""
+    if isinstance(dt_str, str) and len(dt_str) >= 10:
+        try:
+            d = datetime.strptime(dt_str[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return d + _TTL
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc) + _TTL
 
 
 def _to_doc(item: RawItem) -> dict:
@@ -74,6 +87,42 @@ class FirestoreStore:
     def get_fundamental(self, symbol: str) -> dict:
         snap = self.db.collection("fundamentals").document(symbol).get()
         return (snap.to_dict() or {}) if snap.exists else {}
+
+    def filter_new_bar_ids(self, ids: list[str]) -> list[str]:
+        """price_bars에 아직 없는 바 id만(입력 순서 보존) — 새 바만 write해 5분 주기 write 비용을
+        묶는다(뉴스 filter_new_ids와 동일 패턴)."""
+        if not ids:
+            return []
+        col = self.db.collection(_BARS)
+        refs = [col.document(i) for i in ids]
+        existing = {s.id for s in self.db.get_all(refs) if s.exists}
+        return [i for i in ids if i not in existing]
+
+    def save_bars(self, bars: list[dict]) -> int:
+        """price_bars/{id} 배치 적재(바 1개=문서 1개, 완전 스트림). 반환=쓴 수.
+        각 bar는 'id'와 'datetime'을 가진다. TTL expire_at은 바 날짜에서 store가 주입(단일 통제점).
+        호출자가 새 바만(filter_new_bar_ids) 넘기지만 set은 멱등이라 재적재도 안전."""
+        if not bars:
+            return 0
+        col = self.db.collection(_BARS)
+        n = 0
+        for i in range(0, len(bars), 500):           # Firestore batch ≤500 op
+            batch = self.db.batch()
+            for b in bars[i:i + 500]:
+                doc = {k: v for k, v in b.items() if k != "id"}
+                doc["expire_at"] = _bar_expire_at(b.get("datetime"))
+                batch.set(col.document(b["id"]), doc)
+                n += 1
+            batch.commit()
+        return n
+
+    def get_bars(self, key: str) -> list[dict]:
+        """price_bars에서 한 심볼(key)의 바를 datetime 오름차순으로. 소비자·테스트용."""
+        out = []
+        for snap in self.db.collection(_BARS).where("key", "==", key).stream():
+            out.append(snap.to_dict() or {})
+        out.sort(key=lambda d: d.get("datetime") or "")
+        return out
 
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()

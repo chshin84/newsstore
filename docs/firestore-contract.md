@@ -9,13 +9,14 @@
 | `items` | collect Job | web UI | 있음(`expire_at`) | 뉴스 기사 원본 + 수집 시점 `kind` 분류 |
 | `feed_state` | collect Job | collect Job | **없음** | etag/last_modified 폴링 커서 — 만료시키면 증분 수집이 어긋난다 |
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
-| `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 스냅샷(FMP + Yahoo 폴백) |
+| `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 **최신 스냅샷**(값+최근 시계열) — 웹 확인용 |
+| `price_bars` | prices Job | 다운스트림 | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
 | `fundamentals` | fundamentals Job | web UI | 있음(`expire_at`) | 티커별 재무제표(FMP) |
 
 ## TTL 규칙 (1개월, 비용 통제)
 
 Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료시킨다. 이 스토어의 만료 필드명은 **`expire_at`**로 통일한다.
-- **`items`·`prices`·`fundamentals`**: 각 문서에 `expire_at`(= 저장 시각 + 30일)을 넣고, 컬렉션마다 gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`).
+- **`items`·`prices`·`price_bars`·`fundamentals`**: 각 문서에 `expire_at`을 넣고, 컬렉션마다 gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`). `items`·`prices`·`fundamentals`는 저장 시각 + 30일, **`price_bars`는 바 날짜 + 30일**(스트림이라 바 자체의 나이 기준).
 - **`feed_state`엔 `expire_at`을 절대 넣지 않는다.** ETag·커서가 만료되면 증분 수집이 매번 전량 재수집으로 어긋난다.
 - `expire_at` 주입은 store가 단일 통제점이다(`firestore_store.py`). 호출자가 안 넣어도 store가 보장한다.
 
@@ -34,12 +35,20 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 사이트용 소형 메타 문서(예: `sources`). 소스 목록과 **소스 tier**를 여기로 발행한다(아래 §공유 설정).
 
 ### `prices` (prices Job이 기록, 공개 read)
-지수·환율·국채 스냅샷. 문서 키 = 심볼 key(예: `sp500`, `usdkrw`, `us10y`).
-- **필드**: `close, change, percent_change, datetime, currency, series, label, symbol, group, order, fetched_at, source, flags, expire_at`.
+지수·환율·국채 **최신 스냅샷**(값 + 최근 5분봉 시계열) — 웹 확인 UI가 읽는다. 매 패스 덮어쓰기. 문서 키 = 심볼 key(예: `sp500`, `usdkrw`, `us10y`).
+- **필드**: `close, change, percent_change, datetime, currency, series, label, symbol, group, order, fetched_at, source, flags, expire_at`. `series`는 최근 봉(5분봉, 국채는 일봉)에서 도출한 `{t, c, v?}` 배열.
 - **`fetched_at`** (신선도) — 조회 시각. 스케줄러가 조용히 멈춰 낡은 값을 실시간처럼 보여주는 사고를 막는 검문소 필드.
 - **`source`** (fmp|fmp_treasury|yahoo) — 이 심볼을 어디서 가져왔는지. 대부분 FMP, 국채는 FMP treasury-rates에서 도출, kosdaq·dxy·wti 3종만 Yahoo 폴백(FMP Premium 미커버).
 - **`flags`** (비파괴 상식범위 플래그) — %등락이 상식 밖(지수 ±15%·환율 ±5% 가이드)이면 삭제하지 않고 여기에 표시한다. 검증은 하되 수정은 하지 않는다.
 - **`expire_at`** = 저장 시각 + 30일(store 주입).
+
+### `price_bars` (prices Job이 기록, 다운스트림용)
+5분봉 **완전 스트림** — 바 1개가 문서 1개. 다운스트림 DB가 한 달 안에 적재한다는 가정. 문서 키 = `{심볼key}__{YYYYMMDDHHMMSS}`(결정론 — 겹쳐 받아도 멱등, 중복 없음).
+- **필드**: `key, symbol, label, group, order, source, datetime, close, open?, high?, low?, volume?, fetched_at, expire_at`. OHLCV는 소스가 주면 싣고, 국채는 `close`(수익률 %)만.
+- **`datetime`** — 소스 타임스탬프 문자열을 보존한다(FMP 인트라데이는 거래소 로컬시각, Yahoo는 UTC ISO, 국채는 날짜). 다운스트림이 해석한다.
+- **적재는 새 바만** — `run_price_pass`가 `filter_new_bar_ids`로 이미 있는 바를 걸러 5분 주기 write 비용을 묶는다.
+- 미국채(`fmp_treasury`)는 5분봉이 없어 **일봉 1바/일**(id는 `{key}__{YYYYMMDD}`).
+- **`expire_at`** = 바 날짜 + 30일(store 주입).
 
 ### `fundamentals` (fundamentals Job이 기록, 공개 read)
 티커별 재무제표(FMP). 문서 키 = 티커 심볼(예: `AAPL`).
@@ -50,7 +59,8 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 ## Store 표면 (`firestore_store.FirestoreStore`)
 - `upsert_items(items) -> int` — `_to_doc`가 `kind` 분류 + `expire_at`을 박는다.
 - `get_feed_state`, `set_feed_state`, `count`, `filter_new_ids`, `set_meta`.
-- `save_price(key, data)`, `get_price(key)` — TTL(`expire_at`) 주입.
+- `save_price(key, data)`, `get_price(key)` — 스냅샷. TTL(`expire_at`) 주입.
+- `filter_new_bar_ids(ids)`, `save_bars(bars)`, `get_bars(key)` — price_bars 스트림. `save_bars`가 바 날짜 기준 TTL 주입.
 - `save_fundamental(symbol, data)`, `get_fundamental(symbol)` — TTL 주입.
 - `close`/`__enter__`/`__exit__`.
 

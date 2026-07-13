@@ -107,10 +107,11 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
   ```
   printf '%s' "<NEW_FMP_API_KEY>" | gcloud secrets versions add fmp-api-key --data-file=-
   ```
-- **커버리지**: 대부분 심볼은 FMP(quote+historical), 국채(us2y/us10y/us30y)는 FMP treasury-rates에서 도출, kosdaq·dxy·wti 3종만 Yahoo 폴백이다(FMP Premium 미커버). 심볼·소스 매핑 SSOT는 `config/prices.yaml`.
+- **커버리지**: 대부분 심볼은 FMP 5분봉(`historical-chart/5min`), 국채(us2y/us10y/us30y)는 FMP treasury-rates에서 도출(5분봉이 없어 일봉 1바/일), kosdaq·dxy·wti 3종만 Yahoo 5분봉 폴백이다(FMP Premium 미커버). 심볼·소스 매핑 SSOT는 `config/prices.yaml`.
+- **저장**: 5분봉 완전 스트림은 `price_bars`에 바 1개=문서 1개로 적재(새 바만 write), 웹 확인용 최신 스냅샷은 `prices/{key}`에 갱신한다. `price_bars`는 문서가 가장 빨리 늘어 TTL(§F)이 특히 중요하다.
 
 ## F. TTL 정책 (content 컬렉션 30일 만료)
-`items`·`prices`·`fundamentals`는 `expire_at`(저장 시각 + 30일)을 TTL 정책이 보고 만료시킨다(비용 통제). **`feed_state`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`. 현재 상태 확인:
+`items`·`prices`·`price_bars`·`fundamentals`는 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 30일, 나머지는 저장 시각 + 30일). **`feed_state`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`. 현재 상태 확인:
 ```
 gcloud firestore fields ttl list --collection-group=items
 ```
@@ -152,7 +153,7 @@ gcloud alpha monitoring policies create --policy-from-file=/tmp/job-fail-policy.
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 원본을 지우지 않는다. 수집 시점 `kind` 분류(`classify_kind`)로 라벨링하고, 노출은 `web/index.html`(뷰)이 `kind === "story"`만 보여주는 식으로 처리한다. 튜닝·되돌리기 쉽다.
 - **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`src/newsstore/collect/body_fetch.py` — 한경 `.article-body`). **무차별 크롤링은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 본문 부족 소스는 피드 추가도 병행.
-- **가격 데이터 무결성**: 받은 숫자를 의심한다 — 가격·펀더멘털 doc에 `fetched_at`(신선도)을 남겨 스케줄러가 조용히 멈춰도 낡은 값을 실시간처럼 표시하지 않게 한다. %등락이 상식 밖이면 삭제하지 않고 `flags`에 표시(비파괴). 값·등락은 라이브 시세가 아니라 일봉 시계열에서 도출한다.
+- **가격 데이터 무결성**: 받은 숫자를 의심한다 — 가격·펀더멘털 doc에 `fetched_at`(신선도)을 남겨 스케줄러가 조용히 멈춰도 낡은 값을 실시간처럼 표시하지 않게 한다. %등락이 상식 밖이면 삭제하지 않고 `flags`에 표시(비파괴). 스냅샷의 값·등락은 라이브 시세가 아니라 5분봉 시계열에서 도출한다(각 봉의 종가는 그 봉 자체의 값이라 stale-라이브 오답이 없다).
 - **피드 추가 전 curl 실측**(HTTP·item수·desc 유무) → 되는 것만 등록 → A 재배포.
 - **콘솔 수동 대신 REST**로 GCP/Firebase 운영(인증 공유).
 - 환경(`APP_ENV`=home/office, 저장소=Firestore 단일)은 `README.md` 표 참조.

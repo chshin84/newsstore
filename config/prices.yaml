@@ -1,10 +1,11 @@
-# 가격 데이터 수집 대상 (SSOT) — FMP + Yahoo 하이브리드. 소비자: collect/prices.py
+# 가격 데이터 수집 대상 (SSOT) — FMP + Yahoo 하이브리드, 5분봉 스트림. 소비자: collect/prices.py
 #
-# 목적: 가격 탭(값+차트). 실제 지수·수익률·환율·원자재를 수집.
-# 소스 전환(2026-07-13): 주 소스를 FMP stable REST로, FMP Premium 미커버 3종만 Yahoo 폴백.
-#   - fmp          : FMP quote + historical-price-eod(일봉). 헤더 apikey(FMP_API_KEY).
-#   - fmp_treasury : FMP treasury-rates에서 미국채 수익률 도출(권위 소스). treasury_key=year2/year10/year30.
-#   - yahoo        : Yahoo Finance chart(무키, UA). FMP Premium 미커버(kosdaq·dxy·wti) 폴백.
+# 목적: 다운스트림 적재용 5분봉 스트림(price_bars/) + 웹 확인용 최신 스냅샷(prices/{key}).
+# 소스 전환(2026-07-13): 주 소스 FMP stable REST(5분봉), FMP Premium 미커버 3종만 Yahoo 폴백.
+#   - fmp          : FMP historical-chart/5min(인트라데이 OHLCV). 헤더 apikey(FMP_API_KEY).
+#   - fmp_treasury : FMP treasury-rates에서 미국채 수익률 도출(권위 소스, 5분봉 없어 일봉 1바/일).
+#                    treasury_key=year2/year10/year30.
+#   - yahoo        : Yahoo Finance chart(interval=5m, 무키·UA). FMP Premium 미커버(kosdaq·dxy·wti) 폴백.
 #
 # 계약: {key(prices/{key} 문서), symbol(소스 심볼), label, group(분류), source, treasury_key?}.
 #   group = 지수·금리·환율·원자재·변동성 (주석 SSOT를 데이터로 — load_price_symbols가 읽어 prices/{key}에 실음).

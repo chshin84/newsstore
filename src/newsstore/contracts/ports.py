@@ -44,3 +44,14 @@ class Store(Protocol):
     def get_fundamental(self, symbol: str) -> dict:
         """fundamentals/{symbol}. 없으면 {}."""
         ...
+
+    def filter_new_bar_ids(self, ids: list[str]) -> list[str]:
+        """`price_bars`에 아직 없는 바 id만(입력 순서 보존) — 새 5분봉만 write."""
+        ...
+    def save_bars(self, bars: list[dict]) -> int:
+        """price_bars 배치 적재(바 1개=문서 1개). 각 bar는 'id'·'datetime' 보유.
+        store가 바 날짜 기준 expire_at TTL 주입. 반환=쓴 수."""
+        ...
+    def get_bars(self, key: str) -> list[dict]:
+        """price_bars에서 한 심볼(key)의 바를 datetime 오름차순으로."""
+        ...

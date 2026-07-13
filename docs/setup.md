@@ -81,11 +81,13 @@ gcloud firestore indexes composite create --collection-group=items \
 ```
 
 ## 7. TTL 정책 (content 컬렉션 30일 만료 — 비용 통제)
-`items`·`prices`·`fundamentals`는 각 문서의 `expire_at`(저장 시각 + 30일)을 Firestore TTL 정책이 보고 만료시킨다. **`feed_state`엔 TTL을 걸지 않는다**(폴링 커서가 만료되면 증분 수집이 어긋난다).
+`items`·`prices`·`price_bars`·`fundamentals`는 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(`items`·`prices`·`fundamentals`는 저장 시각 + 30일, `price_bars`는 바 날짜 + 30일). **`feed_state`엔 TTL을 걸지 않는다**(폴링 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉 완전 스트림)는 문서 수가 가장 빠르게 늘어 TTL이 특히 중요하다.
 ```
 gcloud firestore fields ttl update expire_at --collection-group=items \
   --enable-ttl --project=<PROJECT_ID>
 gcloud firestore fields ttl update expire_at --collection-group=prices \
+  --enable-ttl --project=<PROJECT_ID>
+gcloud firestore fields ttl update expire_at --collection-group=price_bars \
   --enable-ttl --project=<PROJECT_ID>
 gcloud firestore fields ttl update expire_at --collection-group=fundamentals \
   --enable-ttl --project=<PROJECT_ID>

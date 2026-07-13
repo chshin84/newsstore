@@ -88,3 +88,38 @@ def test_save_fundamental_roundtrip_and_ttl(store):
     assert got["income"] == [{"revenue": 1}]
     assert "expire_at" in got            # store가 호출자 무관하게 TTL 주입
     assert store.get_fundamental("MSFT") == {}
+
+
+# --- price_bars(5분봉 완전 스트림): 적재·dedup·조회·바 날짜 기준 TTL ---
+
+def _bar(bid, key, dt, close):
+    return {"id": bid, "key": key, "symbol": "^GSPC", "source": "fmp",
+            "datetime": dt, "close": close}
+
+
+def test_save_bars_and_get_bars_sorted(store):
+    store.save_bars([_bar("sp500__20260710101000", "sp500", "2026-07-10 10:10:00", 102.0),
+                     _bar("sp500__20260710100000", "sp500", "2026-07-10 10:00:00", 100.0)])
+    got = store.get_bars("sp500")
+    assert [b["close"] for b in got] == [100.0, 102.0]        # datetime 오름차순
+    assert store.get_bars("other") == []
+
+
+def test_save_bars_expire_at_from_bar_date(store):
+    store.save_bars([_bar("sp500__20260710101000", "sp500", "2026-07-10 10:10:00", 1.0)])
+    d = store.db.collection("price_bars").document("sp500__20260710101000").get().to_dict()
+    # TTL = 바 날짜(2026-07-10) + 30일. 시·분은 만료에 무의미.
+    assert d["expire_at"] == datetime(2026, 8, 9, tzinfo=timezone.utc)
+
+
+def test_filter_new_bar_ids_returns_only_unstored(store):
+    store.save_bars([_bar("k__1", "k", "2026-07-10 10:00:00", 1.0)])
+    assert store.filter_new_bar_ids(["k__1", "k__2", "k__3"]) == ["k__2", "k__3"]
+    assert store.filter_new_bar_ids([]) == []
+
+
+def test_save_bars_is_idempotent_on_same_id(store):
+    b = _bar("k__1", "k", "2026-07-10 10:00:00", 1.0)
+    store.save_bars([b])
+    store.save_bars([b])                 # 같은 id 재적재 — 중복 문서 안 쌓임
+    assert len(store.get_bars("k")) == 1
