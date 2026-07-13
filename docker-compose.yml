@@ -44,44 +44,30 @@ services:
       - .env
     command: python -m newsstore.entrypoints.run_collect --force
 
-  sync:                          # 로컬 레이더 작업장 — Firestore → data/local.db 증분 동기화
+  prices:                        # 가격 수집 — FMP(+Yahoo 폴백) 지수·환율·국채 → Firestore prices
     build:
       context: .
       dockerfile: infra/Dockerfile
       args:
         INSTALL_DEV: "false"
-        INSTALL_RADAR: "true"
-    image: newsstore-radar
+        INSTALL_GCP: "true"       # 실 Firestore 접속(prices 저장) — firestore 라이브러리 필수
+    image: newsstore
     volumes:
       - ".:/app"
     env_file:
-      - .env
-    command: python -m newsstore.entrypoints.run_radar --mode sync
+      - .env                      # FMP_API_KEY(백엔드 전용 비밀) + GOOGLE_CLOUD_PROJECT 등
+    command: python -m newsstore.entrypoints.run_prices
 
-  prices:                        # 로컬 레이더 작업장 — watchlist 일봉 적재(data/prices.db)
+  fundamentals:                  # 펀더멘털 수집 — FMP income/balance/cashflow → Firestore fundamentals
     build:
       context: .
       dockerfile: infra/Dockerfile
       args:
         INSTALL_DEV: "false"
-        INSTALL_RADAR: "true"
-    image: newsstore-radar
+        INSTALL_GCP: "true"       # 실 Firestore 접속(fundamentals 저장) — firestore 라이브러리 필수
+    image: newsstore
     volumes:
       - ".:/app"
     env_file:
-      - .env
-    command: python -m newsstore.entrypoints.run_radar --mode prices
-
-  radar:                         # 로컬 레이더 작업장 — 일보 조립(radar_out/YYYY-MM-DD.md)
-    build:
-      context: .
-      dockerfile: infra/Dockerfile
-      args:
-        INSTALL_DEV: "false"
-        INSTALL_RADAR: "true"
-    image: newsstore-radar
-    volumes:
-      - ".:/app"
-    env_file:
-      - .env
-    command: python -m newsstore.entrypoints.run_radar --mode radar
+      - .env                      # FMP_API_KEY(백엔드 전용 비밀) + GOOGLE_CLOUD_PROJECT 등
+    command: python -m newsstore.entrypoints.run_fundamentals

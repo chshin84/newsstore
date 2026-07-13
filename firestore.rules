@@ -16,31 +16,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Step-2 스토리(내러티브 클러스터) — 사이트 타임라인 UI용 공개 읽기, 쓰기 금지
-    // (Processor Job은 Admin SDK라 규칙 우회해 기록)
-    match /stories/{id} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // 리포트 탭(스펙 2026-06-30 §6) — 데일리 리포트·standing 프레임 공개 읽기, 쓰기 금지
-    // (report 패스는 Admin SDK라 규칙 우회해 기록. frames_history는 UI 미소비 — 기본 거부)
-    match /reports/{doc} {
-      allow read: if true;
-      allow write: if false;
-    }
-    match /frames/{doc} {
-      allow read: if true;
-      allow write: if false;
-    }
-    // 가격 스냅샷(뉴스 vs 가격 반응) — 공개 read, write 금지(수집 잡은 Admin SDK 우회)
+    // 가격 스냅샷(지수·환율·국채) — 공개 read, write 금지(가격 수집 잡은 Admin SDK 우회)
     match /prices/{key} {
       allow read: if true;
       allow write: if false;
     }
-    // v2 신호(조사 큐 signals/unexplained_moves 등) — 공개 read, write 금지
-    // (signals 패스는 Admin SDK라 규칙 우회해 기록. 모든 산출은 unverified:true=가설/트리아지)
-    match /signals/{doc} {
+
+    // 펀더멘털(income/balance/cashflow) — 공개 read, write 금지(수집 잡은 Admin SDK 우회)
+    match /fundamentals/{symbol} {
       allow read: if true;
       allow write: if false;
     }

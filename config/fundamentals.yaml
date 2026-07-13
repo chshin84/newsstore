@@ -1,0 +1,12 @@
+# 펀더멘털(재무제표) 수집 대상 (SSOT) — FMP income/balance/cashflow(annual, limit 5). 소비자: collect/fundamentals.py
+#
+# 목적: 고정 관심 티커의 연간 재무제표 스냅샷을 fundamentals/{symbol}에 저장.
+# 수집: run_fundamentals가 FMP stable REST(헤더 apikey=FMP_API_KEY)로 세 재무제표를 취합.
+#   - income-statement / balance-sheet-statement / cash-flow-statement (period=annual, limit=5).
+# 티커 추가·삭제는 여기만(SSOT). 대문자로 정규화되며 중복은 load_fundamental_tickers가 fail-loud.
+tickers:
+  - AAPL
+  - MSFT
+  - NVDA
+  - GOOGL
+  - AMZN

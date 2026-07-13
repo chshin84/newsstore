@@ -4,9 +4,8 @@ import pathlib
 SRC = pathlib.Path("src/newsstore")
 # 각 모듈이 import하면 안 되는 형제 모듈 prefix (오직 contracts에만 의존해야 함)
 FORBIDDEN = {
-    "collect": ("newsstore.enrich", "newsstore.store"),
-    "enrich":  ("newsstore.collect", "newsstore.store"),
-    "store":   ("newsstore.collect", "newsstore.enrich"),
+    "collect": ("newsstore.store",),
+    "store":   ("newsstore.collect",),
 }
 
 
@@ -35,6 +34,6 @@ def test_modules_only_depend_on_contracts():
                 if imp.startswith(banned):
                     violations.append(f"{py}  imports  {imp}")
     assert not violations, (
-        "모듈 경계 위반(collect/enrich/store는 서로 import 금지, contracts만):\n"
+        "모듈 경계 위반(collect/store는 서로 import 금지, contracts만):\n"
         + "\n".join(violations)
     )

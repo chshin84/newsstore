@@ -1,29 +1,33 @@
-# 가격 데이터 수집 대상 (SSOT) — Yahoo Finance chart API. 소비자: collect/prices.py
+# 가격 데이터 수집 대상 (SSOT) — FMP + Yahoo 하이브리드. 소비자: collect/prices.py
 #
-# 목적: 가격 탭(값+차트). 실제 지수·수익률·환율·원자재를 무키로 수집(2026-07-05 전환).
-# Twelve Data(프록시·유료 필요) → Yahoo Finance(실제 지수, 무키, 개별종목·한국지수 커버).
+# 목적: 가격 탭(값+차트). 실제 지수·수익률·환율·원자재를 수집.
+# 소스 전환(2026-07-13): 주 소스를 FMP stable REST로, FMP Premium 미커버 3종만 Yahoo 폴백.
+#   - fmp          : FMP quote + historical-price-eod(일봉). 헤더 apikey(FMP_API_KEY).
+#   - fmp_treasury : FMP treasury-rates에서 미국채 수익률 도출(권위 소스). treasury_key=year2/year10/year30.
+#   - yahoo        : Yahoo Finance chart(무키, UA). FMP Premium 미커버(kosdaq·dxy·wti) 폴백.
 #
-# 계약: {key(prices/{key} 문서), symbol(Yahoo 심볼), label, group(분류)}.
+# 계약: {key(prices/{key} 문서), symbol(소스 심볼), label, group(분류), source, treasury_key?}.
 #   group = 지수·금리·환율·원자재·변동성 (주석 SSOT를 데이터로 — load_price_symbols가 읽어 prices/{key}에 실음).
 #   order = load 시 등장 순서(enumerate, 코드에서 부여) — 무순서 Firestore에서 web이 순서 복원. 여기 순서가 SSOT.
-# 수집: run_prices가 query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1mo&interval=1d.
-#   한 콜로 현재값 + 등락 + 30일 시계열(차트). User-Agent 필요. 심볼 추가는 여기만(SSOT).
-# 갭: 국고채 3/10년(한국 국채)은 Yahoo에 없음 → 한국은행 ECOS(별도, 키 필요) 도입 시 추가.
+#   source = fmp | fmp_treasury | yahoo (필수 — load_price_symbols가 모르는 값이면 fail-loud).
+# 수집: run_prices가 source별로 FMP/Yahoo client를 배선. 한 콜로 현재값 + 등락 + 30일 시계열(차트).
+#   FMP 미커버 실측(2026-07-13): ^KQ11·^KS11·DXY·^DXY·CLUSD 모두 "not available under your current
+#   subscription" → 코스닥·달러지수·WTI는 Yahoo 폴백. Brent/Gold는 FMP 가능하나 유가는 WTI 유지 요구.
 symbols:
-  # ── 지수 ── (코스피200 ^KS200은 Yahoo 데이터 불량[stale·±10% 스윙]이라 제외 — 별도 KR 소스 필요)
-  - {key: kosdaq,   symbol: "^KQ11",    label: 코스닥,       group: 지수}
-  - {key: nasdaq,   symbol: "^IXIC",    label: 나스닥,       group: 지수}
-  - {key: sp500,    symbol: "^GSPC",    label: "S&P500",     group: 지수}
-  # ── 금리(미국채 수익률 %) ──
-  - {key: us2y,     symbol: "2YY=F",    label: "미국채 2년",  group: 금리}
-  - {key: us10y,    symbol: "^TNX",     label: "미국채 10년", group: 금리}
-  - {key: us30y,    symbol: "^TYX",     label: "미국채 30년", group: 금리}
-  # ── 환율 ── (달러지수 DX-Y.NYB는 실측 검증됨[2026-07-06: 101.08, 신선]. DX=F 상장폐지·^DXY stale[2019]이라 제외)
-  - {key: usdkrw,   symbol: "KRW=X",    label: 원/달러,      group: 환율}
-  - {key: usdjpy,   symbol: "JPY=X",    label: 엔/달러,      group: 환율}
-  - {key: dxy,      symbol: "DX-Y.NYB", label: 달러지수,     group: 환율}
-  # ── 원자재 ──
-  - {key: wti,      symbol: "CL=F",     label: WTI유가,      group: 원자재}
-  - {key: gold,     symbol: "GC=F",     label: 금,           group: 원자재}
-  # ── 변동성 ── (VIX 실측 검증됨[2026-07-06: 16.34, 신선])
-  - {key: vix,      symbol: "^VIX",     label: VIX변동성,    group: 변동성}
+  # ── 지수 ──
+  - {key: kosdaq,   symbol: "^KQ11",  label: 코스닥,       group: 지수,   source: yahoo}
+  - {key: nasdaq,   symbol: "^IXIC",  label: 나스닥,       group: 지수,   source: fmp}
+  - {key: sp500,    symbol: "^GSPC",  label: "S&P500",     group: 지수,   source: fmp}
+  # ── 금리(미국채 수익률 %) ── FMP treasury-rates가 권위 소스(Yahoo 국채 심볼 대체).
+  - {key: us2y,     symbol: "UST2Y",  label: "미국채 2년",  group: 금리,   source: fmp_treasury, treasury_key: year2}
+  - {key: us10y,    symbol: "UST10Y", label: "미국채 10년", group: 금리,   source: fmp_treasury, treasury_key: year10}
+  - {key: us30y,    symbol: "UST30Y", label: "미국채 30년", group: 금리,   source: fmp_treasury, treasury_key: year30}
+  # ── 환율 ── (FMP는 =X 접미사 없이 USDKRW·USDJPY. 달러지수는 FMP 미커버라 Yahoo 폴백.)
+  - {key: usdkrw,   symbol: "USDKRW", label: 원/달러,      group: 환율,   source: fmp}
+  - {key: usdjpy,   symbol: "USDJPY", label: 엔/달러,      group: 환율,   source: fmp}
+  - {key: dxy,      symbol: "DX-Y.NYB", label: 달러지수,   group: 환율,   source: yahoo}
+  # ── 원자재 ── (FMP는 금=GCUSD. WTI는 FMP CLUSD 차단이라 Yahoo CL=F 폴백.)
+  - {key: wti,      symbol: "CL=F",   label: WTI유가,      group: 원자재, source: yahoo}
+  - {key: gold,     symbol: "GCUSD",  label: 금,           group: 원자재, source: fmp}
+  # ── 변동성 ──
+  - {key: vix,      symbol: "^VIX",   label: VIX변동성,    group: 변동성, source: fmp}

@@ -8,7 +8,7 @@
 | `coding-principles.md` | ✅ **항상** (작고 ROI 높음·정적 불변식) | 아래 배선 |
 | `solved_problems.md`의 **핵심 gotchas** 섹션 | ✅ **항상** | 아래 배선 |
 | `solved_problems.md` 전체 아카이브 | ⛔ **통째 X** | 작업이 닿는 영역 항목만 **발췌** 주입 |
-| 백로그·🔴 결정 (GitHub Issues) | ⛔ **worker엔 X** | 사용자·오케스트레이터 전용. 🔴는 사용자 승인 게이트 뒤 |
+| 백로그·🔴 결정 | ⛔ **worker엔 X** | 사용자·오케스트레이터 전용. 🔴는 사용자 승인 게이트 뒤 |
 
 이유: 전체 로그를 모든 병렬 worker에 밀면 토큰 낭비 + 무관 항목이 핵심을 묻어 **adherence 저하**(lost-in-the-middle). 서브에이전트의 lean-context 이점도 깎인다. **관련성 > 분량.**
 

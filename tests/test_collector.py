@@ -82,6 +82,6 @@ def test_collect_once_fills_hankyung_body(monkeypatch, store):
     feeds = [FeedConfig(feed_id="hk_economy", url="https://www.hankyung.com/feed/economy",
                         source="한국경제", language="ko", body_mode="headline")]
     collect_once(client, store, feeds, force=True)
-    saved = store.get_unprocessed()
-    hk = [it for it in saved if it.feed_id == "hk_economy"][0]
-    assert "한경 본문" in hk.body
+    saved = [d.to_dict() for d in store.db.collection("items").stream()]
+    hk = [d for d in saved if d.get("feed_id") == "hk_economy"][0]
+    assert "한경 본문" in hk["body"]

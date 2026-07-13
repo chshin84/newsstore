@@ -27,7 +27,7 @@
 - 저장 전에 거르지 말고, 저장 후 처리 단계에서 표시.
 
 ## 7. 측정 먼저 (가정 금지)
-- 빌드 전에 실제로 되는지 **측정**(curl 피드 테스트, 임베딩 스파이크 등).
+- 빌드 전에 실제로 되는지 **측정**(curl 피드 테스트, FMP 엔드포인트 실측 등).
 - "집(잔여 IP)에서 됨 ≠ 프로덕션(Cloud Run 데이터센터 IP)에서 됨" — 환경 차이를 먼저 확인.
 
 ## 8. Docker 전용 개발/테스트
@@ -36,5 +36,5 @@
 - 테스트: `MSYS_NO_PATHCONV=1 docker compose run --rm test`(Firestore 에뮬레이터 자동 기동 후 pytest).
 
 ## 9. 비밀 분리
-- 진짜 비밀(`GEMINI_API_KEY`, 서비스계정 키)은 **백엔드 전용** — `.env`(gitignore+dockerignore) / Cloud Run env / Secret Manager. 클라이언트·커밋 금지.
+- 진짜 비밀(`FMP_API_KEY`, 서비스계정 키)은 **백엔드 전용** — `.env`(gitignore+dockerignore) / Cloud Run env / Secret Manager. 클라이언트·커밋 금지.
 - 비밀이 아닌 식별자(Firebase 웹 apiKey)는 클라이언트 노출 OK — 접근은 보안 규칙이 통제.

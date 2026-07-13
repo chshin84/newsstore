@@ -17,15 +17,9 @@ def fsclient():
         pytest.skip("Firestore emulator not running (set FIRESTORE_EMULATOR_HOST)")
     from google.cloud import firestore
     db = firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "test"))
-    for col in ("items", "feed_state", "meta", "stories", "t", "frames", "reports"):
+    for col in ("items", "feed_state", "meta", "prices", "fundamentals", "t"):
         for d in db.collection(col).stream():
             d.reference.delete()
-    # frames_history는 하위컬렉션(snapshots)이라 명시 순회로 비운다
-    # (부모 doc 삭제만으로는 하위 스냅샷이 안 지워짐).
-    for doc in db.collection("frames_history").list_documents():
-        for snap in doc.collection("snapshots").list_documents():
-            snap.delete()
-        doc.delete()
     return db
 
 

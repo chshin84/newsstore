@@ -1,0 +1,12 @@
+[
+  {
+    "symbol": "^GSPC",
+    "name": "S&P 500",
+    "price": 6187.68,
+    "changePercentage": 0.52,
+    "change": 32.05,
+    "previousClose": 6155.63,
+    "volume": 2100000000,
+    "timestamp": 1783036800
+  }
+]

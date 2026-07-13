@@ -18,12 +18,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.2"]
 gcp = ["google-cloud-firestore>=2.16"]
-# Step-2 LLM 인리치(Processor Job#2 전용). 로직은 DI라 미설치 환경서도 테스트 가능;
-# 실 GeminiClient만 이 SDK에 의존(lazy import). GEMINI_API_KEY=Developer API 경로.
-enrich = ["google-genai>=1.0"]
-# 로컬 레이더 작업장(prices) 전용 — 클라우드 이미지 미포함. requirements.lock 밖에 둔다
-# (lock은 클라우드 재현용이고 radar extra는 로컬 전용이라는 의도적 결정 — 스펙 2026-07-10).
-radar = ["yfinance>=0.2.40"]
+# 가격·펀더멘털 수집은 FMP REST(+Yahoo 폴백)를 순수 httpx로 호출하므로 신규 의존이 없다.
 
 [tool.setuptools.packages.find]
 where = ["src"]
