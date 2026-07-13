@@ -16,7 +16,7 @@
 ## TTL 규칙 (1개월, 비용 통제)
 
 Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료시킨다. 이 스토어의 만료 필드명은 **`expire_at`**로 통일한다.
-- **`items`·`prices`·`price_bars`·`fundamentals`**: 각 문서에 `expire_at`을 넣고, 컬렉션마다 gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`). `items`·`prices`·`fundamentals`는 저장 시각 + 30일, **`price_bars`는 바 날짜 + 30일**(스트림이라 바 자체의 나이 기준).
+- **`items`·`prices`·`price_bars`·팩터 컬렉션**: 각 문서에 `expire_at`을 넣고, 컬렉션마다 gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`). `items`·`prices`는 저장 시각 + 30일, **`price_bars`는 바 날짜 + 30일**(스트림이라 바 자체의 나이 기준). 팩터 컬렉션(income·balance·cashflow 등, 하단 「팩터·펀더멘털 수집 계약」 절)도 저장 시각 + 30일.
 - **`feed_state`엔 `expire_at`을 절대 넣지 않는다.** ETag·커서가 만료되면 증분 수집이 매번 전량 재수집으로 어긋난다.
 - `expire_at` 주입은 store가 단일 통제점이다(`firestore_store.py`). 호출자가 안 넣어도 store가 보장한다.
 
@@ -50,11 +50,8 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - 미국채(`fmp_treasury`)는 5분봉이 없어 **일봉 1바/일**(id는 `{key}__{YYYYMMDD}`).
 - **`expire_at`** = 바 날짜 + 30일(store 주입).
 
-### `fundamentals` (fundamentals Job이 기록, 공개 read)
-티커별 재무제표(FMP). 문서 키 = 티커 심볼(예: `AAPL`).
-- **필드**: `income[], balance[], cashflow[], fetched_at, expire_at`. 각 배열은 annual·최근 5개.
-- **`fetched_at`** (신선도) — 조회 시각.
-- **`expire_at`** = 저장 시각 + 30일(store 주입).
+### `fundamentals` (폐기 — income·balance·cashflow가 대체)
+레거시 컬렉션. 티커별 재무제표를 배열로 담고 있었으나, 이제 하단 「팩터·펀더멘털 수집 계약」의 `income`·`balance`·`cashflow` 개별 컬렉션(날짜별 개별 문서)으로 대체됨. 기존 공개 read 규칙에서 제거됨(보안규칙 `firestore.rules` 참조).
 
 ## Store 표면 (`firestore_store.FirestoreStore`)
 - `upsert_items(items) -> int` — `_to_doc`가 `kind` 분류 + `expire_at`을 박는다.
@@ -77,7 +74,10 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **feed_state에 `expire_at` 부재** — TTL이 폴링 커서를 만료시키지 않음을 지킨다.
 
 ## 인프라
-- Firestore 보안규칙(`items`·`prices`·`fundamentals`·`meta` 공개 read)·복합 인덱스는 newsstore가 적용한다(보안규칙 `docs/operations.md §C`, 복합 인덱스 §D). TTL 정책 프로비저닝은 `docs/setup.md`·`docs/operations.md`.
+- **2층 보안규칙** (`firestore.rules`, `docs/operations.md §C`):
+  - **공개 read** (web/index.html 뉴스 리더): `items`·`meta`·`prices`.
+  - **인증+허용목록 게이트** (web/dashboard.html 대시보드): 팩터·펀더멘털 컬렉션 (price_bars, prices_eod, income, balance, cashflow, ratios, market_cap, grades_history, profiles, estimates, price_targets, grades_consensus, index_members, index_changes, delisted). `config/allowlist` 문서에 인증된 이메일 배열 정의 → `allowed()` 함수가 요청 인증 토큰의 이메일을 확인.
+  - **복합 인덱스** (§D). TTL 정책 프로비저닝은 `docs/setup.md`·`docs/operations.md`.
 - 비밀(`FMP_API_KEY`)은 백엔드 전용(SECRETS) — 클라이언트/커밋 금지.
 
 ## 공유 설정
