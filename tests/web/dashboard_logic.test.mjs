@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   SCHEDULE, CARDS, TTL_DAYS, isWeekend, isOverdue, relTime, cardFreshness,
+  idRange, universeUnion, searchFilter, HIGH_SENTINEL,
 } from '../../web/dashboard_logic.mjs';
 
 const MON = Date.UTC(2026, 6, 13, 12, 0, 0);   // 2026-07-13 월 12:00 UTC
@@ -67,4 +68,32 @@ test('cardFreshness: 가장 오래된 값, 하나라도 비면 anyEmpty(→경�
   assert.deepEqual(cardFreshness([300, 100, 200]), { lastFetchedMs: 100, anyEmpty: false });
   assert.deepEqual(cardFreshness([300, null, 200]), { lastFetchedMs: null, anyEmpty: true });
   assert.deepEqual(cardFreshness([]), { lastFetchedMs: null, anyEmpty: true });
+});
+
+test('idRange: 상한 sentinel이 하한보다 크고, 인접 접두를 안 물어들인다', () => {
+  const r = idRange('AAPL');
+  assert.equal(r.low, 'AAPL__');
+  assert.ok(r.high > r.low, '상한 sentinel 존재(없으면 0건)');
+  // 실제 문서는 low 이상, high 이하 — AAPL 자기 문서만 포함
+  assert.ok('AAPL__20240101' >= r.low && 'AAPL__20240101' <= r.high);
+  // 인접 접두 AAP는 AAPL을 안 물어들인다: 'AAPL__...' 은 AAP 범위(하한 'AAP__') 밑
+  const rAAP = idRange('AAP');
+  assert.ok(!('AAPL__20240101' >= rAAP.low && 'AAPL__20240101' <= rAAP.high));
+});
+
+test('universeUnion: 3개 지수 합집합·중복제거·심볼 정렬', () => {
+  const docs = [
+    { members: [{ symbol: 'AAPL', name: 'Apple' }, { symbol: 'MSFT', name: 'Microsoft' }] },
+    { members: [{ symbol: 'MSFT', name: 'Microsoft' }, { symbol: 'NVDA', name: 'Nvidia' }] },
+    { members: [] },
+    null,
+  ];
+  assert.deepEqual(universeUnion(docs).map(x => x.symbol), ['AAPL', 'MSFT', 'NVDA']);
+});
+
+test('searchFilter: 심볼·이름 부분일치, 빈 쿼리는 빈 결과', () => {
+  const u = [{ symbol: 'AAPL', name: 'Apple' }, { symbol: 'MSFT', name: 'Microsoft' }];
+  assert.deepEqual(searchFilter(u, 'aap').map(x => x.symbol), ['AAPL']);
+  assert.deepEqual(searchFilter(u, 'micro').map(x => x.symbol), ['MSFT']);
+  assert.deepEqual(searchFilter(u, '  '), []);
 });

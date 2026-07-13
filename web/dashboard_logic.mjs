@@ -71,3 +71,30 @@ export function cardFreshness(fetchedMsList) {
   if (fetchedMsList.length === 0) anyEmpty = true;
   return { lastFetchedMs: anyEmpty ? null : oldest, anyEmpty };
 }
+
+// 문서 id {symbol}__{YYYYMMDD}의 종목별 범위. 상한 sentinel 필수(없으면 0건).
+// U+F8FF를 안 보이는 문자로 쓰지 말고 fromCharCode로 명시(스펙 리뷰 교훈).
+export const HIGH_SENTINEL = String.fromCharCode(0xF8FF);
+export function idRange(symbol) {
+  return { low: symbol + '__', high: symbol + '__' + HIGH_SENTINEL };
+}
+
+// index_members 문서들(각 {members:[{symbol,name}]})에서 유니버스 도출(중복제거·심볼 정렬).
+export function universeUnion(memberDocs) {
+  const bySym = new Map();
+  for (const d of (memberDocs || [])) {
+    for (const m of (d && d.members ? d.members : [])) {
+      if (m && m.symbol && !bySym.has(m.symbol)) bySym.set(m.symbol, m.name || '');
+    }
+  }
+  return [...bySym.entries()]
+    .map(([symbol, name]) => ({ symbol, name }))
+    .sort((a, b) => (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0));
+}
+
+export function searchFilter(universe, q) {
+  const s = (q || '').trim().toUpperCase();
+  if (!s) return [];
+  return universe.filter(x =>
+    x.symbol.toUpperCase().includes(s) || (x.name || '').toUpperCase().includes(s));
+}
