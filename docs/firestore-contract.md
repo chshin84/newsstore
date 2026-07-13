@@ -10,7 +10,7 @@
 | `feed_state` | collect Job | collect Job | **없음** | etag/last_modified 폴링 커서 — 만료시키면 증분 수집이 어긋난다 |
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
 | `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 **최신 스냅샷**(값+최근 시계열) — 웹 확인용 |
-| `price_bars` | prices Job | 다운스트림(Admin SDK) + 허용목록 인증 사용자(대시보드) | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
+| `price_bars` | prices Job | 공개(대시보드 · 다운스트림) | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
 > 위는 뉴스·시세 수집 표면이다. 다운스트림 백테스트용 **팩터·펀더멘털 수집**(ratios·재무제표·배당조정가·컨센서스 스냅샷·PIT 유니버스 등 ~17개 컬렉션)은 이 문서 하단 「팩터·펀더멘털 수집 계약」 절이 SSOT이며, `entrypoints/run_factors`로 **구현돼 있다**.
 
 ## TTL 규칙 (1개월, 비용 통제)
@@ -42,7 +42,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **`flags`** (비파괴 상식범위 플래그) — %등락이 상식 밖(지수 ±15%·환율 ±5% 가이드)이면 삭제하지 않고 여기에 표시한다. 검증은 하되 수정은 하지 않는다.
 - **`expire_at`** = 저장 시각 + 30일(store 주입).
 
-### `price_bars` (prices Job이 기록, 다운스트림 Admin SDK + 허용목록 인증 사용자 대시보드)
+### `price_bars` (prices Job이 기록, 공개 read — 대시보드·다운스트림)
 5분봉 **완전 스트림** — 바 1개가 문서 1개. 다운스트림 DB가 한 달 안에 적재한다는 가정. 문서 키 = `{심볼key}__{YYYYMMDDHHMMSS}`(결정론 — 겹쳐 받아도 멱등, 중복 없음).
 - **필드**: `key, symbol, label, group, order, source, datetime, close, open?, high?, low?, volume?, fetched_at, expire_at`. OHLCV는 소스가 주면 싣고, 국채는 `close`(수익률 %)만.
 - **`datetime`** — 소스 타임스탬프 문자열을 보존한다(FMP 인트라데이는 거래소 로컬시각, Yahoo는 UTC ISO, 국채는 날짜). 다운스트림이 해석한다.
@@ -74,9 +74,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **feed_state에 `expire_at` 부재** — TTL이 폴링 커서를 만료시키지 않음을 지킨다.
 
 ## 인프라
-- **2층 보안규칙** (`firestore.rules`, `docs/operations.md §C`):
-  - **공개 read** (web/index.html 뉴스 리더): `items`·`meta`·`prices`.
-  - **인증+허용목록 게이트** (web/dashboard.html 대시보드): 팩터·펀더멘털 컬렉션 (price_bars, prices_eod, income, balance, cashflow, ratios, market_cap, grades_history, profiles, estimates, price_targets, grades_consensus, index_members, index_changes, delisted). `config/allowlist` 문서에 인증된 이메일 배열 정의 → `allowed()` 함수가 요청 인증 토큰의 이메일을 확인.
+- **전면 공개 read 보안규칙** (`firestore.rules`, `docs/operations.md §C`): 대시보드·뉴스 리더가 **로그인 없이** 최근 데이터를 본다. `items`·`meta`·`prices`와 팩터·스트림 컬렉션(`price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`) 모두 `allow read: if true`. **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). 공개해도 노출은 **30일 버퍼**에 한정된다 — 깊은 아카이브(10년 EOD·1년 5분봉)는 Firestore가 아니라 **로컬 SQLite**(일회성 백필) 몫이라 Firestore 밖이다. `feed_state`(폴링 커서)만 기본 거부.
   - **복합 인덱스** (§D). TTL 정책 프로비저닝은 `docs/setup.md`·`docs/operations.md`.
 - 비밀(`FMP_API_KEY`)은 백엔드 전용(SECRETS) — 클라이언트/커밋 금지.
 

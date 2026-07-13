@@ -82,10 +82,10 @@ Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -H
 배포 후 브라우저는 **Ctrl+F5**(캐시). 검증: 사이트 콘솔에 404 없는지.
 
 ## C. 보안 규칙 변경 (firestore.rules)
-`firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기. **2층 모델**이다:
-- **공개 read**: `items`·`meta`·`prices`(공개 뉴스 리더 `web/index.html`). `feed_state`·`config`는 비공개.
-- **인증+허용목록 게이트**(대시보드 `web/dashboard.html`): 팩터·스트림 컬렉션(`price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`)은 `allowed()` 함수가 `request.auth.token.email`이 `config/allowlist.data.emails`에 있고 `email_verified`일 때만 read 허용. **write는 전면 금지**(Admin SDK만).
-- **재배포 시 필수 순서·설정**: ① Firebase 콘솔 → Authentication에서 **Google provider 활성화**. ② Firestore에 **`config/allowlist` 문서 먼저 생성**(`{"emails":["you@example.com", ...]}`) — 규칙 배포 전에 없으면 `get(config/allowlist)`가 실패해 허용목록 사용자도 팩터 read가 전부 막힌다. ③ 그 뒤 규칙 배포. 사람 추가/취소 = allowlist 배열 편집(규칙 재배포 불요). 상세 계약: `docs/firestore-contract.md`.
+`firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기. **전면 공개 read 모델**이다:
+- **공개 read**: `items`·`meta`·`prices`와 팩터·스트림 컬렉션(`price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`) 모두 `allow read: if true`. 대시보드(`web/dashboard.html`)·뉴스 리더(`web/index.html`)가 **로그인 없이** 읽는다.
+- **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). `feed_state`(폴링 커서)만 기본 거부.
+- **노출 범위는 30일 버퍼뿐** — 깊은 아카이브(10년 EOD·1년 5분봉)는 로컬 SQLite(일회성 백필) 몫이라 Firestore 밖. **구글 auth·허용목록 불요**(공개 모델). 배포는 `firebase deploy --only firestore:rules,hosting`.
 
 ## D. 복합 인덱스 추가
 ```

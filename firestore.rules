@@ -2,40 +2,29 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── 공개 read (공개 뉴스 리더 web/index.html) — RSS·시세 스냅샷, FMP 재배포 제약 밖 ──
-    match /items/{id}  { allow read: if true;  allow write: if false; }
-    match /meta/{id}   { allow read: if true;  allow write: if false; }
-    match /prices/{id} { allow read: if true;  allow write: if false; }
+    // ── 전면 공개 read (대시보드·뉴스 리더는 로그인 없이 최근 데이터를 본다) ──
+    // newsstore는 30일 버퍼만 유지하므로 공개해도 노출은 최근 데이터에 한정된다(깊은 아카이브는
+    // 로컬 SQLite 몫 — Firestore 밖). write는 전면 금지(수집기는 Admin SDK라 규칙 우회).
+    match /items/{id}            { allow read: if true; allow write: if false; }
+    match /meta/{id}             { allow read: if true; allow write: if false; }
+    match /prices/{id}           { allow read: if true; allow write: if false; }
+    match /price_bars/{id}       { allow read: if true; allow write: if false; }
+    match /prices_eod/{id}       { allow read: if true; allow write: if false; }
+    match /income/{id}           { allow read: if true; allow write: if false; }
+    match /balance/{id}          { allow read: if true; allow write: if false; }
+    match /cashflow/{id}         { allow read: if true; allow write: if false; }
+    match /ratios/{id}           { allow read: if true; allow write: if false; }
+    match /market_cap/{id}       { allow read: if true; allow write: if false; }
+    match /grades_history/{id}   { allow read: if true; allow write: if false; }
+    match /profiles/{id}         { allow read: if true; allow write: if false; }
+    match /estimates/{id}        { allow read: if true; allow write: if false; }
+    match /price_targets/{id}    { allow read: if true; allow write: if false; }
+    match /grades_consensus/{id} { allow read: if true; allow write: if false; }
+    match /index_members/{id}    { allow read: if true; allow write: if false; }
+    match /index_changes/{id}    { allow read: if true; allow write: if false; }
+    match /delisted/{id}         { allow read: if true; allow write: if false; }
 
-    // ── 인증 + 이메일 허용목록 게이트 (FMP 팩터/스트림) ──
-    // 로그인했고 이메일이 config/allowlist.emails 에 있어야 read. write는 전면 금지(Admin SDK만).
-    function allowed() {
-      return request.auth != null
-        && request.auth.token.email_verified == true
-        && request.auth.token.email in
-           get(/databases/$(database)/documents/config/allowlist).data.emails;
-    }
-    match /price_bars/{id}       { allow read: if allowed(); allow write: if false; }
-    match /prices_eod/{id}       { allow read: if allowed(); allow write: if false; }
-    match /income/{id}           { allow read: if allowed(); allow write: if false; }
-    match /balance/{id}          { allow read: if allowed(); allow write: if false; }
-    match /cashflow/{id}         { allow read: if allowed(); allow write: if false; }
-    match /ratios/{id}           { allow read: if allowed(); allow write: if false; }
-    match /market_cap/{id}       { allow read: if allowed(); allow write: if false; }
-    match /grades_history/{id}   { allow read: if allowed(); allow write: if false; }
-    match /profiles/{id}         { allow read: if allowed(); allow write: if false; }
-    match /estimates/{id}        { allow read: if allowed(); allow write: if false; }
-    match /price_targets/{id}    { allow read: if allowed(); allow write: if false; }
-    match /grades_consensus/{id} { allow read: if allowed(); allow write: if false; }
-    match /index_members/{id}    { allow read: if allowed(); allow write: if false; }
-    match /index_changes/{id}    { allow read: if allowed(); allow write: if false; }
-    match /delisted/{id}         { allow read: if allowed(); allow write: if false; }
-
-    // 허용목록 자체는 비공개(이메일 PII) — 규칙 get()만 접근
-    match /config/{id} { allow read, write: if false; }
-
-    // 그 외(feed_state·레거시 fundamentals/stories/frames 등) 기본 거부.
-    // 수집기는 Admin SDK라 규칙 우회 — write:false여도 정상 적재.
+    // 그 외(feed_state 폴링 커서 등)는 기본 거부(공개 불요).
     match /{document=**} { allow read, write: if false; }
   }
 }

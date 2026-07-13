@@ -29,16 +29,10 @@
 <body>
 <header>
   <h1>newsstore 수집 대시보드</h1>
-  <div><span id="who" class="mut"></span> <button id="signout" style="display:none">로그아웃</button></div>
+  <span class="mut">최근 데이터(공개) · 10분마다 자동 갱신</span>
 </header>
 
-<div id="signin">
-  <p class="mut">허용된 이메일로 로그인해야 데이터가 보입니다.</p>
-  <button id="google">구글로 로그인</button>
-  <p id="denied" class="alert" style="display:none">이 계정은 접근 권한이 없습니다(허용목록에 없음).</p>
-</div>
-
-<main id="app" style="display:none">
+<main id="app">
   <p class="mut">불러온 시각: <span id="loaded"></span> · <button id="refresh">새로고침</button></p>
   <section id="cards"></section>
   <section class="card">
@@ -51,8 +45,6 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, collection, query, orderBy, limit, getDocs, doc, getDoc,
          where, documentId }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
@@ -61,7 +53,6 @@ import { CARDS, isOverdue, relTime, cardFreshness, idRange, universeUnion, searc
   from "./dashboard_logic.mjs";
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
 const toMs = (ts) => {                        // Firestore Timestamp | ISO 문자열 | null → ms
@@ -70,22 +61,9 @@ const toMs = (ts) => {                        // Firestore Timestamp | ISO 문�
   const t = Date.parse(ts); return Number.isFinite(t) ? t : null;
 };
 
-// ── 인증 게이트 ──
-$("google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => {
-  $("denied").textContent = "로그인 실패: " + e.code; $("denied").style.display = "block";
-});
-$("signout").onclick = () => signOut(auth);
-onAuthStateChanged(auth, async (user) => {
-  if (!user) { $("signin").style.display = "block"; $("app").style.display = "none";
-               $("signout").style.display = "none"; $("who").textContent = ""; return; }
-  // 허용목록 통과 여부는 실제 read 시도로 확인(규칙이 최종 판정). 우선 UI 전환 후 로드.
-  $("who").textContent = user.email; $("signout").style.display = "inline-block";
-  try { await load(); $("signin").style.display = "none"; $("app").style.display = "block"; }
-  catch (e) {                                  // permission-denied = 허용목록 밖
-    $("app").style.display = "none"; $("signin").style.display = "block";
-    $("denied").textContent = "이 계정은 접근 권한이 없습니다(허용목록에 없음)."; $("denied").style.display = "block";
-  }
-});
+// ── 공개: 로그인 없이 최근 데이터 표시(30일 버퍼). 10분마다 자동 갱신 ──
+load().catch(e => { $("cards").innerHTML = `<div class="alert">로드 실패: ${e.code || e.message}</div>`; });
+setInterval(() => load().catch(() => {}), 10 * 60 * 1000);
 
 // ── 로드: 상태 카드 + 유니버스 ──
 let universe = [];
