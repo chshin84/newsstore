@@ -36,8 +36,8 @@ newsstore가 수집하는 각 데이터 종류가 **최근 정상적으로 들�
 | 시세(5분봉) | `price_bars`, `prices` | 5분(장중) | 마지막 바 시각 · 심볼 수(12) |
 | 배당조정 EOD | `prices_eod` | 일(장마감 후) | 마지막 수집 · 샘플 종목 최근 adjClose |
 | 재무제표 | `income`·`balance`·`cashflow` | 주 | 마지막 수집(가장 오래된 것 기준) · 샘플 종목·회계일 |
-| 프로파일·비율·시총 | `profiles`·`ratios`·`market_cap` | 주 | 마지막 수집 · 샘플 |
-| 컨센서스 | `estimates`·`price_targets`·`grades_history`·`grades_consensus` | 주 | 마지막 수집(as-of) · 샘플 |
+| 프로파일·비율·시총·등급이력 | `profiles`·`ratios`·`market_cap`·`grades_history` | 주 | 마지막 수집 · 샘플 (grades_history=§1 백필 가능) |
+| 컨센서스 | `estimates`·`price_targets`·`grades_consensus` | 주 | 마지막 수집(as-of) · 샘플 (§2 백필 불가 3종) |
 | 유니버스 | `index_members`·`index_changes`·`delisted` | 주 | 현재 구성 N종목(3개 지수 합집합) · 최근 변경 로그 몇 건 |
 
 각 카드 공통:
