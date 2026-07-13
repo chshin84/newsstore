@@ -11,6 +11,7 @@ service cloud.firestore {
     // 로그인했고 이메일이 config/allowlist.emails 에 있어야 read. write는 전면 금지(Admin SDK만).
     function allowed() {
       return request.auth != null
+        && request.auth.token.email_verified == true
         && request.auth.token.email in
            get(/databases/$(database)/documents/config/allowlist).data.emails;
     }

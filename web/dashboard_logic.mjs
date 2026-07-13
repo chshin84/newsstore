@@ -7,7 +7,7 @@ export const LEAD_FRACTION = 0.4;   // §2: 지연 문턱 = TTL_DAYS × 이 비�
 
 // 실제 수집 스케줄(Cloud Scheduler cron / run_factors cadence)의 UI측 사본(초).
 // 클라이언트는 스케줄러를 못 읽어 불가피한 두 번째 출처 — 스케줄을 바꾸면 여기도 바꾼다.
-// (docs/operations.md §8 · setup.md §8과 일치해야 함.)
+// (setup.md §8 스케줄러 생성 · operations.md 리소스 표의 Cloud Scheduler 행과 일치해야 함.)
 export const SCHEDULE = { intraday: 300, daily: 86400, weekly: 604800 };
 
 // 카드 SSOT — 계약 17개 컬렉션을 7카드로 빠짐없이 묶는다.

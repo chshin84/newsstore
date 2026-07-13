@@ -1,4 +1,4 @@
-// Firebase 웹 설정 (공개 read 전용 — 비밀 아님). index.html이 import.
+// Firebase 웹 설정 (웹 apiKey는 비밀 아님 — 규칙이 데이터를 보호). index.html·dashboard.html이 import.
 export const firebaseConfig = {
   apiKey: "AIzaSyAs-PhCFJ7_RkIOkDfv8FrIYxdyphT8Ofk",
   authDomain: "daily-recap-498506.firebaseapp.com",
