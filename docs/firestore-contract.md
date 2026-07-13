@@ -47,6 +47,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **필드**: `key, symbol, label, group, order, source, datetime, close, open?, high?, low?, volume?, fetched_at, expire_at`. OHLCV는 소스가 주면 싣고, 국채는 `close`(수익률 %)만.
 - **`datetime`** — 소스 타임스탬프 문자열을 보존한다(FMP 인트라데이는 거래소 로컬시각, Yahoo는 UTC ISO, 국채는 날짜). 다운스트림이 해석한다.
 - **적재는 새 바만** — `run_price_pass`가 `filter_new_bar_ids`로 이미 있는 바를 걸러 5분 주기 write 비용을 묶는다.
+- **5분봉 1년 백필**(`entrypoints/run_intraday_backfill`) — FMP는 넓은 from/to엔 최근 ~1주만 주므로, 1년치는 주 단위(~52콜/심볼)로 역수집한다(`collect/prices.week_windows`). 대상은 `--target macro`(config/prices.yaml FMP 심볼 — 매크로 12) · `universe`(S&P500∪Nasdaq∪Dow 현재 구성종목 ~600, 종목별 `PriceSymbol(source=fmp)`) · `both`. 주식 600 × 1년 ≈ 1,180만 문서(초기 백필 대용량) — 30일 TTL 컨베이어로 다운스트림이 받아간다. Yahoo 폴백 3종은 FMP 5분 미커버라 이 백필에서 제외.
 - 미국채(`fmp_treasury`)는 5분봉이 없어 **일봉 1바/일**(id는 `{key}__{YYYYMMDD}`).
 - **`expire_at`** = 바 날짜 + 30일(store 주입).
 
@@ -116,7 +117,7 @@ newsstore는 이 데이터를 영구 보관하지 않는다. **모든 컬렉션�
 | `income` | `{symbol}__{date}` | `income-statement?symbol=&period=annual` | 손익계산서(+분기) — 멀티플 재계산·성장 파생의 원천 | 주 1회 |
 | `balance` | `{symbol}__{date}` | `balance-sheet-statement?symbol=&period=annual` | 대차대조표 | 주 1회 |
 | `cashflow` | `{symbol}__{date}` | `cash-flow-statement?symbol=&period=annual` | 현금흐름표 | 주 1회 |
-| `prices_eod` | `{symbol}__{date}` | `historical-price-eod/dividend-adjusted?symbol=` | **배당조정** 일봉(adjOpen/adjHigh/adjLow/adjClose·volume) — 총수익 백테스트(가격만 쓰면 배당만큼 왜곡) | 일 1회(증분) |
+| `prices_eod` | `{symbol}__{date}` | `historical-price-eod/dividend-adjusted?symbol=&from=&to=` | **배당조정** 일봉 OHLC(adjOpen/adjHigh/adjLow/adjClose·volume) — 총수익 백테스트(가격만 쓰면 배당만큼 왜곡). **from=today-10년**(FactorSpec.lookback_days=3653)으로 10년치 수집. | 일 1회(증분) |
 | `market_cap` | `{symbol}__{date}` | `historical-market-capitalization?symbol=` | 일별 시가총액 — 사이즈 팩터·바스켓 가중 | 주 1회 |
 | `grades_history` | `{symbol}__{date}` | `grades-historical?symbol=` | 날짜별 애널리스트 등급 카운트(strongBuy/buy/hold/sell/strongSell) — 리비전 방향, PIT | 주 1회 |
 | `profiles` | `{symbol}` | `profile?symbol=` | 섹터·산업·시총·설명문(현재값, 덮어쓰기) — 섹터중립 랭크·유니버스 필터·테마 판정 | 주 1회 |

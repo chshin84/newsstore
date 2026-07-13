@@ -205,6 +205,46 @@ def _snapshot(bars: list[dict], s: PriceSymbol, *, fetched_at: str) -> dict:
 _UNSET = object()   # treasury-rates는 한 콜로 전 만기를 주므로 pass당 한 번만 fetch(캐시 센티널)
 
 
+def week_windows(lookback_days: int, today) -> list[tuple[str, str]]:
+    """[today-lookback, today]를 ~7일 창으로 쪼갠 (from, to) 리스트(최신→과거).
+    FMP historical-chart/5min은 넓은 from/to엔 최근 ~1주만 주므로, 1년치 5분봉은 주 단위로
+    역수집한다(각 창은 그 주 데이터를 온전히 준다 — 실측). today는 date."""
+    from datetime import timedelta
+    out, end = [], today
+    floor = today - timedelta(days=lookback_days)
+    while end >= floor:                          # floor(하한)까지 포함 — >가 아니라 >=
+        start = max(floor, end - timedelta(days=6))
+        out.append((start.isoformat(), end.isoformat()))
+        end = start - timedelta(days=1)
+    return out
+
+
+def run_intraday_backfill(store, fetch_window, symbols: list[PriceSymbol],
+                          windows: list[tuple[str, str]], *, fetched_at: str,
+                          delay_s: float = 0.0) -> int:
+    """각 (symbol, window)를 fetch_window(symbol, from, to)→bars_from_fmp_intraday→새 바만 적재.
+    반환=새로 적재한 바 수. 5분봉 1년 백필(매크로·주식) — run_price_pass의 다창 버전.
+    개별 (symbol,window) 실패는 스킵(fail-soft). 새 바만 write(멱등 — 겹침 무비용)."""
+    total, calls = 0, 0
+    for s in symbols:
+        for frm, to in windows:
+            if delay_s and calls:
+                time.sleep(delay_s)
+            calls += 1
+            try:
+                bars = bars_from_fmp_intraday(fetch_window(s.symbol, frm, to), s, fetched_at=fetched_at)
+            except Exception as e:
+                log.warning("intraday backfill %s[%s~%s] 실패: %s", s.symbol, frm, to, e)
+                continue
+            if not bars:
+                continue
+            new_ids = set(store.filter_new_bar_ids([b["id"] for b in bars]))
+            total += store.save_bars([b for b in bars if b["id"] in new_ids])
+        log.info("intraday backfill %s:누적 %d 바", s.key, total)
+    log.info("intraday backfill done: %d bars, %d symbols × %d windows", total, len(symbols), len(windows))
+    return total
+
+
 def run_price_pass(store, fetchers: dict, symbols: list[PriceSymbol],
                    *, delay_s: float = 0.0) -> int:
     """각 심볼을 source별로 fetch→바 추출→(새 바만) price_bars 적재 + prices/{key} 스냅샷 갱신.
