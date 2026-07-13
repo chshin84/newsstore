@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>newsstore 수집 대시보드</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1e26; --line:#2a2f3a; --fg:#e6e9ef; --mut:#8b93a3; --alert:#ff6b6b; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+  h1 { font-size:16px; margin:0; } h2 { font-size:14px; margin:0; }
+  .mut { color:var(--mut); } .alert { color:var(--alert); font-weight:600; }
+  button { background:#252b36; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; }
+  main { padding:16px 20px; max-width:920px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .card .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .sample { color:var(--mut); font-size:13px; margin-top:4px; }
+  #signin { text-align:center; padding:64px 20px; }
+  input { background:#252b36; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; width:100%; }
+  .suggest { border:1px solid var(--line); border-radius:6px; margin-top:4px; max-height:180px; overflow:auto; }
+  .suggest div { padding:6px 10px; cursor:pointer; } .suggest div:hover { background:#252b36; }
+  .panel { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+  .box { background:#141821; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+  .box .none { color:var(--mut); font-style:italic; }
+  a { color:#6db3ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>newsstore 수집 대시보드</h1>
+  <div><span id="who" class="mut"></span> <button id="signout" style="display:none">로그아웃</button></div>
+</header>
+
+<div id="signin">
+  <p class="mut">허용된 이메일로 로그인해야 데이터가 보입니다.</p>
+  <button id="google">구글로 로그인</button>
+  <p id="denied" class="alert" style="display:none">이 계정은 접근 권한이 없습니다(허용목록에 없음).</p>
+</div>
+
+<main id="app" style="display:none">
+  <p class="mut">불러온 시각: <span id="loaded"></span> · <button id="refresh">새로고침</button></p>
+  <section id="cards"></section>
+  <section class="card">
+    <h2>종목 드릴다운</h2>
+    <input id="search" placeholder="심볼 또는 이름 검색 (예: AAPL)" autocomplete="off">
+    <div id="suggest" class="suggest" style="display:none"></div>
+    <div id="detail"></div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, query, orderBy, limit, getDocs, doc, getDoc,
+         where, documentId }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { firebaseConfig } from "./config.js";
+import { CARDS, isOverdue, relTime, cardFreshness, idRange, universeUnion, searchFilter }
+  from "./dashboard_logic.mjs";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = (id) => document.getElementById(id);
+const toMs = (ts) => {                        // Firestore Timestamp | ISO 문자열 | null → ms
+  if (!ts) return null;
+  if (typeof ts.toMillis === "function") return ts.toMillis();
+  const t = Date.parse(ts); return Number.isFinite(t) ? t : null;
+};
+
+// ── 인증 게이트 ──
+$("google").onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(e => {
+  $("denied").textContent = "로그인 실패: " + e.code; $("denied").style.display = "block";
+});
+$("signout").onclick = () => signOut(auth);
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { $("signin").style.display = "block"; $("app").style.display = "none";
+               $("signout").style.display = "none"; $("who").textContent = ""; return; }
+  // 허용목록 통과 여부는 실제 read 시도로 확인(규칙이 최종 판정). 우선 UI 전환 후 로드.
+  $("who").textContent = user.email; $("signout").style.display = "inline-block";
+  try { await load(); $("signin").style.display = "none"; $("app").style.display = "block"; }
+  catch (e) {                                  // permission-denied = 허용목록 밖
+    $("app").style.display = "none"; $("signin").style.display = "block";
+    $("denied").textContent = "이 계정은 접근 권한이 없습니다(허용목록에 없음)."; $("denied").style.display = "block";
+  }
+});
+
+// ── 로드: 상태 카드 + 유니버스 ──
+let universe = [];
+async function latestFetched(coll) {           // 컬렉션 최신 fetched_at(ms) — 바운드(limit 1)
+  const snap = await getDocs(query(collection(db, coll), orderBy("fetched_at", "desc"), limit(1)));
+  if (snap.empty) return { ms: null, doc: null };
+  const d = snap.docs[0].data();
+  return { ms: toMs(d.fetched_at), doc: d };
+}
+async function load() {
+  $("loaded").textContent = new Date().toLocaleString("ko-KR");
+  const now = Date.now();
+  // 카드별: 묶인 컬렉션의 최신 fetched_at을 모아 신선도·지연 판정
+  const cardsEl = $("cards"); cardsEl.innerHTML = "";
+  for (const c of CARDS) {
+    const results = await Promise.all(c.collections.map(latestFetched));
+    const { lastFetchedMs, anyEmpty } = cardFreshness(results.map(r => r.ms));
+    const verdict = isOverdue(lastFetchedMs, c, now);
+    const when = lastFetchedMs == null ? "데이터 없음" : relTime(lastFetchedMs, now);
+    const flag = verdict.overdue
+      ? `<span class="alert">⚠️ ${anyEmpty ? "데이터 없음/기한 초과" : "지연"}</span>` : "";
+    const sample = sampleLine(c, results);
+    const el = document.createElement("div"); el.className = "card";
+    el.innerHTML = `<div class="row"><h2>${c.label}</h2><span class="mut">마지막 수집: ${when} · 기대: ${cadenceLabel(c.expectedSec)} ${flag}</span></div>`
+                 + (sample ? `<div class="sample">${sample}</div>` : "");
+    cardsEl.appendChild(el);
+  }
+  // 유니버스: index_members 3문서만 읽어 검색 후보 구성(추가 읽기 없음)
+  const um = await getDocs(collection(db, "index_members"));
+  universe = universeUnion(um.docs.map(d => d.data()));
+}
+function cadenceLabel(sec) { return sec <= 300 ? "5분" : sec <= 86400 ? "일" : "주"; }
+function sampleLine(card, results) {
+  if (card.key === "universe") {
+    const im = results[0].doc;                 // index_members 첫 결과(문서 하나의 members)
+    const n = im && im.members ? im.members.length : 0;
+    return im ? `한 지수 구성 ${n}종목 (유니버스 전체는 드릴다운 검색)` : "";
+  }
+  const d = results[0].doc;
+  if (!d) return "";
+  if (card.key === "news")  return `최근: ${d.source || ""} · ${(d.title || "").slice(0, 60)}`;
+  if (card.key === "intraday") return `최근 바: ${d.datetime || d.symbol || ""}`;
+  if (d.symbol) return `샘플 종목: ${d.symbol}${d.date ? " · " + d.date : ""}`;
+  return "";
+}
+$("refresh").onclick = () => load().catch(() => {});
+
+// ── 드릴다운 ──
+const DRILL = [                                // {coll, label, shape:'range'|'single', render}
+  { coll: "profiles", label: "프로파일", shape: "single",
+    render: d => `${d.data?.[0]?.companyName || d.symbol || ""} · ${d.data?.[0]?.sector || ""} · 시총 ${fmt(d.data?.[0]?.marketCap)}` },
+  { coll: "ratios", label: "비율", shape: "range",
+    render: d => `P/E ${num(d.priceToEarningsRatio)} · P/S ${num(d.priceToSalesRatio)} · P/B ${num(d.priceToBookRatio)} (${d.date || ""})` },
+  { coll: "income", label: "손익", shape: "range",
+    render: d => `매출 ${fmt(d.revenue)} · 순이익 ${fmt(d.netIncome)} (${d.date || ""})` },
+  { coll: "balance", label: "대차", shape: "range",
+    render: d => `총자산 ${fmt(d.totalAssets)} · 총부채 ${fmt(d.totalLiabilities)} (${d.date || ""})` },
+  { coll: "cashflow", label: "현금흐름", shape: "range",
+    render: d => `영업CF ${fmt(d.operatingCashFlow)} · FCF ${fmt(d.freeCashFlow)} (${d.date || ""})` },
+  { coll: "estimates", label: "추정치(as-of)", shape: "range",
+    render: d => `캡처 ${d.as_of || ""} · FY추정 ${d.data?.[0]?.epsAvg ?? "?"} EPS` },
+  { coll: "price_targets", label: "목표가(as-of)", shape: "range",
+    render: d => `consensus ${num(d.data?.[0]?.targetConsensus)} (H ${num(d.data?.[0]?.targetHigh)}/L ${num(d.data?.[0]?.targetLow)})` },
+  { coll: "grades_consensus", label: "등급 분포(as-of)", shape: "range",
+    render: d => `buy ${d.data?.[0]?.buy ?? "?"} · hold ${d.data?.[0]?.hold ?? "?"} · sell ${d.data?.[0]?.sell ?? "?"}` },
+  { coll: "prices_eod", label: "배당조정 EOD", shape: "range",
+    render: d => `최근 adjClose ${num(d.adjClose)} (${d.date || ""})` },
+];
+function num(v) { return (v == null || Number.isNaN(+v)) ? "?" : (+v).toLocaleString(); }
+function fmt(v) { if (v == null) return "?"; const n = +v; return Math.abs(n) >= 1e9 ? (n/1e9).toFixed(1)+"B" : n.toLocaleString(); }
+
+async function latestOf(coll, symbol) {        // 종목 최신 1건 — doc-id 범위(상한 sentinel)
+  const { low, high } = idRange(symbol);
+  const q = query(collection(db, coll),
+    where(documentId(), ">=", low), where(documentId(), "<", high),
+    orderBy(documentId(), "desc"), limit(1));
+  const snap = await getDocs(q);
+  return snap.empty ? null : snap.docs[0].data();
+}
+async function drill(symbol) {
+  const detail = $("detail"); detail.innerHTML = `<div class="mut">${symbol} 불러오는 중…</div>`;
+  const panel = document.createElement("div"); panel.className = "panel";
+  for (const spec of DRILL) {
+    let data = null;
+    try {
+      data = spec.shape === "single"
+        ? await getDoc(doc(db, spec.coll, symbol)).then(s => s.exists() ? s.data() : null)
+        : await latestOf(spec.coll, symbol);
+    } catch (e) { data = { __err: e.code || "error" }; }
+    const box = document.createElement("div"); box.className = "box";
+    const body = data == null ? `<span class="none">데이터 없음(미수집)</span>`
+              : data.__err ? `<span class="alert">오류: ${data.__err}</span>`
+              : spec.render(data);
+    box.innerHTML = `<b>${spec.label}</b><br>${body}`;
+    panel.appendChild(box);
+  }
+  detail.innerHTML = `<h2 style="margin-top:12px">${symbol}</h2>`; detail.appendChild(panel);
+}
+$("search").oninput = (e) => {
+  const hits = searchFilter(universe, e.target.value).slice(0, 12);
+  const box = $("suggest");
+  if (!hits.length) { box.style.display = "none"; return; }
+  box.innerHTML = ""; box.style.display = "block";
+  for (const h of hits) {
+    const d = document.createElement("div"); d.textContent = `${h.symbol}  ${h.name || ""}`;
+    d.onclick = () => { $("search").value = h.symbol; box.style.display = "none"; drill(h.symbol); };
+    box.appendChild(d);
+  }
+};
+</script>
+</body>
+</html>
