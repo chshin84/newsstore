@@ -51,3 +51,23 @@ export function isOverdue(lastFetchedMs, opts, nowMs) {
   const overdue = (nowMs - lastFetchedMs) > thresholdMs;
   return { overdue, reason: overdue ? 'stale' : 'ok' };
 }
+
+export function relTime(fromMs, nowMs) {
+  const s = Math.max(0, Math.floor((nowMs - fromMs) / 1000));
+  if (s < 60) return '방금';
+  const m = Math.floor(s / 60); if (m < 60) return `${m}분 전`;
+  const h = Math.floor(m / 60); if (h < 24) return `${h}시간 전`;
+  return `${Math.floor(h / 24)}일 전`;
+}
+
+// 카드 신선도 = 묶인 컬렉션들의 '최신 fetched_at' 중 가장 오래된 것(하나만 멈춰도 카드가 잡음).
+// 하나라도 비었으면(수집 전·TTL 만료) anyEmpty → 카드는 경보 처리.
+export function cardFreshness(fetchedMsList) {
+  let anyEmpty = false, oldest = null;
+  for (const v of fetchedMsList) {
+    if (v == null || !Number.isFinite(v)) { anyEmpty = true; continue; }
+    oldest = oldest == null ? v : Math.min(oldest, v);
+  }
+  if (fetchedMsList.length === 0) anyEmpty = true;
+  return { lastFetchedMs: anyEmpty ? null : oldest, anyEmpty };
+}
