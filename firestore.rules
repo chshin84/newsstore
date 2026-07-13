@@ -1,41 +1,40 @@
 rules_version = '2';
-
-// 공개 뷰어용 규칙: items는 누구나 읽기, 클라이언트 쓰기는 전면 금지.
-// 수집기(Cloud Run Job)는 Admin SDK라 규칙을 우회하므로 write:false여도 정상 기록됨.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /items/{id} {
-      allow read: if true;
-      allow write: if false;
-    }
+    // ── 공개 read (공개 뉴스 리더 web/index.html) — RSS·시세 스냅샷, FMP 재배포 제약 밖 ──
+    match /items/{id}  { allow read: if true;  allow write: if false; }
+    match /meta/{id}   { allow read: if true;  allow write: if false; }
+    match /prices/{id} { allow read: if true;  allow write: if false; }
 
-    // 사이트용 메타(소스 목록 등) — feeds.yaml에서 수집기가 도출해 기록(SSOT)
-    match /meta/{doc} {
-      allow read: if true;
-      allow write: if false;
+    // ── 인증 + 이메일 허용목록 게이트 (FMP 팩터/스트림) ──
+    // 로그인했고 이메일이 config/allowlist.emails 에 있어야 read. write는 전면 금지(Admin SDK만).
+    function allowed() {
+      return request.auth != null
+        && request.auth.token.email in
+           get(/databases/$(database)/documents/config/allowlist).data.emails;
     }
+    match /price_bars/{id}       { allow read: if allowed(); allow write: if false; }
+    match /prices_eod/{id}       { allow read: if allowed(); allow write: if false; }
+    match /income/{id}           { allow read: if allowed(); allow write: if false; }
+    match /balance/{id}          { allow read: if allowed(); allow write: if false; }
+    match /cashflow/{id}         { allow read: if allowed(); allow write: if false; }
+    match /ratios/{id}           { allow read: if allowed(); allow write: if false; }
+    match /market_cap/{id}       { allow read: if allowed(); allow write: if false; }
+    match /grades_history/{id}   { allow read: if allowed(); allow write: if false; }
+    match /profiles/{id}         { allow read: if allowed(); allow write: if false; }
+    match /estimates/{id}        { allow read: if allowed(); allow write: if false; }
+    match /price_targets/{id}    { allow read: if allowed(); allow write: if false; }
+    match /grades_consensus/{id} { allow read: if allowed(); allow write: if false; }
+    match /index_members/{id}    { allow read: if allowed(); allow write: if false; }
+    match /index_changes/{id}    { allow read: if allowed(); allow write: if false; }
+    match /delisted/{id}         { allow read: if allowed(); allow write: if false; }
 
-    // 가격 스냅샷(지수·환율·국채) — 공개 read, write 금지(가격 수집 잡은 Admin SDK 우회)
-    match /prices/{key} {
-      allow read: if true;
-      allow write: if false;
-    }
+    // 허용목록 자체는 비공개(이메일 PII) — 규칙 get()만 접근
+    match /config/{id} { allow read, write: if false; }
 
-    // 펀더멘털(income/balance/cashflow) — 공개 read, write 금지(수집 잡은 Admin SDK 우회)
-    match /fundamentals/{symbol} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // 내부 상태(조건부 GET 등)는 비공개
-    match /feed_state/{id} {
-      allow read, write: if false;
-    }
-
-    // 그 외 전부 거부
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    // 그 외(feed_state·레거시 fundamentals/stories/frames 등) 기본 거부.
+    // 수집기는 Admin SDK라 규칙 우회 — write:false여도 정상 적재.
+    match /{document=**} { allow read, write: if false; }
   }
 }
