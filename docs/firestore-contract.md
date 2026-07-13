@@ -11,7 +11,9 @@
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
 | `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 **최신 스냅샷**(값+최근 시계열) — 웹 확인용 |
 | `price_bars` | prices Job | 다운스트림 | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
-| `fundamentals` | fundamentals Job | web UI | 있음(`expire_at`) | 티커별 재무제표(FMP) |
+| `fundamentals` | fundamentals Job | web UI | 있음(`expire_at`) | 티커별 재무제표(FMP) — 아래 팩터 계약의 seed |
+
+> 위는 현재 구현된 수집 표면이다. 다운스트림 백테스트용 **팩터·펀더멘털 수집 계약**(ratios·재무제표·배당조정가·컨센서스 스냅샷·PIT 유니버스 등)은 이 문서 하단 「팩터·펀더멘털 수집 계약」 절이 SSOT다 — 아직 구현 전, 목표 계약이다.
 
 ## TTL 규칙 (1개월, 비용 통제)
 
@@ -82,3 +84,76 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 
 ## 공유 설정
 - **`config/feeds.yaml`의 `tier` 필드** — `feeds.yaml`은 수집기 SSOT다. 수집 패스가 `meta/sources`에 `{"sources":[...], "tiers":{source: tier}}`로 발행한다. UI는 거기서 소스 등급을 읽는다. 파일을 복제하지 않는다(SSOT).
+
+---
+
+# 팩터·펀더멘털 수집 계약 (Phase 0/1 — 다운스트림 백테스트 seam)
+
+이 절은 다운스트림 팩터·백테스트 엔진이 쓸 재무·가격·컨센서스 데이터를 newsstore가 어떻게 수집·저장하는지의 계약이다. **분석은 다운스트림이 한다 — newsstore는 수집·전달만 한다.** 두 레포가 이 절을 SSOT로 공유한다. 모든 엔드포인트는 FMP `/stable/` base이며, 아래 표의 심볼·엔드포인트는 실 API로 접지(2026-07-13, Premium 티어에서 열림 확인)했다.
+
+## 모델 — 컨베이어 벨트(30일 롤링 버퍼), 아카이브 아님
+
+newsstore는 이 데이터를 영구 보관하지 않는다. **모든 컬렉션에 30일 TTL**을 걸고(비용 통제), 다운스트림 DB가 그 30일 안에 적재해 영구 보관한다. 30년치 백필도 예외가 아니다 — 한 번 흘려보내고 다운스트림이 받아간 뒤 만료된다. 그래서 `expire_at`은 **데이터 날짜가 아니라 수집 시각 + 30일**이다(그래야 2005년 행도 지금 수집하면 30일 살아 있다). 정상 운영에선 초기 백필 후 증분만 수집하므로 정상상태 용량은 작다.
+
+**하드 의존성 (FAIL-LOUD — 조용히 숨기지 않는다):** 이 모델은 **다운스트림이 30일 안에 적재함**을 전제한다.
+- **§2(백필 불가) 데이터** — 포워드 추정치·목표가·등급 분포 스냅샷은 FMP가 과거값을 주지 않는다(현재값만). 다운스트림 적재가 30일 넘게 밀리면 그 사이 주간 스냅샷은 **영구 유실**되고 리비전 velocity에 복구 불가능한 구멍이 난다. 다운스트림 적재 지연 모니터링이 필수다 — 여기서 30일은 안전마진이 아니라 데드라인이다.
+- **§1(백필 가능) 데이터** — 재무제표·비율·조정가·PIT 유니버스는 유실돼도 재수집으로 복구된다(비용만 든다).
+
+## 유니버스 (PIT — 생존편향 없음)
+
+수집 대상 종목 = **S&P 500 ∪ Nasdaq-100 ∪ Dow 30**의 현재 구성종목(중복 제거, ~600). 목록을 하드코딩하지 않고 constituent 엔드포인트에서 **도출**한다(SSOT). 과거 시점의 진짜 모집단은 constituent 변경 로그 + 상장폐지 목록으로 재구성한다(생존편향을 잡는다 — 오늘 목록으로 과거를 조회하면 살아남은 종목만 남아 성과가 부풀려진다).
+
+## 공통 필드·저장 원칙
+
+- 모든 문서에 `fetched_at`(수집/as-of 시각)·`source: "fmp"`·`expire_at`(수집 시각 + 30일).
+- **날짜가 있는 데이터는 날짜별 개별 문서**(`{symbol}__{YYYYMMDD}`, 멱등 set)로 저장한다 — 배열 무한성장과 Firestore 1MB 문서 한도를 피한다. 겹쳐 받아도 같은 id라 중복이 없다(뉴스 dedup·`price_bars`와 동일 패턴).
+- 현재값 스냅샷(프로파일·현재 구성종목)은 `{symbol}`·`{index}` 한 문서에 덮어쓴다.
+- 응답 필드는 FMP 스키마 그대로 저장한다(다운스트림이 해석) — newsstore가 파생 지표를 만들지 않는다.
+
+## §1 백필 가능 — 지금 요청 (Phase 0 백테스트)
+
+| 컬렉션 | 문서 id | FMP 엔드포인트 | 담는 것 | 주기 |
+|---|---|---|---|---|
+| `ratios` | `{symbol}__{date}` | `ratios?symbol=&period=annual`(+quarterly) | 시점정합 멀티플(P/E·P/S·P/B·EV/EBITDA 등) — 싼지 축의 코어 | 주 1회 |
+| `income` | `{symbol}__{date}` | `income-statement?symbol=&period=annual` | 손익계산서(+분기) — 멀티플 재계산·성장 파생의 원천 | 주 1회 |
+| `balance` | `{symbol}__{date}` | `balance-sheet-statement?symbol=&period=annual` | 대차대조표 | 주 1회 |
+| `cashflow` | `{symbol}__{date}` | `cash-flow-statement?symbol=&period=annual` | 현금흐름표 | 주 1회 |
+| `prices_eod` | `{symbol}__{date}` | `historical-price-eod/dividend-adjusted?symbol=` | **배당조정** 일봉(adjOpen/adjHigh/adjLow/adjClose·volume) — 총수익 백테스트(가격만 쓰면 배당만큼 왜곡) | 일 1회(증분) |
+| `market_cap` | `{symbol}__{date}` | `historical-market-capitalization?symbol=` | 일별 시가총액 — 사이즈 팩터·바스켓 가중 | 주 1회 |
+| `grades_history` | `{symbol}__{date}` | `grades-historical?symbol=` | 날짜별 애널리스트 등급 카운트(strongBuy/buy/hold/sell/strongSell) — 리비전 방향, PIT | 주 1회 |
+| `profiles` | `{symbol}` | `profile?symbol=` | 섹터·산업·시총·설명문(현재값, 덮어쓰기) — 섹터중립 랭크·유니버스 필터·테마 판정 | 주 1회 |
+
+## §2 백필 불가 — 지금부터 축적 (가장 시급)
+
+FMP는 이 값들의 "과거 어느 날의 값"을 주지 않는다. **오늘부터 주 1회 as-of 스냅샷**을 찍지 않으면 리비전 velocity를 영영 못 만든다.
+
+| 컬렉션 | 문서 id | FMP 엔드포인트 | 담는 것 | 주기 |
+|---|---|---|---|---|
+| `estimates` | `{symbol}__{YYYYMMDD}` | `analyst-estimates?symbol=&period=annual` | 포워드 FY 컨센 추정(매출·EPS avg/high/low, 분석가 수)의 as-of 캡처 | 주 1회 |
+| `price_targets` | `{symbol}__{YYYYMMDD}` | `price-target-consensus?symbol=` | 목표주가 컨센(high/low/median/consensus) | 주 1회 |
+| `grades_consensus` | `{symbol}__{YYYYMMDD}` | `grades-consensus?symbol=` | 등급 컨센 분포(strong buy…sell 카운트) 스냅샷 — `grades_history`로도 재구성 가능한 싼 보험 | 주 1회 |
+
+## PIT 유니버스 (생존편향 보정)
+
+| 컬렉션 | 문서 id | FMP 엔드포인트 | 담는 것 | 주기 |
+|---|---|---|---|---|
+| `index_members` | `{index}` (sp500·nasdaq·dow) | `sp500-constituent`·`nasdaq-constituent`·`dowjones-constituent` | 현재 구성종목(symbol·name·sector) — **유니버스 도출 SSOT** | 주 1회 덮어쓰기 |
+| `index_changes` | `{index}__{date}` | `historical-sp500-constituent`(+nasdaq·dowjones) | 편입·편출 이벤트(dateAdded·addedSecurity·removedTicker) — PIT 모집단 재구성 | 주 1회 |
+| `delisted` | `{symbol}` | `delisted-companies` | 상장폐지 종목(companyName·exchange·delistedDate) | 주 1회 |
+
+## §3 나중 (verify Phase 2+ — 지금은 안 함, 계약만 예약)
+
+`revenue-product-segmentation`·`revenue-geographic-segmentation`(테마 매출 근접) · `historical-sector-pe`·`historical-industry-pe`(섹터 상대 리레이팅) · `discounted-cash-flow`(내재가치 교차검증) · `sec-filings-search`(어닝 콜 전화록 대체 — 전화록은 Ultimate 전용) · `earnings`(어닝 서프라이즈). 필요해질 때 위와 같은 원칙(날짜별 개별 문서·30일 TTL·FMP 스키마 그대로)으로 추가한다.
+
+## 티어 경계 (§0 — Premium이 못 주는 것)
+
+- **Bulk/Batch 전송은 Ultimate 전용.** 그래서 심볼별로 수집한다. 각 엔드포인트가 심볼당 full history를 한 콜에 주고 Premium이 750콜/분이라, 전 유니버스 백필도 수 분~십수 분이다 — 콜 폭증이 아니며 Bulk는 편의지 필수가 아니다. **지금 업그레이드 불요.**
+- **어닝 콜 전화록은 Ultimate 전용.** verify는 Phase 2+라 먼 얘기고, 그때 Ultimate로 올리거나 Premium이 주는 SEC 필링(10-K JSON, `sec-filings-search`)으로 대체한다.
+
+## 조인 키 — 티커 (gotcha #3, 별도 소과제)
+
+다운스트림은 뉴스와 팩터를 **티커로 조인**한다. 그러려면 newsstore 뉴스 `items`가 티커로 해석 가능해야 하는데, 현재는 `asset_hint`만 있고 해석된 티커가 없다. 티커 태깅은 무-LLM 규칙(alias 사전 매칭)으로 되살릴 수 있다 — 이번 수집-전용 전환에서 삭제한 `watchlist.yaml`(티커+alias)이 바로 그 어휘였다. **별도 소과제로 남긴다**: `items`에 `tickers[]` 필드 추가 + 티커-alias SSOT 복원. 이 계약(팩터 데이터)과 독립적으로 진행 가능하다.
+
+## 현재 상태와의 관계 (구현 Phase로 넘길 것)
+
+지금 코드의 `fundamentals/{symbol}`(고정 5티커, income/balance/cashflow 배열)은 이 계약의 seed다. 구현 Phase에서 (1) 유니버스를 constituent 도출로 넓히고, (2) 재무제표를 위 per-period 개별 문서 컬렉션(`income`·`balance`·`cashflow`)으로 재구성하며, (3) 위 나머지 컬렉터를 추가한다. 이 절이 그 구현의 목표 계약이다.
