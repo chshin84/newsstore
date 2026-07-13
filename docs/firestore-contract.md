@@ -10,7 +10,7 @@
 | `feed_state` | collect Job | collect Job | **없음** | etag/last_modified 폴링 커서 — 만료시키면 증분 수집이 어긋난다 |
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
 | `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 **최신 스냅샷**(값+최근 시계열) — 웹 확인용 |
-| `price_bars` | prices Job | 다운스트림 | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
+| `price_bars` | prices Job | 다운스트림(Admin SDK) + 허용목록 인증 사용자(대시보드) | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
 > 위는 뉴스·시세 수집 표면이다. 다운스트림 백테스트용 **팩터·펀더멘털 수집**(ratios·재무제표·배당조정가·컨센서스 스냅샷·PIT 유니버스 등 ~17개 컬렉션)은 이 문서 하단 「팩터·펀더멘털 수집 계약」 절이 SSOT이며, `entrypoints/run_factors`로 **구현돼 있다**.
 
 ## TTL 규칙 (1개월, 비용 통제)
@@ -42,7 +42,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **`flags`** (비파괴 상식범위 플래그) — %등락이 상식 밖(지수 ±15%·환율 ±5% 가이드)이면 삭제하지 않고 여기에 표시한다. 검증은 하되 수정은 하지 않는다.
 - **`expire_at`** = 저장 시각 + 30일(store 주입).
 
-### `price_bars` (prices Job이 기록, 다운스트림용)
+### `price_bars` (prices Job이 기록, 다운스트림 Admin SDK + 허용목록 인증 사용자 대시보드)
 5분봉 **완전 스트림** — 바 1개가 문서 1개. 다운스트림 DB가 한 달 안에 적재한다는 가정. 문서 키 = `{심볼key}__{YYYYMMDDHHMMSS}`(결정론 — 겹쳐 받아도 멱등, 중복 없음).
 - **필드**: `key, symbol, label, group, order, source, datetime, close, open?, high?, low?, volume?, fetched_at, expire_at`. OHLCV는 소스가 주면 싣고, 국채는 `close`(수익률 %)만.
 - **`datetime`** — 소스 타임스탬프 문자열을 보존한다(FMP 인트라데이는 거래소 로컬시각, Yahoo는 UTC ISO, 국채는 날짜). 다운스트림이 해석한다.
