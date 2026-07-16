@@ -69,23 +69,30 @@ def test_embed_text_caps_body_at_500():
 def test_embed_items_three_way_classification():
     from newsstore.embed.embedder import embed_items
     from newsstore.embed.gemini import LLMError, PermanentEmbedError
-    items = [_pi("ok1", "good"), _pi("bad-dim", "short"),
+    items = [_pi("ok1", "good"),
              _pi("retry1", "flaky"), _pi("perm1", "reject"), _pi("empty1", "", "")]
     fake = FakeEmbed({
         "good": [0.1] * 768,
-        "short": [0.1] * 10,                                     # 차원 불일치 → 영구
         "flaky": LLMError("exhausted"),                          # 재시도 소진 → 재시도 가능
         "reject": PermanentEmbedError("bad input", code=400),    # 400 → 영구
     })
     out = embed_items(items, fake)
-    assert [r.item_id for r in out] == ["ok1", "bad-dim", "retry1", "perm1", "empty1"]  # 순서 보존
+    assert [r.item_id for r in out] == ["ok1", "retry1", "perm1", "empty1"]  # 순서 보존
     by = {r.item_id: r for r in out}
     assert by["ok1"].outcome == "ok" and len(by["ok1"].vector) == 768
-    assert by["bad-dim"].outcome == "permanent"
     assert by["retry1"].outcome == "retryable"
     assert by["perm1"].outcome == "permanent"
     assert by["empty1"].outcome == "permanent"       # 빈 입력 — API 호출 없이 즉시 처분
     assert "" not in fake.calls                      # 빈 입력은 호출 안 함
+
+
+def test_embed_items_dim_mismatch_aborts_pass():
+    """차원 불일치는 설정 드리프트(전 항목 공통) — 항목 처분 없이 패스 전체 실패로 승격."""
+    from newsstore.embed.embedder import embed_items
+    from newsstore.embed.gemini import PermanentEmbedError
+    fake = FakeEmbed({"short": [0.1] * 10})
+    with pytest.raises(PermanentEmbedError):
+        embed_items([_pi("x", "short")], fake)
 
 
 def test_embed_items_auth_error_aborts_pass():
