@@ -11,6 +11,7 @@
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
 | `prices` | prices Job | web UI | 있음(`expire_at`) | 지수·환율·국채 **최신 스냅샷**(값+최근 시계열) — 웹 확인용 |
 | `price_bars` | prices Job | 공개(대시보드 · 다운스트림) | 있음(`expire_at`) | **5분봉 완전 스트림**(바 1개=문서 1개). 국채는 일봉 1바/일 |
+| `item_vectors` | collect Job(임베딩 패스) | 공개(다운스트림) | 있음(`expire_at` — **원본 item 미러링**) | story 기사 임베딩 벡터(768차원) — 기사와 함께 만료 |
 > 위는 뉴스·시세 수집 표면이다. 다운스트림 백테스트용 **팩터·펀더멘털 수집**(ratios·재무제표·배당조정가·컨센서스 스냅샷·PIT 유니버스 등 ~17개 컬렉션)은 이 문서 하단 「팩터·펀더멘털 수집 계약」 절이 SSOT이며, `entrypoints/run_factors`로 **구현돼 있다**.
 
 ## TTL 규칙 (1개월, 비용 통제)
@@ -18,6 +19,7 @@
 Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료시킨다. 이 스토어의 만료 필드명은 **`expire_at`**로 통일한다.
 - **`items`·`prices`·`price_bars`·팩터 컬렉션**: 각 문서에 `expire_at`을 넣고, 컬렉션마다 gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`). `items`·`prices`는 저장 시각 + 30일, **`price_bars`는 바 날짜 + 30일**(스트림이라 바 자체의 나이 기준). 팩터 컬렉션(income·balance·cashflow 등, 하단 「팩터·펀더멘털 수집 계약」 절)도 저장 시각 + 30일.
 - **`feed_state`엔 `expire_at`을 절대 넣지 않는다.** ETag·커서가 만료되면 증분 수집이 매번 전량 재수집으로 어긋난다.
+- **`item_vectors`는 원본 item의 `expire_at`을 그대로 미러링**한다(기사와 벡터가 함께 만료 — 고아 벡터 방지). 이 컬렉션만 호출자(임베딩 패스)가 원본에서 읽은 값을 전달하고, `embed_model`·`embedded_at`은 store가 주입한다.
 - `expire_at` 주입은 store가 단일 통제점이다(`firestore_store.py`). 호출자가 안 넣어도 store가 보장한다.
 
 ## 컬렉션 스키마
@@ -33,6 +35,15 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 
 ### `meta` (collect가 기록, 공개 read)
 사이트용 소형 메타 문서(예: `sources`). 소스 목록과 **소스 tier**를 여기로 발행한다(아래 §공유 설정).
+
+### `item_vectors` (collect Job의 임베딩 패스가 기록, 공개 read)
+story 기사당 벡터 1문서. 문서 키 = item id. **분석이 아니라 수집 시점 1회 계산**이다(생성형 LLM 아님 — 스코프 예외).
+- **필드**: `vector`(float×768), `embed_model`("gemini-embedding-001" — store가 SSOT 주입), `embedded_at`, `expire_at`(원본 미러링).
+- **임베딩 입력 규칙(계약)**: `title + " " + body[:500]`. 모델·차원과 함께 다운스트림 계약이다 — 유사도 검색 쿼리도 같은 모델·차원·규칙으로 임베딩해야 한다. 상수 SSOT: `src/newsstore/contracts/embedding.py`.
+- **모델 교체는 단방향 문**: 다운스트림이 이 계약에 의존하면 교체 시 전량 재임베딩 + 다운스트림 협응이 필요하다. `embed_model` 필드가 mismatch 감지 수단.
+
+### `items.embed_pending` (transient 플래그)
+`_to_doc`가 story에만 `embed_pending: true`를 박고, 임베딩 패스가 완료 시 `DELETE_FIELD`로 걷는다(항목 귀속 영구 실패 — 빈 입력·400 — 도 처분 시 걷는다; 좀비 재시도 방지). Firestore가 "필드 없음"을 쿼리할 수 없어 플래그 존재 = 대기를 뜻한다. **공개 read인 items에 임베딩 전까지 노출되는 백엔드 상태 필드**다 — 경미한 노출은 수용 결정(웹 파서는 미지 필드 무시).
 
 ### `prices` (prices Job이 기록, 공개 read)
 지수·환율·국채 **최신 스냅샷**(값 + 최근 5분봉 시계열) — 웹 확인 UI가 읽는다. 매 패스 덮어쓰기. 문서 키 = 심볼 key(예: `sp500`, `usdkrw`, `us10y`).
@@ -59,6 +70,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - `save_price(key, data)`, `get_price(key)` — 스냅샷. TTL(`expire_at`) 주입.
 - `filter_new_bar_ids(ids)`, `save_bars(bars)`, `get_bars(key)` — price_bars 스트림. `save_bars`가 바 날짜 기준 TTL 주입.
 - `save_docs(collection, docs)`, `filter_new_ids_in(collection, ids)`, `save_snapshot(collection, doc_id, data)`, `get_snapshot`, `get_docs` — 팩터·펀더멘털 계약의 제네릭 적재(하단 절). `expire_at`(수집 시각+30일) 주입.
+- `get_pending_embed_items(limit)`, `save_vectors(entries)`, `clear_embed_pending(ids)` — 임베딩 대기 큐·벡터 저장(원자 batch + 만료 격리)·영구 실패 처분. 타입 계약은 `contracts/ports.py`의 `PendingItem`·`VectorEntry`.
 - `close`/`__enter__`/`__exit__`.
 
 ## 필터 (비-LLM 규칙, 수집 경로에 배선됨)
@@ -74,9 +86,9 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **feed_state에 `expire_at` 부재** — TTL이 폴링 커서를 만료시키지 않음을 지킨다.
 
 ## 인프라
-- **전면 공개 read 보안규칙** (`firestore.rules`, `docs/operations.md §C`): 대시보드·뉴스 리더가 **로그인 없이** 최근 데이터를 본다. `items`·`meta`·`prices`와 팩터·스트림 컬렉션(`price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`) 모두 `allow read: if true`. **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). 공개해도 노출은 **30일 버퍼**에 한정된다 — 깊은 아카이브(10년 EOD·1년 5분봉)는 Firestore가 아니라 **로컬 SQLite**(일회성 백필) 몫이라 Firestore 밖이다. `feed_state`(폴링 커서)만 기본 거부.
+- **전면 공개 read 보안규칙** (`firestore.rules`, `docs/operations.md §C`): 대시보드·뉴스 리더가 **로그인 없이** 최근 데이터를 본다. `items`·`meta`·`prices`와 팩터·스트림 컬렉션(`price_bars`·`prices_eod`·`income`·`balance`·`cashflow`·`ratios`·`market_cap`·`grades_history`·`profiles`·`estimates`·`price_targets`·`grades_consensus`·`index_members`·`index_changes`·`delisted`·`item_vectors`) 모두 `allow read: if true`. **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). 공개해도 노출은 **30일 버퍼**에 한정된다 — 깊은 아카이브(10년 EOD·1년 5분봉)는 Firestore가 아니라 **로컬 SQLite**(일회성 백필) 몫이라 Firestore 밖이다. `feed_state`(폴링 커서)만 기본 거부.
   - **복합 인덱스** (§D). TTL 정책 프로비저닝은 `docs/setup.md`·`docs/operations.md`.
-- 비밀(`FMP_API_KEY`)은 백엔드 전용(SECRETS) — 클라이언트/커밋 금지.
+- 비밀(`FMP_API_KEY`·`GEMINI_API_KEY`)은 백엔드 전용(SECRETS) — 클라이언트/커밋 금지.
 
 ## 공유 설정
 - **`config/feeds.yaml`의 `tier` 필드** — `feeds.yaml`은 수집기 SSOT다. 수집 패스가 `meta/sources`에 `{"sources":[...], "tiers":{source: tier}}`로 발행한다. UI는 거기서 소스 등급을 읽는다. 파일을 복제하지 않는다(SSOT).

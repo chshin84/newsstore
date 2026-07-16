@@ -83,7 +83,7 @@ gcloud firestore indexes composite create --collection-group=items \
 ## 7. TTL 정책 (content 컬렉션 30일 만료 — 비용 통제)
 모든 content 컬렉션은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(대부분 저장 시각 + 30일, `price_bars`만 바 날짜 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타는 만료 대상이 아니다 — 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉)와 `prices_eod`(배당조정 EOD 백필)가 문서 수가 가장 빨라 TTL이 특히 중요하다. 컬렉션마다 한 번씩 정책을 건다:
 ```
-for c in items prices price_bars \
+for c in items prices price_bars item_vectors \
          income balance cashflow ratios prices_eod market_cap grades_history \
          profiles estimates price_targets grades_consensus \
          index_members index_changes delisted ; do
@@ -95,6 +95,8 @@ done
 
 ## 8. 가격·팩터 수집 Job (FMP)
 가격(`run_prices`, 5분봉)·팩터(`run_factors`, 재무제표·비율·조정가·컨센서스·PIT유니버스)는 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — **Secret Manager**로 주입한다(커밋/이미지/로그 금지). 같은 collector 이미지를 쓰고 CMD만 다르다. 팩터는 cadence로 나눈다 — `--cadence daily`(배당조정 EOD), `--cadence weekly`(나머지 + 유니버스 갱신).
+
+- **Gemini 키(임베딩)**: `gcloud secrets create gemini-api-key --replication-policy=automatic` 후 `printf '%s' "<GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-`. collector 잡(§3에서 생성한 `newsstore-collector`)에 주입: `gcloud run jobs update newsstore-collector --set-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>`
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
 printf '%s' "<FMP_API_KEY>" | gcloud secrets create fmp-api-key --data-file=- --replication-policy=automatic

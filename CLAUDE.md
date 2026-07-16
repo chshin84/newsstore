@@ -14,10 +14,10 @@
 - 로컬 Python 없음 → **Docker로만** 실행/테스트.
   테스트: **`MSYS_NO_PATHCONV=1 docker compose run --rm test`** (Firestore 에뮬레이터 자동 기동 후 pytest). store 테스트는 에뮬레이터에 붙음 — `mock-firestore`·sqlite 제거됨(store 단일=Firestore).
 - 설정은 루트 **`.env`** (`cp .env.example .env`): `APP_ENV` home|office · `GOOGLE_CLOUD_PROJECT` · `GCP_REGION` · `FMP_API_KEY`(비밀). **저장소=Firestore 단일**(로컬/테스트는 `FIRESTORE_EMULATOR_HOST`로 에뮬레이터; sqlite 백엔드 제거).
-- **비밀 구분**: `FMP_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지 — `.env.example`엔 플레이스홀더만). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
+- **비밀 구분**: `FMP_API_KEY`·`GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지 — `.env.example`엔 플레이스홀더만). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프 (중요):** newsstore = **수집 전용**이다 — 뉴스 RSS 수집 + 가격·펀더멘털 수집(FMP) + Firestore 저장 + 정적 확인 UI. **LLM/분석/신호/리포트는 이 repo에 없다**(태깅·임베딩·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 1개월 TTL(`expire_at`, `feed_state` 제외).
+- **스코프 (중요):** newsstore = **수집 전용**이다 — 뉴스 RSS 수집 + 가격·펀더멘털 수집(FMP) + Firestore 저장 + 정적 확인 UI. **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 1개월 TTL(`expire_at`, `feed_state` 제외).
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - Firestore 스키마 계약(TTL·kind·FMP 소스): `docs/firestore-contract.md`

@@ -4,14 +4,14 @@
 
 - **사이트:** https://daily-recap-498506.web.app
 - **GitHub:** https://github.com/chshin84/newsstore (public)
-- **수집 전용, 무LLM.** 분석·태깅·임베딩·클러스터·스토리·리포트·신호 같은 인리치 레이어는 이 repo에 없다. 필터는 LLM이 아니라 **비-LLM 규칙**(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다.
-- **모든 content 데이터에 1개월 TTL**을 걸어 Firestore 비용을 통제한다(`items`·`prices`·`price_bars` 및 팩터 컬렉션 `income`·`ratios`·`prices_eod`·… 의 `expire_at`; `feed_state` 제외). 계약 SSOT: `docs/firestore-contract.md`.
+- **수집 전용, 무 생성형 LLM.** 분석·태깅·클러스터·스토리·리포트·신호 같은 인리치 레이어는 이 repo에 없다. **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 LLM이 아니라 **비-LLM 규칙**(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다.
+- **모든 content 데이터에 1개월 TTL**을 걸어 Firestore 비용을 통제한다(`items`·`prices`·`price_bars`·`item_vectors` 및 팩터 컬렉션 `income`·`ratios`·`prices_eod`·… 의 `expire_at`; `feed_state` 제외). 계약 SSOT: `docs/firestore-contract.md`.
 - **가격은 5분봉 완전 스트림**을 `price_bars`(바 1개=문서 1개)에 적재하고, 웹 확인용 최신 스냅샷을 `prices/{key}`에 갱신한다. 다운스트림 DB가 한 달 안에 적재한다는 가정 아래 TTL로 정리한다.
 
 ## 아키텍처
 
 ```
-Cloud Scheduler (*/5분)   → Cloud Run Job (뉴스 수집 1패스)        → Firestore: items, feed_state, meta
+Cloud Scheduler (*/5분)   → Cloud Run Job (뉴스 수집 1패스 + 임베딩 패스) → Firestore: items, feed_state, meta, item_vectors
 Cloud Scheduler (*/5분)   → Cloud Run Job (가격 5분봉, FMP+Yahoo)  → Firestore: price_bars(스트림), prices(스냅샷)
 Cloud Scheduler (일/주)   → Cloud Run Job (팩터·펀더멘털, FMP)     → Firestore: income·ratios·prices_eod·estimates·index_members·… (계약 문서)
 Firebase Hosting (web/index.html, 정적)

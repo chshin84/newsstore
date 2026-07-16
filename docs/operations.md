@@ -12,6 +12,7 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 - **Firebase 관리/규칙/호스팅 REST 호출 시 quota project 헤더 필수**: `x-goog-user-project: daily-recap-498506` (없으면 403). 토큰은 `gcloud auth print-access-token`.
 - 프로젝트/리전 변수는 루트 **`.env`**(`GOOGLE_CLOUD_PROJECT`, `GCP_REGION`). PowerShell 로드법은 `docs/setup.md` 참조.
 - 가격·펀더멘털 잡은 `FMP_API_KEY`(백엔드 전용 비밀)를 **Secret Manager**(`fmp-api-key`)로 주입한다. 커밋/이미지/로그 금지.
+- collector 잡은 `GEMINI_API_KEY`(백엔드 전용 비밀)를 **Secret Manager**(`gemini-api-key`)로 주입한다(임베딩 패스). prices·factors 잡에는 넣지 않는다.
 
 ## 리소스 인벤토리
 | 종류 | 이름 |
@@ -35,7 +36,7 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 ## A. 수집기 재배포 (config/feeds.yaml 또는 수집기 코드 변경 시)
 `config/feeds.yaml`은 이미지에 `COPY` 되므로 **반드시 재빌드 후 Job 갱신**해야 반영된다. 세 수집 Job(collector·prices·factors)이 같은 이미지를 쓰므로, 코드 변경 시 이미지 1개를 재빌드하고 세 Job 모두를 새 이미지로 갱신한다.
 ```
-# 1) 이미지 재빌드 ([gcp] 타깃 = google-cloud-firestore 포함)
+# 1) 이미지 재빌드 ([gcp] 타깃 = google-cloud-firestore 포함, `infra/cloudbuild.yaml`이 INSTALL_EMBED=true도 함께 빌드 — 임베딩 패스의 google-genai 포함)
 gcloud builds submit --config infra/cloudbuild.yaml \
   --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest .
 # 2) 세 Job을 새 이미지 digest로 재고정
@@ -49,6 +50,18 @@ gcloud run jobs execute newsstore-collector --region=asia-northeast3 --wait
 # 4) 확인 (실패 피드 / 수집 수)
 gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-collector"' \
   --freshness=5m --format="value(textPayload)" | Select-String "feed\(s\) failed|collected .* new item"
+```
+
+### 임베딩 패스 (collector 잡 내)
+- 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 500건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 5분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
+- **키 부재 + 대기분 존재 = run 실패(exit 1)** — 조용한 무임베딩 고착을 스케줄러가 감지한다(대기 0건이면 경고 후 정상 종료 — 키 없는 로컬 수집 스모크 보존).
+- 시크릿 재발급: `printf '%s' "<NEW_GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-`
+- **배포 직후 실측(MEASURE-FIRST)**: 첫 런 로그에서 (collect 소요 + embed 소요) < task-timeout 600초를 확인하고, 넘치면 embed_pass cap을 낮춘다.
+
+### 임베딩 백필 (일회성 — 배포 직후)
+로컬 Docker로 실행한다(Cloud Run 타임아웃 제약 없음). 멱등 — 재실행 안전. 무진전(지속 장애)이면 exit 1로 끝나며 잔여분은 정규 5분 런이 이어받는다.
+```bash
+MSYS_NO_PATHCONV=1 docker compose run --rm collect python -m newsstore.entrypoints.run_backfill_embed
 ```
 
 ## B. 사이트 재배포 (web/ 변경 시)
@@ -114,7 +127,7 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 - **저장**: 5분봉 완전 스트림은 `price_bars`에 바 1개=문서 1개로 적재(새 바만 write), 웹 확인용 최신 스냅샷은 `prices/{key}`에 갱신한다. `price_bars`는 문서가 가장 빨리 늘어 TTL(§F)이 특히 중요하다.
 
 ## F. TTL 정책 (content 컬렉션 30일 만료)
-모든 content 컬렉션(`items`·`prices`·`price_bars` + 팩터 계약 컬렉션)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 30일, 나머지는 저장 시각 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
+모든 content 컬렉션(`items`·`prices`·`price_bars`·`item_vectors` + 팩터 계약 컬렉션)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 30일, 나머지는 저장 시각 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
 ```
 gcloud firestore fields ttl list --collection-group=items
 ```
