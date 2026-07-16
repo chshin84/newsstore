@@ -23,6 +23,7 @@ service cloud.firestore {
     match /index_members/{id}    { allow read: if true; allow write: if false; }
     match /index_changes/{id}    { allow read: if true; allow write: if false; }
     match /delisted/{id}         { allow read: if true; allow write: if false; }
+    match /item_vectors/{id}     { allow read: if true; allow write: if false; }
 
     // 그 외(feed_state 폴링 커서 등)는 기본 거부(공개 불요).
     match /{document=**} { allow read, write: if false; }

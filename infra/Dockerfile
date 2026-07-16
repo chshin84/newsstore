@@ -9,6 +9,9 @@ ARG INSTALL_DEV=true
 # 클라우드(Cloud Run) 이미지는 INSTALL_DEV=false INSTALL_GCP=true 로 빌드 → google-cloud-firestore 포함.
 # 가격·펀더멘털 수집(run_prices/run_fundamentals)도 Firestore 저장에 [gcp]가 필요하다.
 ARG INSTALL_GCP=false
+# 임베딩(gemini) — collector 이미지용. lock -c 는 버전 제약일 뿐 설치 트리거가 아니므로
+# extra를 명시 설치해야 한다(스펙 2026-07-16 재리뷰 critical).
+ARG INSTALL_EMBED=false
 
 # 의존성 먼저 (캐시). requirements.lock을 constraints로 걸어 재현 가능 빌드.
 COPY pyproject.toml ./
@@ -18,6 +21,7 @@ RUN pip install --upgrade pip && \
     EXTRAS="" ; \
     if [ "$INSTALL_DEV" = "true" ]; then EXTRAS="dev" ; fi ; \
     if [ "$INSTALL_GCP" = "true" ]; then EXTRAS="${EXTRAS:+$EXTRAS,}gcp" ; fi ; \
+    if [ "$INSTALL_EMBED" = "true" ]; then EXTRAS="${EXTRAS:+$EXTRAS,}embed" ; fi ; \
     if [ -n "$EXTRAS" ]; then \
       pip install -e ".[$EXTRAS]" -c infra/requirements.lock ; \
     else \

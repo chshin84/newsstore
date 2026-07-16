@@ -19,6 +19,8 @@ dependencies = [
 dev = ["pytest>=8.2"]
 gcp = ["google-cloud-firestore>=2.16"]
 # 가격·펀더멘털 수집은 FMP REST(+Yahoo 폴백)를 순수 httpx로 호출하므로 신규 의존이 없다.
+# 임베딩(embed 모듈)은 lazy import — extra 미설치 환경에서도 import·테스트 가능.
+embed = ["google-genai>=1.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

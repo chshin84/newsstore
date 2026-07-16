@@ -17,6 +17,8 @@ steps:
       - INSTALL_DEV=false
       - --build-arg
       - INSTALL_GCP=true
+      - --build-arg
+      - INSTALL_EMBED=true
       - -t
       - ${_IMAGE}
       - .
