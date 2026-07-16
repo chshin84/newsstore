@@ -26,17 +26,23 @@ def _bar_expire_at(dt_str) -> datetime:
 
 
 def _to_doc(item: RawItem) -> dict:
-    return {
+    # 수집 시점 kind triage: 신선 항목도 즉시 spam/digest/sports로 숨김 가능(', More' 등).
+    # 백엔드가 kind의 단일 통제점 — 규칙 필터(비-LLM)라 수집 경로에서 한 번만 박는다.
+    kind = classify_kind(item.title, item.body)
+    doc = {
         "feed_id": item.feed_id, "source": item.source,
         "asset_hint": item.asset_hint, "language": item.language,
         "url": item.url, "title": item.title, "body": item.body,
         "published_at": item.published_at, "fetched_at": item.fetched_at,
-        # 수집 시점 kind triage: 신선 항목도 즉시 spam/digest/sports로 숨김 가능(', More' 등).
-        # 백엔드가 kind의 단일 통제점 — 규칙 필터(비-LLM)라 수집 경로에서 한 번만 박는다.
-        "kind": classify_kind(item.title, item.body),
+        "kind": kind,
         # TTL: 수집 시각 기준 30일 뒤 만료. 원본은 이때까지 보존된다.
         "expire_at": item.fetched_at + _TTL,
     }
+    if kind == "story":
+        # 임베딩 대기 플래그 — Firestore는 '필드 없음'을 쿼리할 수 없어 플래그의 존재
+        # 자체가 '대상이며 미완'을 뜻한다. 임베딩 패스가 완료 시 DELETE_FIELD로 걷는다.
+        doc["embed_pending"] = True
+    return doc
 
 
 class FirestoreStore:

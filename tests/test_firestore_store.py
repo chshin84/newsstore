@@ -147,3 +147,18 @@ def test_save_bars_is_idempotent_on_same_id(store):
     store.save_bars([b])
     store.save_bars([b])                 # 같은 id 재적재 — 중복 문서 안 쌓임
     assert len(store.get_bars("k")) == 1
+
+
+# --- 임베딩 대기 플래그(spec 2026-07-16): story에만 embed_pending이 박히는가 ---
+
+def test_to_doc_stamps_embed_pending_for_story_only(store):
+    junk = RawItem(id="j2", feed_id="f", source="S", url="https://e/j2",
+                   title="Rosen Law reminds investors of class action deadline",
+                   body="b", fetched_at=NOW)
+    good = RawItem(id="g2", feed_id="f", source="S", url="https://e/g2",
+                   title="Fed holds rates steady", body="b", fetched_at=NOW)
+    store.upsert_items([junk, good])
+    dj = store.db.collection("items").document("j2").get().to_dict()
+    dg = store.db.collection("items").document("g2").get().to_dict()
+    assert dg["embed_pending"] is True           # story → 대기 플래그
+    assert "embed_pending" not in dj             # 비-story → 필드 자체가 없어야 함

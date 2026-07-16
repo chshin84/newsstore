@@ -19,7 +19,7 @@ def fsclient():
     db = firestore.Client(project=os.environ.get("GOOGLE_CLOUD_PROJECT", "test"))
     for col in ("items", "feed_state", "meta", "prices", "price_bars", "t",
                 "income", "ratios", "prices_eod", "estimates", "profiles",
-                "index_members", "index_changes", "delisted", "c1"):
+                "index_members", "index_changes", "delisted", "c1", "item_vectors"):
         for d in db.collection(col).stream():
             d.reference.delete()
     return db
