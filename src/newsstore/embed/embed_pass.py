@@ -33,8 +33,10 @@ def embed_pass(store, client, cap: int = DEFAULT_CAP) -> dict:
         for r in permanent:
             log.error("embed permanent failure %s: %s (pending cleared, no vector)",
                       r.item_id, r.reason)
-    for r in retryable:
-        log.warning("embed retryable failure %s: %s (retried next run)",
-                    r.item_id, r.reason)
+    if retryable:
+        log.warning("embed retryable failures: %d item(s) (flags kept; retried next run)",
+                    len(retryable))
+        for r in retryable[:5]:      # 예시만 — 대량 장애 시 런당 수백 줄 폭주 방지
+            log.warning("  e.g. %s: %s", r.item_id, r.reason)
     return {"pending": len(pending), "embedded": embedded,
             "permanent": len(permanent), "retryable": len(retryable)}
