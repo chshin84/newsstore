@@ -28,6 +28,7 @@ def main(argv=None) -> int:
 
     feeds = load_feeds(args.feeds)
     client = make_client()
+    embed_failed = False
     with make_store() as store:                  # Firestore(에뮬레이터 or 실)
         # SSOT: 사이트 소스 목록·tier를 feeds.yaml에서 도출해 기록 (하드코딩 X). tier 전파 #17.
         store.set_meta("sources", {"sources": distinct_sources(feeds),
@@ -44,13 +45,33 @@ def main(argv=None) -> int:
         for fid, n in sorted(summary.items()):
             log.info("  %s: %s", fid, "FAIL" if n == -1 else n)
 
+        # ── 임베딩 패스(스펙 2026-07-16) — 수집과 격리: 여기 실패해도 수집분은 이미 저장됨.
+        # 키 부재 fail-loud는 '대기분 실재'로 좁힌다(키 없는 로컬 수집 스모크 보존).
+        api_key = os.environ.get("GEMINI_API_KEY")
+        try:
+            if api_key:
+                from ..embed.gemini import GeminiEmbedClient
+                from ..embed.embed_pass import embed_pass
+                es = embed_pass(store, GeminiEmbedClient(api_key))
+                log.info("embed pass: pending=%d embedded=%d permanent=%d retryable=%d",
+                         es["pending"], es["embedded"], es["permanent"], es["retryable"])
+            elif store.get_pending_embed_items(limit=1):
+                log.error("GEMINI_API_KEY missing but embed_pending items exist "
+                          "(embedding stalled — set the secret)")
+                embed_failed = True
+            else:
+                log.warning("GEMINI_API_KEY not set; no pending embeds — skipping embed pass")
+        except Exception:
+            log.exception("embed pass failed (collection results preserved)")
+            embed_failed = True
+
     if attempted and len(failed) / attempted >= FAIL_RATE_ALERT:
         log.error("run FAILED: %d/%d feeds failed (>= %.0f%%): %s",
                   len(failed), attempted, FAIL_RATE_ALERT * 100, ", ".join(sorted(failed)))
         return 1
     if failed:
         log.warning("%d feed(s) failed (isolated): %s", len(failed), ", ".join(sorted(failed)))
-    return 0
+    return 1 if embed_failed else 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
