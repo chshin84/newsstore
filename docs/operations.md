@@ -18,7 +18,7 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 | 종류 | 이름 |
 |------|------|
 | GCP 프로젝트 | `daily-recap-498506` (asia-northeast3) |
-| Firestore | `(default)` Native — 컬렉션 `items`·`feed_state`·`meta`·`prices`·`price_bars` + 팩터 계약 컬렉션(`income`·`ratios`·`prices_eod`·… — docs/firestore-contract.md) |
+| Firestore | `(default)` Native — 컬렉션 `items`·`feed_state`·`meta`·`prices`·`price_bars`·`item_vectors` + 팩터 계약 컬렉션(`income`·`ratios`·`prices_eod`·… — docs/firestore-contract.md) |
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
 | Cloud Run Job | `newsstore-collector` — 뉴스 수집(`run_collect`) |
 | Cloud Run Job | `newsstore-prices` — 가격 5분봉(`run_prices`, secret `fmp-api-key`) |
@@ -27,6 +27,7 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 | Cloud Scheduler | `newsstore-prices-5min` (`*/5 * * * *`) — 가격 5분봉 |
 | Cloud Scheduler | `newsstore-factors-weekly` (예 `30 6 * * 0`) — 팩터·펀더멘털 (배당조정 EOD는 daily로 별도) |
 | Secret Manager | `fmp-api-key` (prices·factors Job에 `--update-secrets`로 주입; SA에 secretAccessor) |
+| Secret Manager | `gemini-api-key` (collector Job에 `--set-secrets`로 주입 — 임베딩 패스; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
 | Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |
