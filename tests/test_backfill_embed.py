@@ -47,6 +47,7 @@ def test_drain_stops_after_no_progress(store):
                                 title="Fed", body="b", fetched_at=NOW)])
     totals = drain(store, AlwaysRetryable(), cap=10)
     assert totals["embedded"] == 0
+    assert totals["stalled"] is True
     assert len(store.get_pending_embed_items(limit=10)) == 1   # 플래그는 남아 정규 런 몫
 
 
@@ -62,4 +63,5 @@ def test_drain_drains_to_zero(store):
                                 title=f"Fed {i}", body="b", fetched_at=NOW) for i in range(5)])
     totals = drain(store, OkEmbed(), cap=2)          # cap<대기 — 여러 라운드에 걸쳐 소진
     assert totals["embedded"] == 5
+    assert totals["stalled"] is False
     assert store.get_pending_embed_items(limit=10) == []
