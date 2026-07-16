@@ -4,7 +4,7 @@ import pathlib
 SRC = pathlib.Path("src/newsstore")
 # 각 모듈이 import하면 안 되는 형제 모듈 prefix (오직 contracts에만 의존해야 함)
 FORBIDDEN = {
-    "collect": ("newsstore.store",),
+    "collect": ("newsstore.store", "newsstore.embed"),
     "store":   ("newsstore.collect", "newsstore.embed"),
     "embed":   ("newsstore.store", "newsstore.collect"),
 }

@@ -15,7 +15,9 @@ class FeedState(TypedDict, total=False):
 
 
 class PendingItem(TypedDict):
-    """get_pending_embed_items 반환 — 임베딩 입력(title·body)과 TTL 미러링(expire_at)."""
+    """get_pending_embed_items 반환 — 임베딩 입력(title·body)과 TTL 미러링(expire_at).
+    키는 기존 관례 `id`가 아니라 `item_id`다 — item_vectors가 items를 참조하는 외래 키
+    성격이라 명시적으로 구분하며, 문서 경로 item_vectors/{item_id}와 정합한다."""
     item_id: str
     title: str
     body: str
