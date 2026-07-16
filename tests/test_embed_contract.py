@@ -15,6 +15,8 @@ def test_embed_extra_wired_into_prod_image():
     assert '"google-genai' in pathlib.Path("pyproject.toml").read_text(encoding="utf-8")
     dockerfile = pathlib.Path("infra/Dockerfile").read_text(encoding="utf-8")
     assert "INSTALL_EMBED" in dockerfile
+    # ARG 선언만으로는 부족 — RUN의 EXTRAS 조립(실제 설치 경로)까지 있어야 한다.
+    assert 'EXTRAS="${EXTRAS:+$EXTRAS,}embed"' in dockerfile
     cloudbuild = pathlib.Path("infra/cloudbuild.yaml").read_text(encoding="utf-8")
     assert "INSTALL_EMBED=true" in cloudbuild
     lock = pathlib.Path("infra/requirements.lock").read_text(encoding="utf-8")
