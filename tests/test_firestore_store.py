@@ -162,3 +162,66 @@ def test_to_doc_stamps_embed_pending_for_story_only(store):
     dg = store.db.collection("items").document("g2").get().to_dict()
     assert dg["embed_pending"] is True           # story → 대기 플래그
     assert "embed_pending" not in dj             # 비-story → 필드 자체가 없어야 함
+
+
+# --- 임베딩 벡터 표면(spec 2026-07-16): pending 큐 조회 + 벡터 저장 + 플래그 처분 ---
+
+def _story(i):
+    return RawItem(id=i, feed_id="f", source="S", url=f"https://e/{i}",
+                   title=f"Fed news {i}", body="b", fetched_at=NOW)
+
+
+def test_get_pending_embed_items_returns_queue_with_limit(store):
+    store.upsert_items([_story("p1"), _story("p2"), _story("p3")])
+    got = store.get_pending_embed_items(limit=2)
+    assert len(got) == 2
+    one = got[0]
+    assert set(one) == {"item_id", "title", "body", "expire_at"}
+    assert one["expire_at"] is not None          # TTL 미러링 원천
+
+
+def test_save_vectors_writes_vector_and_clears_flag(store):
+    store.upsert_items([_story("v1")])
+    [p] = store.get_pending_embed_items(limit=10)
+    n = store.save_vectors([{"item_id": "v1", "vector": [0.1] * 768,
+                             "expire_at": p["expire_at"]}])
+    assert n == 1
+    vec = store.db.collection("item_vectors").document("v1").get().to_dict()
+    assert len(vec["vector"]) == 768
+    assert vec["embed_model"] == "gemini-embedding-001"   # store가 SSOT에서 주입
+    assert vec["embedded_at"] is not None
+    assert vec["expire_at"] == p["expire_at"]             # 원본 TTL 미러링
+    item = store.db.collection("items").document("v1").get().to_dict()
+    assert "embed_pending" not in item                    # 같은 batch로 플래그 해제
+    assert store.get_pending_embed_items(limit=10) == []
+
+
+def test_save_vectors_skips_missing_item_and_keeps_rest(store):
+    """만료 경합 격리: 원본이 사라진 항목이 나머지 벡터 저장을 막지 않는다."""
+    store.upsert_items([_story("m1"), _story("m2")])
+    exp = store.get_pending_embed_items(limit=10)[0]["expire_at"]
+    store.db.collection("items").document("m1").delete()   # TTL 삭제 시뮬레이션
+    n = store.save_vectors([
+        {"item_id": "m1", "vector": [0.1] * 768, "expire_at": exp},
+        {"item_id": "m2", "vector": [0.2] * 768, "expire_at": exp},
+    ])
+    assert n == 1                                          # m1은 스킵, m2는 저장
+    assert not store.db.collection("item_vectors").document("m1").get().exists
+    assert store.db.collection("item_vectors").document("m2").get().exists
+
+
+def test_save_vectors_is_idempotent(store):
+    store.upsert_items([_story("i1")])
+    exp = store.get_pending_embed_items(limit=10)[0]["expire_at"]
+    entry = {"item_id": "i1", "vector": [0.3] * 768, "expire_at": exp}
+    store.save_vectors([entry])
+    store.save_vectors([entry])                            # 재실행(플래그 이미 없음)
+    assert store.db.collection("item_vectors").document("i1").get().exists
+
+
+def test_clear_embed_pending_removes_flag_without_vector(store):
+    store.upsert_items([_story("c1x")])
+    store.clear_embed_pending(["c1x", "ghost-없는-id"])     # 없는 id도 조용히 스킵
+    item = store.db.collection("items").document("c1x").get().to_dict()
+    assert "embed_pending" not in item
+    assert not store.db.collection("item_vectors").document("c1x").get().exists

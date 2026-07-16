@@ -2,10 +2,12 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from ..contracts.models import RawItem
 from ..contracts.classify import classify_kind   # 순수 triage(키워드 매칭) — contracts 공유
+from ..contracts.embedding import EMBED_MODEL
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
 _BARS = "price_bars"
+_VECTORS = "item_vectors"
 
 # content 데이터의 보존 기간(1개월). Firestore TTL 정책이 각 문서의 expire_at을
 # 가리켜 만료시킨다(비용 통제). feed_state에는 절대 넣지 않는다 — 증분 수집 커서가
@@ -166,6 +168,74 @@ class FirestoreStore:
             out.append(snap.to_dict() or {})
         out.sort(key=lambda d: d.get("datetime") or "")
         return out
+
+    # ── 임베딩 계약(spec 2026-07-16) — item_vectors + embed_pending 대기 큐 ──────
+
+    def get_pending_embed_items(self, limit: int) -> list[dict]:
+        """items where embed_pending==true 를 limit까지(단일 equality — 복합 인덱스 불필요)."""
+        q = self.db.collection(_ITEMS).where("embed_pending", "==", True).limit(limit)
+        out = []
+        for snap in q.stream():
+            d = snap.to_dict() or {}
+            out.append({"item_id": snap.id, "title": d.get("title") or "",
+                        "body": d.get("body") or "", "expire_at": d.get("expire_at")})
+        return out
+
+    def save_vectors(self, entries: list[dict]) -> int:
+        """item_vectors/{item_id} set + 원본 embed_pending 해제를 청크 batch(250건×2op)로
+        커밋 — 벡터 저장과 플래그 해제가 원자적이라 부분 상태가 없다. 원본이 TTL로
+        사라져 batch가 롤백되면 그 청크만 항목 단위로 재커밋해 부재 항목만 건너뛴다
+        (만료 경합 격리 — 벡터 고아 방지). embed_model·embedded_at은 store가 주입
+        (단일 통제점, 계약 SSOT: contracts/embedding)."""
+        if not entries:
+            return 0
+        from google.api_core.exceptions import FailedPrecondition, NotFound   # lazy(클라이언트 주입 유지)
+        from google.cloud.firestore import DELETE_FIELD
+
+        vec_col = self.db.collection(_VECTORS)
+        items_col = self.db.collection(_ITEMS)
+        now = datetime.now(timezone.utc)
+        _MISSING = (NotFound, FailedPrecondition)   # update-of-missing 표면화 타입(에뮬레이터/실서버 편차 흡수)
+
+        def _ops(batch, e):
+            batch.set(vec_col.document(e["item_id"]), {
+                "vector": e["vector"], "embed_model": EMBED_MODEL,
+                "embedded_at": now, "expire_at": e["expire_at"]})
+            batch.update(items_col.document(e["item_id"]),
+                         {"embed_pending": DELETE_FIELD})
+
+        n = 0
+        for i in range(0, len(entries), 250):        # 250건 × 2op = Firestore batch 500 op 한도
+            chunk = entries[i:i + 250]
+            batch = self.db.batch()
+            for e in chunk:
+                _ops(batch, e)
+            try:
+                batch.commit()
+                n += len(chunk)
+            except _MISSING:
+                # 만료 경합: batch는 원자적이라 전체 롤백됨 — 이 청크만 항목 단위로
+                # 재커밋해 부재 항목만 건너뛴다(한 건이 나머지 249건을 못 날리게).
+                for e in chunk:
+                    b2 = self.db.batch()
+                    _ops(b2, e)
+                    try:
+                        b2.commit()
+                        n += 1
+                    except _MISSING:
+                        continue     # 원본 만료 — 이 항목만 스킵(벡터 고아 방지)
+        return n
+
+    def clear_embed_pending(self, ids: list[str]) -> None:
+        """영구 실패 처분 — 벡터 없이 플래그만 걷는다(좀비 재시도 차단). 없는 id는 스킵."""
+        from google.api_core.exceptions import NotFound
+        from google.cloud.firestore import DELETE_FIELD
+        col = self.db.collection(_ITEMS)
+        for i in ids:
+            try:
+                col.document(i).update({"embed_pending": DELETE_FIELD})
+            except NotFound:
+                continue
 
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
