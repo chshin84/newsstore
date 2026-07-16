@@ -228,13 +228,13 @@ class FirestoreStore:
 
     def clear_embed_pending(self, ids: list[str]) -> None:
         """영구 실패 처분 — 벡터 없이 플래그만 걷는다(좀비 재시도 차단). 없는 id는 스킵."""
-        from google.api_core.exceptions import NotFound
+        from google.api_core.exceptions import FailedPrecondition, NotFound
         from google.cloud.firestore import DELETE_FIELD
         col = self.db.collection(_ITEMS)
         for i in ids:
             try:
                 col.document(i).update({"embed_pending": DELETE_FIELD})
-            except NotFound:
+            except (NotFound, FailedPrecondition):   # update-of-missing 편차 흡수 — save_vectors와 통일
                 continue
 
     def get_feed_state(self, feed_id: str) -> dict:
