@@ -56,6 +56,7 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 ### 임베딩 패스 (collector 잡 내)
 - 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 500건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 5분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
 - **키 부재 + 대기분 존재 = run 실패(exit 1)** — 조용한 무임베딩 고착을 스케줄러가 감지한다(대기 0건이면 경고 후 정상 종료 — 키 없는 로컬 수집 스모크 보존).
+- **최초 롤아웃 순서**: 시크릿 바인딩을 **이미지 배포보다 먼저** 한다 — 순서가 뒤집히면 새 이미지가 대기분을 쌓으며 매 5분 런이 exit 1로 끝난다(수집분은 보존되고 키 바인딩 즉시 자가치유되는 의도된 fail-loud지만, 알림 소음을 피하려면 순서를 지킨다).
 - **비밀**: `GEMINI_API_KEY`는 Secret Manager `gemini-api-key`로 주입한다(생성은 `docs/setup.md §8`). 키를 재발급했으면 새 버전을 올리고 잡을 재실행한다:
   ```
   printf '%s' "<NEW_GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-

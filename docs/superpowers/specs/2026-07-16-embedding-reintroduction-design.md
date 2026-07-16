@@ -143,7 +143,8 @@ main 히스토리(ca8840a)의 검증된 코드를 **embed 전용으로 축소 �
 
 ### 백필 (일회성)
 
-- `scripts/backfill_embed_pending.py`(Docker로 실행): TTL 윈도우 안의
+- `entrypoints/run_backfill_embed.py`(Docker로 실행 — 구현 시 scripts/에서 entrypoints
+  관례로 이동, 플랜에 의도적 이탈로 기록): TTL 윈도우 안의
   `kind == "story"` 기사 중 item_vectors에 벡터가 없는 것들에 `embed_pending: true`를
   마킹한다. 단, **잔여 수명 2일 미만인 기사는 제외**한다 — 곧 만료될 벡터에 백필
   쿼터를 쓰지 않고, 만료 경합(위 NotFound 케이스) 창도 줄인다.

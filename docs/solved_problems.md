@@ -95,3 +95,8 @@
 - **2026-07-10 (radar)** 원격 main에 다른 머신 세션의 커밋 74개가 쌓여 push 거부 + 사용자 발화("피드 가격만 남기고") 오독 → 원인: 두 머신에서 병렬로 세션이 진행될 때 로컬 스냅샷·대화 맥락만으로 사용자 발화를 해석했다 — "가격"은 집 세션이 갓 구축한 가격 수집을 가리키는 최신 사실이었는데 오타로 재해석했다 → 해결: **머지·푸시·해석 전에 `git fetch`로 원격을 먼저 측정**하고(상태 문서·로컬 스냅샷은 진실의 캐시), 사용자 발화의 명사가 낯설면 "오타 추정"보다 "내가 모르는 최신 작업" 가설을 먼저 검증한다. 컷/정지 절차 문서에는 고정 목록 대신 판정 규칙(유지: 피드·가격 / 정지: LLM 유발)을 남겨 인벤토리 드리프트에 강건하게 한다.
 
 - **2026-07-10 (radar)** 첫 실데이터 일보에서 어휘 창발 신호가 영어 기능어(on/as/Is/Why)에 침수 → 원인: 불용어가 한국어 조사만 등록돼 있었고 라틴 토큰의 대소문자 변형이 이중 집계됨 — 픽스처 기반 테스트는 전부 통과했다(픽스처가 영어 헤드라인 분포를 재현하지 않음) → 해결: **실데이터 E2E 1회를 머지 게이트로 삼아라** — 픽스처가 못 잡는 분포 결함은 실코퍼스 첫 런이 즉시 드러낸다(STOPWORDS_EN + 소문자 접기로 수정, 회귀 테스트 등재).
+
+## 2026-07-16 임베딩 재도입 (item_vectors)
+- **새 office 머신에서 컨테이너의 외부 HTTPS 전면 실패("self-signed certificate in certificate chain")** — 피드 86/87 + Gemini 호출 전부 SSL 검증 실패 → 원인: `ePrism-SSL-ROOT-CA.crt`가 gitignore 대상이라 새 머신 저장소 루트에 없었고, Dockerfile은 파일이 있을 때만 CA를 굽는다(APP_ENV=office여도 파일 없으면 조용히 스킵) → 해결: **Windows 인증서 저장소에서 내보내면 된다** — `Get-ChildItem Cert:\LocalMachine\Root | Where Subject -match 'ePrism'`로 찾아 RawData를 base64 PEM(`-----BEGIN CERTIFICATE-----`)으로 저장소 루트에 쓰고 이미지 재빌드. 이때도 실패 격리는 설계대로 동작했다(수집분 저장·retryable 플래그 유지·fail-loud exit).
+- **실 Firestore 대상 로컬 스모크는 ADC(`gcloud auth application-default login`) 없이는 못 돈다** — 대신 **에뮬레이터 store + 실 API 키** 조합(`docker compose run -e FIRESTORE_EMULATOR_HOST=... -e GOOGLE_CLOUD_PROJECT=test collect`)으로 외부 API 경로(실 Gemini 임베딩·차원·http_options)를 프로덕션 데이터 오염 없이 E2E 검증할 수 있다. 이 조합으로 수집 1927건 → embed 500(cap) → 백필 drain 1433건 소진을 실측했다.
+- **google-genai SDK는 API 키를 URL이 아니라 헤더로 보낸다**(httpx 로그의 batchEmbedContents URL에 키 없음) — 예외 문자열 `key=` 스크러빙(redact)은 예방 방어선으로 유지하되, URL 노출 걱정으로 로그 레벨을 낮출 필요는 없다.
