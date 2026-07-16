@@ -95,8 +95,6 @@ done
 
 ## 8. 가격·팩터 수집 Job (FMP)
 가격(`run_prices`, 5분봉)·팩터(`run_factors`, 재무제표·비율·조정가·컨센서스·PIT유니버스)는 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — **Secret Manager**로 주입한다(커밋/이미지/로그 금지). 같은 collector 이미지를 쓰고 CMD만 다르다. 팩터는 cadence로 나눈다 — `--cadence daily`(배당조정 EOD), `--cadence weekly`(나머지 + 유니버스 갱신).
-
-- **Gemini 키(임베딩)**: `gcloud secrets create gemini-api-key --replication-policy=automatic` 후 `printf '%s' "<GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-`. collector 잡(§3에서 생성한 `newsstore-collector`)에 주입: `gcloud run jobs update newsstore-collector --set-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>`
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
 printf '%s' "<FMP_API_KEY>" | gcloud secrets create fmp-api-key --data-file=- --replication-policy=automatic
@@ -126,6 +124,17 @@ gcloud scheduler jobs create http newsstore-factors-weekly --location=<REGION> \
   --http-method=POST --oauth-service-account-email=$SA
 # 배당조정 EOD는 매일: cadence=daily로 실행하는 별도 Job(newsstore-factors-daily, --args ...,--cadence,daily)을
 # 같은 패턴으로 만들어 "0 22 * * 1-5"(장마감 후) 스케줄에 건다.
+```
+
+**Gemini 키(임베딩)**: collector 잡의 임베딩 패스는 Gemini API를 호출하므로 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — FMP와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collector` 잡에 주입한다.
+```
+# (a) 비밀 생성 + Job SA에 접근 권한
+printf '%s' "<GEMINI_API_KEY>" | gcloud secrets create gemini-api-key --data-file=- --replication-policy=automatic
+gcloud secrets add-iam-policy-binding gemini-api-key \
+  --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
+# (b) collector 잡에 주입
+gcloud run jobs update newsstore-collector \
+  --set-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>
 ```
 
 ## 9. 사이트 배포 (Firebase Hosting, REST)

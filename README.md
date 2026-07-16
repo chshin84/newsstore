@@ -22,6 +22,7 @@ Firebase Hosting (web/index.html, 정적)
 - 세 수집 Job은 같은 이미지를 쓰고 CMD만 다르다. Admin SDK라 보안규칙 우회. 사이트는 **읽기 전용**.
 - 인증은 IAM 바인딩(서비스계정 `newsstore-job`, role `datastore.user`) — **키 파일 없음**.
 - 가격·펀더멘털은 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — Secret Manager로 주입.
+- story 기사 임베딩은 Gemini API를 호출하므로 collector 잡에 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — Secret Manager로 주입.
 
 ## 환경 변수 (두 축)
 
@@ -32,6 +33,7 @@ Firebase Hosting (web/index.html, 정적)
 | `GOOGLE_CLOUD_PROJECT` | `daily-recap-498506` | 타겟 GCP/Firestore 프로젝트 ID (배포 공통; 에뮬레이터는 `test`) |
 | `GCP_REGION` | `asia-northeast3` | 배포/셋업 리전 (`docs/setup.md`·`operations.md`) |
 | **`FMP_API_KEY`** | (비밀) | **백엔드 전용 비밀.** 가격·펀더멘털 수집(FMP REST)에 필요. 커밋/클라이언트 노출 금지 — `.env`(로컬)·Secret Manager(클라우드). `.env.example`엔 플레이스홀더만. |
+| **`GEMINI_API_KEY`** | (비밀) | **백엔드 전용 비밀.** story 기사 임베딩 패스(Gemini API)에 필요. 커밋/클라이언트 노출 금지 — `.env`(로컬)·Secret Manager(클라우드). `.env.example`엔 플레이스홀더만. |
 
 → **모든 값은 루트 `.env` 한 곳에서 관리.** `cp .env.example .env` 로 만들고 값만 바꾸면 됨(타겟 프로젝트 변경 = `GOOGLE_CLOUD_PROJECT` 한 줄). Docker 실행은 `--env-file .env`.
 

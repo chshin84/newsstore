@@ -20,7 +20,7 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 | GCP 프로젝트 | `daily-recap-498506` (asia-northeast3) |
 | Firestore | `(default)` Native — 컬렉션 `items`·`feed_state`·`meta`·`prices`·`price_bars`·`item_vectors` + 팩터 계약 컬렉션(`income`·`ratios`·`prices_eod`·… — docs/firestore-contract.md) |
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
-| Cloud Run Job | `newsstore-collector` — 뉴스 수집(`run_collect`) |
+| Cloud Run Job | `newsstore-collector` — 뉴스 수집 + 임베딩 패스(`run_collect`, secret `gemini-api-key`) |
 | Cloud Run Job | `newsstore-prices` — 가격 5분봉(`run_prices`, secret `fmp-api-key`) |
 | Cloud Run Job | `newsstore-factors` — 팩터·펀더멘털 수집(`run_factors`, secret `fmp-api-key`) |
 | Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) — 수집기 |
@@ -56,7 +56,10 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 ### 임베딩 패스 (collector 잡 내)
 - 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 500건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 5분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
 - **키 부재 + 대기분 존재 = run 실패(exit 1)** — 조용한 무임베딩 고착을 스케줄러가 감지한다(대기 0건이면 경고 후 정상 종료 — 키 없는 로컬 수집 스모크 보존).
-- 시크릿 재발급: `printf '%s' "<NEW_GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-`
+- **비밀**: `GEMINI_API_KEY`는 Secret Manager `gemini-api-key`로 주입한다(생성은 `docs/setup.md §8`). 키를 재발급했으면 새 버전을 올리고 잡을 재실행한다:
+  ```
+  printf '%s' "<NEW_GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-
+  ```
 - **배포 직후 실측(MEASURE-FIRST)**: 첫 런 로그에서 (collect 소요 + embed 소요) < task-timeout 600초를 확인하고, 넘치면 embed_pass cap을 낮춘다.
 
 ### 임베딩 백필 (일회성 — 배포 직후)
