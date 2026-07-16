@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from ..contracts.embedding import EMBED_DIM
-from .gemini import PermanentEmbedError
+from .gemini import PermanentEmbedError, redact
 
 BODY_CAP = 500
 EMBED_CONCURRENCY = 50      # 병렬 임베딩 동시 호출 수 (ca8840a와 동일)
@@ -48,10 +48,10 @@ def embed_items(items: list[dict], client,
             vec = client.embed(text, timeout=30.0)
         except PermanentEmbedError as e:
             if e.code in _PER_ITEM_PERMANENT_CODES:
-                return EmbedResult(it["item_id"], "permanent", reason=str(e))
+                return EmbedResult(it["item_id"], "permanent", reason=redact(str(e)))
             raise                     # 인증/모델명 드리프트 — 패스 전체 실패로 승격
         except Exception as e:        # LLMError(재시도 소진)·네트워크 등
-            return EmbedResult(it["item_id"], "retryable", reason=str(e))
+            return EmbedResult(it["item_id"], "retryable", reason=redact(str(e)))
         if len(vec) != EMBED_DIM:
             # 차원 불일치는 항목 문제가 아니라 설정 드리프트(EMBED_DIM ↔ API 응답) —
             # 항목별 처분하면 백로그 전체 플래그가 조용히 걷힌다. 401과 같이 승격.

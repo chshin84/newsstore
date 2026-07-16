@@ -7,6 +7,7 @@
 from __future__ import annotations
 import logging
 import random
+import re
 import time
 from typing import Any, Callable
 
@@ -31,6 +32,14 @@ def _status_code(e: BaseException) -> int | None:
     return code if isinstance(code, int) else None
 
 
+_KEY_RE = re.compile(r"(key=)[^&\s]+")
+
+
+def redact(text: str) -> str:
+    """예외/URL 문자열에서 API 키를 가린다 — 로그·에러 메시지에 비밀 금지(SECRETS)."""
+    return _KEY_RE.sub(r"\1[redacted]", text)
+
+
 def call_with_retry(call_fn: Callable[[], Any], *, attempts: int = 3,
                     base_delay: float = 0.5,
                     is_transient: Callable[[BaseException], bool] | None = None) -> Any:
@@ -43,9 +52,10 @@ def call_with_retry(call_fn: Callable[[], Any], *, attempts: int = 3,
         except Exception as e:               # transient: timeout/ratelimit/5xx
             last = e
             if is_transient is not None and not is_transient(e):
-                raise PermanentEmbedError(f"non-transient embed error: {e}",
+                raise PermanentEmbedError(f"non-transient embed error: {redact(str(e))}",
                                           code=_status_code(e)) from e
-            log.warning("embed call failed (attempt %d/%d): %s", i + 1, attempts, e)
+            log.warning("embed call failed (attempt %d/%d): %s", i + 1, attempts,
+                        redact(str(e)))
         else:
             if r is not None:
                 return r

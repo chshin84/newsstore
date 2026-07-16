@@ -102,3 +102,14 @@ def test_embed_items_auth_error_aborts_pass():
     fake = FakeEmbed({"a": PermanentEmbedError("unauthorized", code=401)})
     with pytest.raises(PermanentEmbedError):
         embed_items([_pi("x", "a")], fake)
+
+
+def test_exception_reasons_are_redacted():
+    """예외 문자열에 key=... 가 섞여도 로그·reason에 키가 새지 않는다(SECRETS)."""
+    from newsstore.embed.embedder import embed_items
+    from newsstore.embed.gemini import LLMError
+    fake = FakeEmbed({"a": LLMError("POST https://api/x?key=SECRET-123&alt=json failed")})
+    [r] = embed_items([_pi("x", "a")], fake)
+    assert r.outcome == "retryable"
+    assert "SECRET-123" not in r.reason
+    assert "key=[redacted]" in r.reason
