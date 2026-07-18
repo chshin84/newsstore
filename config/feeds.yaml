@@ -15,12 +15,16 @@ feeds:
   # - {feed_id: infomax_contrib,     url: "https://news.einfomax.co.kr/rss/S1N19.xml", source: 인포맥스, asset_hint: research, language: ko, poll_minutes: 360, body_mode: summary, tz_offset: 9, tier: analysis}
   - {feed_id: infomax_realestate,  url: "https://news.einfomax.co.kr/rss/S1N17.xml", source: 인포맥스, asset_hint: kr_realestate, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: wire}
   # ── 한국 독립 경제지 (연합 계열 밖) ──
-  - {feed_id: hankyung,   url: "https://www.hankyung.com/feed/finance",  source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
-  - {feed_id: hk_economy,    url: "https://www.hankyung.com/feed/economy",       source: 한국경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: hk_realestate, url: "https://www.hankyung.com/feed/realestate",    source: 한국경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: hk_it,         url: "https://www.hankyung.com/feed/it",            source: 한국경제, asset_hint: kr_tech, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: hk_intl,       url: "https://www.hankyung.com/feed/international", source: 한국경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: hk_society,    url: "https://www.hankyung.com/feed/society",       source: 한국경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}
+  # ── 한국경제(한경) ── Cloud Run 데이터센터 IP가 403 차단(2026-07-09 회귀 — 직접 RSS 6종 무수집).
+  # 집(주거 IP)에선 정상이므로 6종은 주석 보존(향후 집 PC 수집 시 되살림). 클라우드는 구글뉴스 경유로
+  # 커버 복구(site:hankyung.com — 제목만). 매경·인포맥스는 클라우드 IP를 안 막아 그대로 유지.
+  # - {feed_id: hankyung,   url: "https://www.hankyung.com/feed/finance",  source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # 403(datacenter IP)
+  # - {feed_id: hk_economy,    url: "https://www.hankyung.com/feed/economy",       source: 한국경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
+  # - {feed_id: hk_realestate, url: "https://www.hankyung.com/feed/realestate",    source: 한국경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
+  # - {feed_id: hk_it,         url: "https://www.hankyung.com/feed/it",            source: 한국경제, asset_hint: kr_tech, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
+  # - {feed_id: hk_intl,       url: "https://www.hankyung.com/feed/international", source: 한국경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
+  # - {feed_id: hk_society,    url: "https://www.hankyung.com/feed/society",       source: 한국경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
+  - {feed_id: gn_hankyung, url: "https://news.google.com/rss/search?q=site:hankyung.com+when:24h&hl=ko&gl=KR&ceid=KR:ko", source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # 한경 우회(구글뉴스 경유, 제목만) — 직접 피드가 클라우드 403이라 커버 복구
   - {feed_id: mk_stock,   url: "https://www.mk.co.kr/rss/50200011/",     source: 매일경제, asset_hint: kr_stock, language: ko, poll_minutes: 30, body_mode: summary}   # 프로빙 HTTP 403(2026-06-28) — 기존 피드, 범위 밖
   # mk.co.kr: Docker 프로빙은 403(IP 차단)이나 프로덕션·브라우저 정상 — 활성 유지
   - {feed_id: mk_economy,    url: "https://www.mk.co.kr/rss/30100041/", source: 매일경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
@@ -86,7 +90,8 @@ feeds:
   - {feed_id: bbg_crypto,     url: "https://feeds.bloomberg.com/crypto/news.rss",     source: Bloomberg, asset_hint: crypto,   poll_minutes: 30, body_mode: summary}
   - {feed_id: bbg_wealth,     url: "https://feeds.bloomberg.com/wealth/news.rss",     source: Bloomberg, asset_hint: wealth,   poll_minutes: 30, body_mode: summary}
   - {feed_id: bbg_industries, url: "https://feeds.bloomberg.com/industries/news.rss", source: Bloomberg, asset_hint: industries, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: bbg_green,      url: "https://feeds.bloomberg.com/green/news.rss",      source: Bloomberg, asset_hint: "esg,energy", poll_minutes: 30, body_mode: headline, tier: wire}
+  # bbg_green 제외(2026-07-19) — https://feeds.bloomberg.com/green/news.rss 가 어디서나 HTTP 404(URL 소멸).
+  # - {feed_id: bbg_green,      url: "https://feeds.bloomberg.com/green/news.rss",      source: Bloomberg, asset_hint: "esg,energy", poll_minutes: 30, body_mode: headline, tier: wire}
   # ── 매크로/루머 헤드라인 (Google News 쿼리; 본문 없음) ──
   - {feed_id: gn_rumor,         url: "https://news.google.com/rss/search?q=(reportedly+OR+%22in+talks%22+OR+%22sources+say%22)+(stock+OR+merger+OR+acquisition+OR+raise)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: rumor, poll_minutes: 30, body_mode: headline}
   - {feed_id: gn_kr_chips,      url: "https://news.google.com/rss/search?q=(%22SK+Hynix%22+OR+Samsung)+(hedge+fund+OR+leverage+OR+chip)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: kr_stock, poll_minutes: 30, body_mode: headline}
@@ -100,7 +105,8 @@ feeds:
   # imf_blog 재프로빙 실패(HTTP 403) 2026-06-28 UA적용 — /en/blogs/rss 차단(이전 entries=0에서 403으로 변경), 제외
   # - {feed_id: imf_blog,     url: "https://www.imf.org/en/blogs/rss",                              source: IMF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: voxeu,        url: "https://cepr.org/rss/vox-content",                              source: VoxEU, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
-  - {feed_id: nber_wp,         url: "https://www.nber.org/rss/new.xml",                    source: NBER, asset_hint: research, poll_minutes: 720, body_mode: headline, tier: analysis}
+  # nber_wp 제외(2026-07-19) — https://www.nber.org/rss/new.xml 이 어디서나 HTTP 403(집·클라우드 모두 차단).
+  # - {feed_id: nber_wp,         url: "https://www.nber.org/rss/new.xml",                    source: NBER, asset_hint: research, poll_minutes: 720, body_mode: headline, tier: analysis}
   - {feed_id: boe_underground, url: "https://bankunderground.co.uk/feed/",                 source: BankUnderground, asset_hint: uk_policy, poll_minutes: 720, body_mode: summary, tier: analysis}
   # cfr_setser 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /blog/setser.rss 경로 없음, 제외
   # - {feed_id: cfr_setser,   url: "https://www.cfr.org/blog/setser.rss",                           source: CFR, asset_hint: flows, poll_minutes: 360, body_mode: summary, tier: analysis}
