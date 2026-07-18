@@ -66,6 +66,27 @@ def test_collect_once_blocked_page_is_failure_not_zero(store):
     assert not state.get("etag") and not state.get("last_fetched")
 
 
+def test_collect_once_records_feed_health(store):
+    # 성공 시 last_success + 연속실패 리셋, 실패 시 연속실패 누적 · last_error 기록(커서 불변).
+    feed = FeedConfig(feed_id="h1", url="https://e/g.rss", source="S", poll_minutes=0)
+    ok = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=RSS)))
+    bad = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+
+    collect_once(ok, store, [feed], now=NOW, force=True)
+    st = store.get_feed_state("h1")
+    assert st["last_success"] is not None and st["consecutive_failures"] == 0
+
+    collect_once(bad, store, [feed], now=NOW + timedelta(minutes=1), force=True)
+    st = store.get_feed_state("h1")
+    assert st["consecutive_failures"] == 1 and st["last_error"]         # 실패 1회 + 에러 기록
+
+    collect_once(bad, store, [feed], now=NOW + timedelta(minutes=2), force=True)
+    assert store.get_feed_state("h1")["consecutive_failures"] == 2       # 누적
+
+    collect_once(ok, store, [feed], now=NOW + timedelta(minutes=3), force=True)
+    assert store.get_feed_state("h1")["consecutive_failures"] == 0       # 성공 시 리셋
+
+
 def test_collect_once_fills_hankyung_body(monkeypatch, store):
     from newsstore.collect import body_fetch
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)

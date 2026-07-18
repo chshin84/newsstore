@@ -9,10 +9,10 @@ _FEED_STATE = "feed_state"
 _BARS = "price_bars"
 _VECTORS = "item_vectors"
 
-# content 데이터의 보존 기간(1개월). Firestore TTL 정책이 각 문서의 expire_at을
+# content 데이터의 보존 기간(60일). Firestore TTL 정책이 각 문서의 expire_at을
 # 가리켜 만료시킨다(비용 통제). feed_state에는 절대 넣지 않는다 — 증분 수집 커서가
 # 유실되면 재수집이 어긋난다.
-_TTL = timedelta(days=30)
+_TTL = timedelta(days=60)
 
 
 def _bar_expire_at(dt_str) -> datetime:
@@ -205,7 +205,7 @@ class FirestoreStore:
                          {"embed_pending": DELETE_FIELD})
 
         n = 0
-        for i in range(0, len(entries), 250):        # 250건 × 2op = Firestore batch 500 op 한도
+        for i in range(0, len(entries), 50):         # 768차원 벡터는 커서 250건이면 Firestore 커밋 10MiB 초과("Transaction too big") — 50건으로 축소
             chunk = entries[i:i + 250]
             batch = self.db.batch()
             for e in chunk:
@@ -237,23 +237,25 @@ class FirestoreStore:
             except (NotFound, FailedPrecondition):   # update-of-missing 편차 흡수 — save_vectors와 통일
                 continue
 
+    # feed_state 지속 필드: 증분 수집 커서(etag·last_modified·last_fetched) + 피드 건강
+    # (last_success·consecutive_failures·last_error·last_error_at). 건강은 대시보드 표시와
+    # 실패 판정(만성 죽음 식별)에 쓴다 — 같은 문서라 쓰기 횟수는 안 늘어난다.
+    _STATE_FIELDS = ("etag", "last_modified", "last_fetched",
+                     "last_success", "consecutive_failures", "last_error", "last_error_at")
+
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()
         if not snap.exists:
             return {}
         d = snap.to_dict() or {}
-        return {"etag": d.get("etag"), "last_modified": d.get("last_modified"),
-                "last_fetched": d.get("last_fetched")}
+        return {k: d.get(k) for k in self._STATE_FIELDS}
 
     def set_feed_state(self, feed_id: str, **fields) -> None:
         cur = self.get_feed_state(feed_id)        # read-modify-write (no merge=)
         cur.update(fields)
         # feed_state에는 expire_at을 넣지 않는다(ETag·커서 유실 시 증분 수집 어긋남).
-        self.db.collection(_FEED_STATE).document(feed_id).set({
-            "etag": cur.get("etag"),
-            "last_modified": cur.get("last_modified"),
-            "last_fetched": cur.get("last_fetched"),
-        })
+        self.db.collection(_FEED_STATE).document(feed_id).set(
+            {k: cur.get(k) for k in self._STATE_FIELDS})
 
     def filter_new_ids(self, ids: list[str]) -> list[str]:
         if not ids:

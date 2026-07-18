@@ -39,9 +39,28 @@ def test_embed_wholesale_failure_preserves_collection_and_exits_1(store, tmp_pat
     assert d["embed_pending"] is True                                 # 플래그 보존(재시도 가능)
 
 
-def test_feed_failure_rate_exits_1_even_without_embed_issues(store, tmp_path, monkeypatch):
-    """합성의 피드 축 — 임베딩이 무사(키 없음·대기 0건)해도 피드 실패율 초과면 exit 1."""
+def test_systemic_feed_failure_exits_1(store, tmp_path, monkeypatch):
+    """시스템 장애 — 정상 피드 다수가 최소 시도 이상에서 갑자기 실패하면 exit 1(임베딩 무사여도)."""
     import newsstore.entrypoints.run_collect as rc
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setattr(rc, "collect_once", lambda *a, **k: {"f1": -1})   # 전 피드 실패 주입
+    monkeypatch.setattr(rc, "collect_once", lambda *a, **k: {f"f{i}": -1 for i in range(12)})
     assert rc.main(["--feeds", _feeds_yaml(tmp_path)]) == 1
+
+
+def test_isolated_feed_failures_do_not_fail_run(store, tmp_path, monkeypatch):
+    """한두 개(소수 배치)만 죽으면 런은 성공 — 런 ≠ 개별 피드 건강(#7)."""
+    import newsstore.entrypoints.run_collect as rc
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(rc, "collect_once", lambda *a, **k: {"f1": -1, "f2": -1})
+    assert rc.main(["--feeds", _feeds_yaml(tmp_path)]) == 0
+
+
+def test_chronic_dead_feeds_excluded_from_systemic_alarm(store, tmp_path, monkeypatch):
+    """만성 죽은 피드(연속실패 ≥5)는 시스템 장애 판정에서 제외 — 이들만 죽어도 런 성공."""
+    import newsstore.entrypoints.run_collect as rc
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    dead = [f"d{i}" for i in range(12)]
+    for fid in dead:
+        store.set_feed_state(fid, consecutive_failures=5)          # 미리 만성 죽음으로 마킹
+    monkeypatch.setattr(rc, "collect_once", lambda *a, **k: {fid: -1 for fid in dead})
+    assert rc.main(["--feeds", _feeds_yaml(tmp_path)]) == 0        # 전부 만성 → healthy_attempted=0 → 알람 없음

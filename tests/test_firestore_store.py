@@ -63,7 +63,7 @@ def test_upsert_stamps_kind_at_collect_time(store):
 def test_upsert_stamps_expire_at_from_fetched_at(store):
     store.upsert_items([_item("a")])
     d = store.db.collection("items").document("a").get().to_dict()
-    assert d["expire_at"] == NOW + timedelta(days=30)
+    assert d["expire_at"] == NOW + timedelta(days=60)
     # enrich 전용 필드는 제거됐다(소비자 없음).
     assert "processed" not in d and "processed_at" not in d and "tags" not in d
 
@@ -133,7 +133,7 @@ def test_save_bars_expire_at_from_bar_date(store):
     store.save_bars([_bar("sp500__20260710101000", "sp500", "2026-07-10 10:10:00", 1.0)])
     d = store.db.collection("price_bars").document("sp500__20260710101000").get().to_dict()
     # TTL = 바 날짜(2026-07-10) + 30일. 시·분은 만료에 무의미.
-    assert d["expire_at"] == datetime(2026, 8, 9, tzinfo=timezone.utc)
+    assert d["expire_at"] == datetime(2026, 9, 8, tzinfo=timezone.utc)
 
 
 def test_filter_new_bar_ids_returns_only_unstored(store):

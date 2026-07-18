@@ -9,11 +9,12 @@ from ..collect.collector import collect_once
 
 log = logging.getLogger("newsstore")
 
-# Exit non-zero when at least this fraction of *attempted* feeds failed, so an
-# external scheduler (cron / Cloud Scheduler) treats a systemic outage (proxy
-# down, cert expired, network gone) as a failed run instead of a silent success.
-# Isolated transient feed flakiness stays below the bar and exits 0.
+# 런의 성공/실패 ≠ 개별 피드의 건강. 런은 '시스템 장애'(프록시·인증·네트워크 다운으로 평소 멀쩡하던
+# 피드 다수가 갑자기 실패)에서만 exit 1. 한두 개·만성 죽은 피드가 죽어도 런은 성공(exit 0)이고,
+# 그건 로그·대시보드로 surface한다. 아래 두 문턱이 오판(특히 --force 없는 소수 배치)을 막는다.
 FAIL_RATE_ALERT = 0.5
+CHRONIC_DEAD_STREAK = 5       # 연속 실패 이상이면 '만성 죽음' — 시스템 장애 판정에서 제외(이미 아는 죽음)
+MIN_ATTEMPTED_FOR_ALERT = 10  # 정상 피드 시도가 이 수 미만이면 실패율 알람 없음(소수 배치 우연 전멸 오판 방지)
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore collector (one pass)")
@@ -41,6 +42,12 @@ def main(argv=None) -> int:
         total_new = sum(v for v in summary.values() if v > 0)
         failed = [k for k, v in summary.items() if v == -1]
         attempted = len(summary)      # skipped (not-due) feeds are absent from summary
+        # 만성 죽은 피드(연속실패 ≥ CHRONIC_DEAD_STREAK)는 시스템 장애 판정에서 제외한다.
+        # (collect_once가 이번 실패로 연속실패를 이미 올려둠 — store 열린 여기서 읽는다.)
+        chronic = {k for k in failed
+                   if (store.get_feed_state(k).get("consecutive_failures") or 0) >= CHRONIC_DEAD_STREAK}
+        new_failed = sorted(k for k in failed if k not in chronic)
+        healthy_attempted = attempted - len(chronic)
         log.info("collected %d new item(s); store total = %d", total_new, store.count())
         for fid, n in sorted(summary.items()):
             log.info("  %s: %s", fid, "FAIL" if n == -1 else n)
@@ -65,12 +72,17 @@ def main(argv=None) -> int:
             log.exception("embed pass failed (collection results preserved)")
             embed_failed = True
 
-    if attempted and len(failed) / attempted >= FAIL_RATE_ALERT:
-        log.error("run FAILED: %d/%d feeds failed (>= %.0f%%): %s",
-                  len(failed), attempted, FAIL_RATE_ALERT * 100, ", ".join(sorted(failed)))
+    # 시스템 장애만 런을 실패시킨다: 정상 피드가 최소 시도 이상에서 다수 실패할 때.
+    if healthy_attempted >= MIN_ATTEMPTED_FOR_ALERT and \
+            len(new_failed) / healthy_attempted >= FAIL_RATE_ALERT:
+        log.error("run FAILED (systemic): %d/%d 정상 피드 실패: %s",
+                  len(new_failed), healthy_attempted, ", ".join(new_failed))
         return 1
-    if failed:
-        log.warning("%d feed(s) failed (isolated): %s", len(failed), ", ".join(sorted(failed)))
+    if new_failed:
+        log.warning("%d feed(s) failed (isolated): %s", len(new_failed), ", ".join(new_failed))
+    if chronic:
+        log.warning("만성 죽은 피드 %d개(런 실패 아님 — 정리 대상): %s",
+                    len(chronic), ", ".join(sorted(chronic)))
     return 1 if embed_failed else 0
 
 if __name__ == "__main__":
