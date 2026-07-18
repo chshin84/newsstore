@@ -280,7 +280,7 @@ def test_run_price_pass_dispatches_by_source_and_streams_bars():
     fetchers, calls = _fetchers()
     n = run_price_pass(store, fetchers, syms)
     assert calls["fmp_intraday"] == ["^GSPC"] and calls["yahoo_intraday"] == ["CL=F"]
-    assert n == 2 + 3 + 2                                      # sp500 2바 + treasury 3일 + wti 2바
+    assert n == 1 + 2 + 1                                      # 마지막(형성 중) 봉 드롭 후: sp500 1 + treasury 2 + wti 1
     assert set(store.saved) == {"sp500", "us10y", "wti"}       # 스냅샷 3종
     assert store.saved["us10y"]["close"] == 4.48               # treasury year10 최신
     assert store.saved["wti"]["close"] == 100.0                # yahoo 최신 봉
@@ -304,8 +304,24 @@ def test_run_price_pass_writes_only_new_bars_on_repeat():
     fetchers, _ = _fetchers()
     first = run_price_pass(store, fetchers, [SP])
     second = run_price_pass(store, fetchers, [SP])
-    assert first == 2 and second == 0
-    assert len(store.bars) == 2                                # 중복 문서 안 쌓임
+    assert first == 1 and second == 0                         # 완결봉 1개만 스트림 적재(마지막 봉 드롭)
+    assert len(store.bars) == 1                                # 중복 문서 안 쌓임
+
+
+def test_run_price_pass_drops_forming_last_bar_from_stream_only():
+    # 완결 안 된 마지막 봉은 price_bars 스트림에서 상시 드롭 — filter_new_bar_ids가 한 번 쓴 바를
+    # 다시 안 써서 형성 중 봉이 고착되는 걸 막는다(다음 폴에 완결되면 그때 저장).
+    # 스냅샷(웹 최신값)은 전체 봉을 써 최신을 보여주고 매 패스 덮어써 자가교정한다.
+    store = _Store()
+    fetchers, _ = _fetchers(
+        fmp_intraday=lambda s: _fmp_intra([("2026-07-10 10:10:00", 102.0),   # 최신 = 형성 중
+                                           ("2026-07-10 10:05:00", 101.0),
+                                           ("2026-07-10 10:00:00", 100.0)]))
+    run_price_pass(store, fetchers, [SP])
+    assert {b["datetime"] for b in store.bars.values()} == {"2026-07-10 10:00:00", "2026-07-10 10:05:00"}
+    assert "sp500__20260710101000" not in store.bars          # 형성 중 마지막 봉은 스트림 미적재
+    assert store.saved["sp500"]["close"] == 102.0             # 스냅샷은 최신 봉 반영(자가교정)
+    assert store.saved["sp500"]["datetime"] == "2026-07-10 10:10:00"
 
 
 def test_run_price_pass_snapshot_stamps_source_fetched_at_flags():

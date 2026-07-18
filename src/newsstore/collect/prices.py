@@ -238,9 +238,13 @@ def run_price_pass(store, fetchers: dict, symbols: list[PriceSymbol],
         if not bars:
             log.warning("price %s(%s, %s): 무효 응답/무 바 — 스킵", s.key, s.symbol, s.source)
             continue
-        # 완전 스트림: 새 바만 적재(멱등 — 겹쳐 받은 바는 같은 id라 재적재 안 함).
-        new_ids = set(store.filter_new_bar_ids([b["id"] for b in bars]))
-        saved = store.save_bars([b for b in bars if b["id"] in new_ids])
+        # 완결 안 된 마지막 봉은 스트림에 적재하지 않는다(상시 드롭). filter_new_bar_ids가 한 번
+        # 쓴 바를 다시 안 써서, 형성 중 봉을 저장하면 불완전값이 그대로 고착된다
+        # (market-data-integrity: forming ≠ final). 다음 폴에 완결되면 그때 저장(FMP 히스토리라
+        # 손실 없음). 스냅샷은 최신값 표시라 전체 봉을 쓰고 매 패스 덮어써 자가교정한다.
+        stream_bars = bars[:-1]
+        new_ids = set(store.filter_new_bar_ids([b["id"] for b in stream_bars]))
+        saved = store.save_bars([b for b in stream_bars if b["id"] in new_ids])
         total_new += saved
         # 웹 확인용 최신 스냅샷(값+최근 시계열) 갱신.
         store.save_price(s.key, _snapshot(bars, s, fetched_at=fetched_at))
