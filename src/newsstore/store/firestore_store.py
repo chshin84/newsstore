@@ -35,6 +35,7 @@ def _to_doc(item: RawItem) -> dict:
         "feed_id": item.feed_id, "source": item.source,
         "asset_hint": item.asset_hint, "language": item.language,
         "url": item.url, "title": item.title, "body": item.body,
+        "symbol": item.symbol,
         "published_at": item.published_at, "fetched_at": item.fetched_at,
         "kind": kind,
         # TTL: 수집 시각 기준 30일 뒤 만료. 원본은 이때까지 보존된다.

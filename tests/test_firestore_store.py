@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from newsstore.contracts.models import RawItem
-from newsstore.store.firestore_store import FirestoreStore
+from newsstore.store.firestore_store import FirestoreStore, _to_doc
 
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
 
@@ -225,3 +225,17 @@ def test_clear_embed_pending_removes_flag_without_vector(store):
     item = store.db.collection("items").document("c1x").get().to_dict()
     assert "embed_pending" not in item
     assert not store.db.collection("item_vectors").document("c1x").get().exists
+
+
+# --- symbol 필드(FMP 티커 태깅 보존) ---
+
+def test_rawitem_symbol_defaults_empty():
+    it = RawItem(id="a", feed_id="fmp:stock-latest", source="X",
+                 url="http://x/1", title="t", fetched_at=datetime.now(timezone.utc))
+    assert it.symbol == ""
+
+
+def test_to_doc_persists_symbol():
+    it = RawItem(id="a", feed_id="fmp:stock-latest", source="X", symbol="AAPL",
+                 url="http://x/1", title="t", fetched_at=datetime.now(timezone.utc))
+    assert _to_doc(it)["symbol"] == "AAPL"

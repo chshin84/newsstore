@@ -12,5 +12,6 @@ class RawItem(BaseModel):
     url: str
     title: str
     body: str = ""
+    symbol: str = ""          # FMP 티커 태깅 보존(RSS는 빈 문자열, 하위호환)
     published_at: datetime | None = None
     fetched_at: datetime
