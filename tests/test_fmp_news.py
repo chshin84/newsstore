@@ -169,6 +169,14 @@ def test_pass_fmp_articles_cap_is_not_error():
     run_fmp_news_pass(store, {"fmp-articles": full}, ["fmp-articles"], now=NOW, delay_s=0)
     assert store.state["fmp:fmp-articles"].get("last_error") in (None,)   # 오탐 없음
 
+def test_pass_records_truncation_for_date_bounded(monkeypatch):
+    # stock-latest(date-bounded)가 캡 소진+가득 → last_error 기록. 작은 캡으로 저비용 검증.
+    monkeypatch.setitem(fmp_news.PAGE_CAP, "stock-latest", 1)
+    store = FakeStore()
+    def full(frm, to, page): return [_row(f"http://x/{page}/{n}") for n in range(PAGE_LIMIT)]
+    run_fmp_news_pass(store, {"stock-latest": full}, ["stock-latest"], now=NOW, delay_s=0)
+    assert store.state["fmp:stock-latest"]["last_error"] == "truncated at page cap"
+
 def test_get_page_retries_on_429(monkeypatch):
     # 실제 httpx.HTTPStatusError(429) 경로가 재시도되는지(리뷰 AA4).
     monkeypatch.setattr(fmp_news.time, "sleep", lambda *_: None)
