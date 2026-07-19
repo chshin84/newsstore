@@ -131,6 +131,11 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 - **커버리지**: 대부분 심볼은 FMP 5분봉(`historical-chart/5min`), 국채(us2y/us10y/us30y)는 FMP treasury-rates에서 도출(5분봉이 없어 일봉 1바/일), kosdaq·dxy·wti 3종만 Yahoo 5분봉 폴백이다(FMP Premium 미커버). 심볼·소스 매핑 SSOT는 `config/prices.yaml`.
 - **저장**: 5분봉 완전 스트림은 `price_bars`에 바 1개=문서 1개로 적재(새 바만 write), 웹 확인용 최신 스냅샷은 `prices/{key}`에 갱신한다. `price_bars`는 문서가 가장 빨리 늘어 TTL(§F)이 특히 중요하다.
 
+### FMP 뉴스 수집 잡(run_fmp_news)
+- 이미지: 세 수집 잡과 동일(같은 이미지, CMD만 `python -m newsstore.entrypoints.run_fmp_news`).
+- 배포: `gcloud run jobs update newsstore-fmp-news --image <IMAGE> --command python --args -m,newsstore.entrypoints.run_fmp_news` (없으면 create) → 스케줄러 하루 1회.
+- 시크릿: FMP_API_KEY(Secret Manager). config: config/fmp_news.yaml.
+
 ## F. TTL 정책 (content 컬렉션 30일 만료)
 모든 content 컬렉션(`items`·`prices`·`price_bars`·`item_vectors` + 팩터 계약 컬렉션)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 30일, 나머지는 저장 시각 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
 ```
