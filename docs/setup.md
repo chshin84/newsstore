@@ -80,8 +80,8 @@ gcloud firestore indexes composite create --collection-group=items \
   --field-config=field-path=source,order=ascending --field-config=field-path=published_at,order=descending --async
 ```
 
-## 7. TTL 정책 (content 컬렉션 30일 만료 — 비용 통제)
-모든 content 컬렉션은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(대부분 저장 시각 + 30일, `price_bars`만 바 날짜 + 30일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타는 만료 대상이 아니다 — 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉)와 `prices_eod`(배당조정 EOD 백필)가 문서 수가 가장 빨라 TTL이 특히 중요하다. 컬렉션마다 한 번씩 정책을 건다:
+## 7. TTL 정책 (content 컬렉션 60일 만료 — 비용 통제)
+모든 content 컬렉션은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(대부분 저장 시각 + 60일, `price_bars`만 바 날짜 + 60일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타는 만료 대상이 아니다 — 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉)와 `prices_eod`(배당조정 EOD 백필)가 문서 수가 가장 빨라 TTL이 특히 중요하다. 컬렉션마다 한 번씩 정책을 건다:
 ```
 for c in items prices price_bars item_vectors \
          income balance cashflow ratios prices_eod market_cap grades_history \
@@ -107,23 +107,22 @@ gcloud run jobs create newsstore-prices \
   --update-secrets=FMP_API_KEY=fmp-api-key:latest \
   --command=python --args=-m,newsstore.entrypoints.run_prices --max-retries=1 --task-timeout=600
 # (c) 팩터 수집 Job (cadence는 스케줄러가 --args로 넘긴다 — 아래 (d))
-gcloud run jobs create newsstore-factors \
+gcloud run jobs create newsstore-stocks \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
   --service-account=$SA --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --update-secrets=FMP_API_KEY=fmp-api-key:latest \
-  --command=python --args=-m,newsstore.entrypoints.run_factors,--cadence,weekly --max-retries=1 --task-timeout=1800
-# (d) 스케줄러: 가격 5분봉(*/5), 팩터 daily(EOD)·weekly. 수집기 패턴과 동일한 :run 호출.
-#     팩터의 daily/weekly는 Job override로 cadence를 바꿔 실행한다(--update-job-args 또는 별도 Job).
-gcloud scheduler jobs create http newsstore-prices-5min --location=<REGION> \
-  --schedule="*/5 * * * *" \
+  --command=python --args=-m,newsstore.entrypoints.run_factors,--cadence,all --max-retries=1 --task-timeout=3600
+# (d) 스케줄러: 가격(*/15), 팩터(매일 07:00). 수집기 패턴과 동일한 :run 호출.
+gcloud scheduler jobs create http newsstore-prices-hourly --location=<REGION> \
+  --schedule="*/15 * * * *" \
   --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-prices:run" \
   --http-method=POST --oauth-service-account-email=$SA
-gcloud scheduler jobs create http newsstore-factors-weekly --location=<REGION> \
-  --schedule="30 6 * * 0" \
-  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-factors:run" \
+gcloud scheduler jobs create http newsstore-stocks-daily --location=<REGION> \
+  --schedule="0 7 * * *" \
+  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-stocks:run" \
   --http-method=POST --oauth-service-account-email=$SA
-# 배당조정 EOD는 매일: cadence=daily로 실행하는 별도 Job(newsstore-factors-daily, --args ...,--cadence,daily)을
-# 같은 패턴으로 만들어 "0 22 * * 1-5"(장마감 후) 스케줄에 건다.
+# 팩터 cadence는 잡의 --args로 정한다(위 (c)). 현재 배포=all(daily=배당조정 EOD + weekly=재무제표·비율·컨센서스 as-of·유니버스 갱신).
+# ~600 종목 전수 패스가 약 37분이라 task-timeout=3600(5분 기본으로는 타임아웃 사망 — solved_problems 2026-07-19).
 ```
 
 **Gemini 키(임베딩)**: collector 잡의 임베딩 패스는 Gemini API를 호출하므로 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — FMP와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collector` 잡에 주입한다.

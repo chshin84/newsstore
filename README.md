@@ -5,8 +5,8 @@
 - **사이트:** https://daily-recap-498506.web.app
 - **GitHub:** https://github.com/chshin84/newsstore (public)
 - **수집 전용, 무 생성형 LLM.** 분석·태깅·클러스터·스토리·리포트·신호 같은 인리치 레이어는 이 repo에 없다. **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 LLM이 아니라 **비-LLM 규칙**(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다.
-- **모든 content 데이터에 1개월 TTL**을 걸어 Firestore 비용을 통제한다(`items`·`prices`·`price_bars`·`item_vectors` 및 팩터 컬렉션 `income`·`ratios`·`prices_eod`·… 의 `expire_at`; `feed_state` 제외). 계약 SSOT: `docs/firestore-contract.md`.
-- **가격은 5분봉 완전 스트림**을 `price_bars`(바 1개=문서 1개)에 적재하고, 웹 확인용 최신 스냅샷을 `prices/{key}`에 갱신한다. 다운스트림 DB가 한 달 안에 적재한다는 가정 아래 TTL로 정리한다.
+- **모든 content 데이터에 60일 TTL**을 걸어 Firestore 비용을 통제한다(`items`·`prices`·`price_bars`·`item_vectors` 및 팩터 컬렉션 `income`·`ratios`·`prices_eod`·… 의 `expire_at`; `feed_state` 제외). 계약 SSOT: `docs/firestore-contract.md`.
+- **가격은 5분봉 완전 스트림**을 `price_bars`(바 1개=문서 1개)에 적재하고, 웹 확인용 최신 스냅샷을 `prices/{key}`에 갱신한다. 다운스트림 DB가 60일 안에 적재한다는 가정 아래 TTL로 정리한다.
 
 ## 아키텍처
 
@@ -50,7 +50,7 @@ docker build -f infra/Dockerfile -t newsstore .
 
 # 1회 뉴스 수집 (.env 설정 사용, named volume로 영속)
 docker run --rm --env-file .env -v newsstore_data:/data newsstore \
-  python -m newsstore.entrypoints.run_collect --force
+  python -m newsstore.entrypoints.run_collect
 ```
 가격·펀더멘털 수집(FMP)은 compose 서비스로도 돌린다(`FMP_API_KEY` 필요):
 ```bash
@@ -75,4 +75,5 @@ MSYS_NO_PATHCONV=1 docker compose run --rm test
 ## 문서
 - 최초 셋업(0→배포): `docs/setup.md` · 운영·재배포: `docs/operations.md`
 - Firestore 스키마 계약(TTL·kind·FMP 소스): `docs/firestore-contract.md`
-- 코드 원칙: `docs/coding-principles.md` · 설계 스펙 히스토리: `docs/superpowers/specs/`
+- 코드 원칙: `docs/coding-principles.md` · 오답노트(교훈 로그): `docs/solved_problems.md`
+- 팩터·펀더멘털 수집 설계(구현 예정): `docs/factors-v2-design.md` · 목적·다운스트림 맥락: `docs/purpose.md`

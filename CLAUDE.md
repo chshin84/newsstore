@@ -17,7 +17,7 @@
 - **비밀 구분**: `FMP_API_KEY`·`GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지 — `.env.example`엔 플레이스홀더만). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프 (중요):** newsstore = **수집 전용**이다 — 뉴스 RSS 수집 + 가격·펀더멘털 수집(FMP) + Firestore 저장 + 정적 확인 UI. **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 1개월 TTL(`expire_at`, `feed_state` 제외).
+- **스코프 (중요):** newsstore = **수집 전용**이다 — 뉴스 RSS 수집 + 가격·펀더멘털 수집(FMP) + Firestore 저장 + 정적 확인 UI. **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 2개월(60일) TTL(`expire_at`, `feed_state` 제외).
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - Firestore 스키마 계약(TTL·kind·FMP 소스): `docs/firestore-contract.md`
@@ -33,6 +33,6 @@
 - **SDD/ultracode 서브에이전트엔 `coding-principles` + `solved_problems.md`의 '핵심 gotchas'를 주입**(전체 아카이브 X — 관련성>분량). 배선: `docs/subagent-context.md`. 서브에이전트는 세션 맥락이 없어 주입해야 실수를 안 반복한다.
 
 ## 배포 (요약, 상세는 operations.md)
-- 코드/피드 변경 → 이미지 재빌드 → 세 수집 Job(collector·prices·fundamentals) 모두 `gcloud run jobs update --image` → execute (같은 이미지, CMD만 다름)
+- 코드/피드 변경 → 이미지 재빌드 → 세 수집 Job(collector·prices·stocks) 모두 `gcloud run jobs update --image` → execute (같은 이미지, CMD만 다름)
 - 사이트(`web/index.html`) 변경 → Hosting REST 재배포
 - gcloud가 PATH에 없으면 설치 풀경로로 호출(머신별로 다름 — `where gcloud`/설치 경로로 확인, 머신로컬 값은 메모리에). Firebase REST엔 `x-goog-user-project` 헤더 필수.
