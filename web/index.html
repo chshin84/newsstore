@@ -468,6 +468,35 @@
                            : (anyEmpty ? "수집 데이터 없음" : "");
           cardRows.push(statusRow(level, c.label, detail, when));
         }
+        // 소스별 최근 기사 + 신선도 — meta/sources(RSS) + 네이버 각각 최신 1건 조회.
+        // "오류 여부"는 마지막 수집 경과로 판정(6h 정상·48h 주의·그이상 점검). 저빈도 소스는
+        // 자연히 오래되므로 전체 요약(worst)엔 반영하지 않고 행 단위로만 표시(오탐 방지).
+        let srcRows = "";
+        try {
+          const ss = await getDoc(doc(db, "meta", "sources"));
+          const names = (ss.exists() && Array.isArray(ss.data().sources)) ? ss.data().sources.slice() : [];
+          names.push("네이버");
+          const res = await Promise.all(names.map(async (nm) => {
+            try {
+              const qs = query(collection(db, "items"), where("source", "==", nm), orderBy("fetched_at", "desc"), limit(1));
+              const s = await getDocs(qs);
+              if (s.empty) return { nm, ms: null };
+              const d = s.docs[0].data();
+              return { nm, ms: _toMs(d.fetched_at), title: String(d.title || "") };
+            } catch (e) { return { nm, err: e.code || e.message }; }
+          }));
+          const rows = res.map(r => {
+            if (r.err) return { lv: "bad", nm: r.nm, det: "조회 오류: " + r.err, wh: "—", k: -2 };
+            if (r.ms == null) return { lv: "bad", nm: r.nm, det: "수집 기록 없음", wh: "없음", k: -1 };
+            const age = now - r.ms;
+            const lv = age < 6 * 3600e3 ? "ok" : age < 48 * 3600e3 ? "warn" : "bad";
+            return { lv, nm: r.nm, det: r.title ? "최근: " + r.title.slice(0, 46) : "", wh: dsRelTime(r.ms, now), k: r.ms };
+          });
+          rows.sort((a, b) => a.k - b.k);   // 오래된·오류 먼저 위로
+          srcRows = rows.map(r => statusRow(r.lv, r.nm, r.det, r.wh)).join("");
+        } catch (e) {
+          srcRows = `<div class="sdetail" style="padding:13px 15px">소스별 상태 조회 실패(색인 생성 중일 수 있어요): <code>${esc(e.message || "")}</code></div>`;
+        }
         const title = worst === "ok" ? "모두 정상" : worst === "warn" ? "주의가 필요합니다" : "점검이 필요합니다";
         const sub = worst === "ok" ? "수집 잡과 데이터가 정상 주기로 갱신되고 있어요."
                                    : "아래에서 지연·실패·정지를 확인하세요.";
@@ -475,7 +504,8 @@
           `<div class="ssummary ${worst}"><span class="sbeacon"></span>`
           + `<div><b>${title}</b><span>${sub}</span></div></div>`
           + `<p class="slabel">수집 잡</p><div class="srows">${jobRows.join("")}</div>`
-          + `<p class="slabel">데이터 신선도</p><div class="srows">${cardRows.join("")}</div>`;
+          + `<p class="slabel">데이터 신선도</p><div class="srows">${cardRows.join("")}</div>`
+          + `<p class="slabel">소스별 최근 기사</p><div class="srows">${srcRows}</div>`;
       } catch (e) {
         priceDocEl.innerHTML = `<div class="sempty">상태 불러오기 실패: <code>${esc(e.message || e.code || "")}</code></div>`;
       }
