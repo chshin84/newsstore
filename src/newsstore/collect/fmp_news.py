@@ -42,3 +42,25 @@ def map_standard_row(row: dict, endpoint: str, fetched_at: datetime) -> RawItem 
         published_at=_parse_dt(row.get("publishedDate") or ""),
         fetched_at=fetched_at,
     )
+
+
+def _first_ticker(tickers: str) -> str:
+    t = (tickers or "").split(",")[0].strip()
+    return t.split(":")[-1].strip() if ":" in t else t
+
+
+def map_article_row(row: dict, fetched_at: datetime) -> RawItem | None:
+    """fmp-articles 변형 shape(link/content/date/tickers) → RawItem."""
+    url = (row.get("link") or "").strip()
+    title = (row.get("title") or "").strip()
+    if not url and not title:
+        return None
+    return RawItem(
+        id=make_id(url or title),
+        feed_id="fmp:fmp-articles",
+        source=(row.get("site") or "Financial Modeling Prep"),
+        url=url, title=title, body=_clean(row.get("content") or ""),
+        symbol=_first_ticker(row.get("tickers") or ""),
+        published_at=_parse_dt(row.get("date") or ""),
+        fetched_at=fetched_at,
+    )
