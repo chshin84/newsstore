@@ -7,7 +7,10 @@ from .fetcher import DEFAULT_HEADERS
 
 log = logging.getLogger("newsstore.collect.body_fetch")
 
-BODY_SELECTORS: dict[str, str] = {"한국경제": ".article-body"}
+# 본문 스크랩 대상 소스 → CSS 셀렉터. "본문만" 가지치기(2026-07-19)로 유일 대상이던
+# 한국경제(hankyung, 클라우드 403)가 제거되어 현재 비어 있다 — enrich_bodies는 no-op(feature 휴면).
+# 스크랩이 필요한 소스가 생기면 여기 등록한다(드리프트 가드가 feeds.yaml의 실제 source와 정합을 강제).
+BODY_SELECTORS: dict[str, str] = {}
 MIN_BODY_CHARS = 80
 MAX_FETCH_PER_FEED = 10
 ARTICLE_TIMEOUT_S = 6.0

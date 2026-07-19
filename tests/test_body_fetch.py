@@ -85,6 +85,7 @@ def _hk(i, body=""):
                    url=f"https://e/{i}", title=f"t{i}", body=body, fetched_at=NOW)
 
 def test_enrich_fills_whitelisted_new_headline(monkeypatch):
+    monkeypatch.setitem(body_fetch.BODY_SELECTORS, "한국경제", ".article-body")   # 프로덕션 맵과 무관히 메커니즘 검증(주입)
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)
     monkeypatch.setattr(body_fetch, "fetch_body", lambda c, u, s: "채운 본문 " * 5)
     items = [_hk("a"), _hk("b")]
@@ -93,6 +94,7 @@ def test_enrich_fills_whitelisted_new_headline(monkeypatch):
     assert out[0].title == "ta"                      # title 불변
 
 def test_enrich_skips_non_whitelist_and_stored_and_has_body(monkeypatch):
+    monkeypatch.setitem(body_fetch.BODY_SELECTORS, "한국경제", ".article-body")   # 프로덕션 맵과 무관히 메커니즘 검증(주입)
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)
     monkeypatch.setattr(body_fetch, "fetch_body", lambda c, u, s: "X" * 100)
     other = RawItem(id="o", feed_id="bz", source="Benzinga", url="https://e/o", title="o", fetched_at=NOW)
@@ -101,6 +103,7 @@ def test_enrich_skips_non_whitelist_and_stored_and_has_body(monkeypatch):
     assert other.body == "" and stored.body == "" and hasbody.body == "already"
 
 def test_enrich_caps_per_feed(monkeypatch):
+    monkeypatch.setitem(body_fetch.BODY_SELECTORS, "한국경제", ".article-body")   # 프로덕션 맵과 무관히 메커니즘 검증(주입)
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)
     calls = {"n": 0}
     def fb(c, u, s): calls["n"] += 1; return "Y" * 100
@@ -110,6 +113,7 @@ def test_enrich_caps_per_feed(monkeypatch):
     assert calls["n"] == MAX_FETCH_PER_FEED          # 상한만 fetch
 
 def test_enrich_logs_error_on_high_empty_rate(monkeypatch, caplog):
+    monkeypatch.setitem(body_fetch.BODY_SELECTORS, "한국경제", ".article-body")   # 프로덕션 맵과 무관히 메커니즘 검증(주입)
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)
     monkeypatch.setattr(body_fetch, "fetch_body", lambda c, u, s: "")   # 전부 빈본문
     with caplog.at_level("ERROR"):

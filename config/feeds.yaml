@@ -1,4 +1,6 @@
 # config/feeds.yaml — verified 2026-06-12 (KR IP, Docker)
+# "본문만" 가지치기 2026-07-19 — 제목+요약(summary/full)이 실제로 오는 소스만 활성화한다.
+# 본문 없는 headline 전용·죽은 피드(Benzinga·WSJ 등)는 제거하고 사유는 docs/data-sources.md에 이관했다.
 feeds:
   # ── 한국 (연합인포맥스 = 연합뉴스 금융단말 자회사) ──
   # infomax는 pubDate를 offset 없는 naive KST로 발행 → tz_offset: 9 로 보정(2026-06-12 검증)
@@ -11,20 +13,8 @@ feeds:
   - {feed_id: infomax_feature,     url: "https://news.einfomax.co.kr/rss/S1N13.xml", source: 인포맥스, asset_hint: kr_market, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: analysis}
   - {feed_id: infomax_column,      url: "https://news.einfomax.co.kr/rss/S1N9.xml",  source: 인포맥스, asset_hint: opinion, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: analysis}
   - {feed_id: infomax_contrib_ext, url: "https://news.einfomax.co.kr/rss/S1N12.xml", source: 인포맥스, asset_hint: research, language: ko, poll_minutes: 360, body_mode: summary, tz_offset: 9, tier: analysis}
-  # infomax_contrib 프로빙 실패(entries=0) 2026-06-28 — S1N19 피드 비어있음, 제외
-  # - {feed_id: infomax_contrib,     url: "https://news.einfomax.co.kr/rss/S1N19.xml", source: 인포맥스, asset_hint: research, language: ko, poll_minutes: 360, body_mode: summary, tz_offset: 9, tier: analysis}
   - {feed_id: infomax_realestate,  url: "https://news.einfomax.co.kr/rss/S1N17.xml", source: 인포맥스, asset_hint: kr_realestate, language: ko, poll_minutes: 60, body_mode: summary, tz_offset: 9, tier: wire}
-  # ── 한국 독립 경제지 (연합 계열 밖) ──
-  # ── 한국경제(한경) ── Cloud Run 데이터센터 IP가 403 차단(2026-07-09 회귀 — 직접 RSS 6종 무수집).
-  # 집(주거 IP)에선 정상이므로 6종은 주석 보존(향후 집 PC 수집 시 되살림). 클라우드는 구글뉴스 경유로
-  # 커버 복구(site:hankyung.com — 제목만). 매경·인포맥스는 클라우드 IP를 안 막아 그대로 유지.
-  # - {feed_id: hankyung,   url: "https://www.hankyung.com/feed/finance",  source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # 403(datacenter IP)
-  # - {feed_id: hk_economy,    url: "https://www.hankyung.com/feed/economy",       source: 한국경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
-  # - {feed_id: hk_realestate, url: "https://www.hankyung.com/feed/realestate",    source: 한국경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
-  # - {feed_id: hk_it,         url: "https://www.hankyung.com/feed/it",            source: 한국경제, asset_hint: kr_tech, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
-  # - {feed_id: hk_intl,       url: "https://www.hankyung.com/feed/international", source: 한국경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
-  # - {feed_id: hk_society,    url: "https://www.hankyung.com/feed/society",       source: 한국경제, asset_hint: kr_social, language: ko, poll_minutes: 30, body_mode: headline, tier: wire}   # 403
-  - {feed_id: gn_hankyung, url: "https://news.google.com/rss/search?q=site:hankyung.com+when:24h&hl=ko&gl=KR&ceid=KR:ko", source: 한국경제, asset_hint: kr_market, language: ko, poll_minutes: 30, body_mode: headline}   # 한경 우회(구글뉴스 경유, 제목만) — 직접 피드가 클라우드 403이라 커버 복구
+  # ── 한국 독립 경제지 (연합 계열 밖) ── 매경은 클라우드 IP를 안 막아 유지. 한경 직접 RSS(6종)는 클라우드 403이라 제거(사유 docs/data-sources.md).
   - {feed_id: mk_stock,   url: "https://www.mk.co.kr/rss/50200011/",     source: 매일경제, asset_hint: kr_stock, language: ko, poll_minutes: 30, body_mode: summary}   # 프로빙 HTTP 403(2026-06-28) — 기존 피드, 범위 밖
   # mk.co.kr: Docker 프로빙은 403(IP 차단)이나 프로덕션·브라우저 정상 — 활성 유지
   - {feed_id: mk_economy,    url: "https://www.mk.co.kr/rss/30100041/", source: 매일경제, asset_hint: kr_macro, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
@@ -33,55 +23,35 @@ feeds:
   - {feed_id: mk_intl,       url: "https://www.mk.co.kr/rss/30300018/", source: 매일경제, asset_hint: global, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
   - {feed_id: mk_corp,       url: "https://www.mk.co.kr/rss/50100032/", source: 매일경제, asset_hint: kr_corp, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
   - {feed_id: mk_realestate, url: "https://www.mk.co.kr/rss/50300009/", source: 매일경제, asset_hint: kr_realestate, language: ko, poll_minutes: 30, body_mode: summary, tier: wire}
-  # ── 미국 주식/크립토/원자재 (Benzinga: /feed 열림, 요약 풍부) ──
-  - {feed_id: bz_news,     url: "https://www.benzinga.com/news/feed",                   source: Benzinga, asset_hint: us_stock, poll_minutes: 5,  body_mode: summary}
-  - {feed_id: bz_markets,  url: "https://www.benzinga.com/markets/feed",                source: Benzinga, asset_hint: us_market, poll_minutes: 5,  body_mode: summary}
-  - {feed_id: bz_movers,   url: "https://www.benzinga.com/movers/feed",                 source: Benzinga, asset_hint: us_stock, poll_minutes: 5,  body_mode: summary}
-  - {feed_id: bz_crypto,   url: "https://www.benzinga.com/markets/cryptocurrency/feed", source: Benzinga, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
-  - {feed_id: bz_commod,   url: "https://www.benzinga.com/markets/commodities/feed",    source: Benzinga, asset_hint: commodity, poll_minutes: 60, body_mode: summary}
-  - {feed_id: bz_largecap,   url: "https://www.benzinga.com/news/large-cap/feed",        source: Benzinga, asset_hint: us_stock, poll_minutes: 15, body_mode: summary, tier: wire}
-  # bz_smallcap 재프로빙 실패(entries=0) 2026-06-28 UA적용 — /topic/small-caps/feed 응답 있으나 항목 없음, 제외
-  # - {feed_id: bz_smallcap,  url: "https://www.benzinga.com/topic/small-caps/feed",                source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_insider,    url: "https://www.benzinga.com/news/insider-trades/feed",   source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_tech,       url: "https://www.benzinga.com/tech/feed",                  source: Benzinga, asset_hint: tech,     poll_minutes: 15, body_mode: summary, tier: wire}
-  - {feed_id: bz_ai,         url: "https://www.benzinga.com/topic/ai/feed",              source: Benzinga, asset_hint: tech,     poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_etf,        url: "https://www.benzinga.com/etfs/feed",                  source: Benzinga, asset_hint: etf,      poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_rumors,     url: "https://www.benzinga.com/news/rumors/feed",           source: Benzinga, asset_hint: rumor,    poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_offerings,  url: "https://www.benzinga.com/news/offerings/feed",        source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_ideas,      url: "https://www.benzinga.com/trading-ideas/feed",         source: Benzinga, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: bz_sotd,       url: "https://www.benzinga.com/topic/stock-of-the-day/feed", source: Benzinga, asset_hint: us_stock, poll_minutes: 60, body_mode: summary, tier: wire}
-  - {feed_id: bz_afterhours, url: "https://www.benzinga.com/after-hours-center/feed",    source: Benzinga, asset_hint: us_stock, poll_minutes: 60, body_mode: summary, tier: wire}
-  - {feed_id: bz_bonds,      url: "https://www.benzinga.com/markets/bonds/feed",         source: Benzinga, asset_hint: us_bond,  poll_minutes: 60, body_mode: summary, tier: wire}
   # ── 미국·글로벌 종합 경제지 (2026-07-06 curl 실측: HTTP·items·desc 확인. 인도지 Economic Times·Business Standard는 추적 자산 밖이라 제외) ──
   - {feed_id: cnbc,          url: "https://www.cnbc.com/id/100003114/device/rss/rss.html", source: CNBC, asset_hint: "us_market,global", language: en, poll_minutes: 30, body_mode: summary}   # 30 items · per-item desc
-  - {feed_id: yahoo_finance, url: "https://finance.yahoo.com/news/rssindex",               source: Yahoo Finance, asset_hint: us_stock, language: en, poll_minutes: 30, body_mode: headline}   # 50 items · 헤드라인만
   - {feed_id: forbes_biz,    url: "https://www.forbes.com/business/feed/",                 source: Forbes, asset_hint: global, language: en, poll_minutes: 60, body_mode: summary}   # 25 items · per-item desc
   - {feed_id: fortune,       url: "https://fortune.com/feed",                             source: Fortune, asset_hint: global, language: en, poll_minutes: 60, body_mode: full}   # content:encoded 전문(301→200)
-  - {feed_id: seekingalpha,  url: "https://seekingalpha.com/market_currents.xml",         source: Seeking Alpha, asset_hint: us_market, language: en, poll_minutes: 60, body_mode: headline}   # market currents · 저volume(7)
+  # ── NYT 공식 RSS (2026-07-19 프로빙: 본문 스니펫 확인, description 채워짐) ──
+  - {feed_id: nyt_business,   url: "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",   source: NYT, asset_hint: us_stock, language: en, poll_minutes: 30, body_mode: summary}
+  - {feed_id: nyt_economy,    url: "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml",    source: NYT, asset_hint: us_macro, language: en, poll_minutes: 30, body_mode: summary}
+  - {feed_id: nyt_dealbook,   url: "https://rss.nytimes.com/services/xml/rss/nyt/DealBook.xml",   source: NYT, asset_hint: us_stock, language: en, poll_minutes: 30, body_mode: summary}
+  - {feed_id: nyt_technology, url: "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml", source: NYT, asset_hint: tech, language: en, poll_minutes: 30, body_mode: summary}
+  - {feed_id: nyt_world,      url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",      source: NYT, asset_hint: global, language: en, poll_minutes: 30, body_mode: summary}
+  - {feed_id: nyt_yourmoney,  url: "https://rss.nytimes.com/services/xml/rss/nyt/YourMoney.xml",  source: NYT, asset_hint: personal_finance, language: en, poll_minutes: 30, body_mode: summary}
+  # ── 기타 미국·글로벌 종합 (2026-07-19 프로빙: 본문 스니펫 확인) ──
+  - {feed_id: guardian_business, url: "https://www.theguardian.com/uk/business/rss", source: Guardian, asset_hint: global, language: en, poll_minutes: 60, body_mode: summary}
+  - {feed_id: npr_economy,       url: "https://feeds.npr.org/1017/rss.xml",           source: NPR, asset_hint: us_macro, language: en, poll_minutes: 60, body_mode: summary}
   # ── 크립토 전용 ──
   - {feed_id: coindesk,      url: "https://www.coindesk.com/arc/outboundfeeds/rss/", source: CoinDesk, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   - {feed_id: cointelegraph, url: "https://cointelegraph.com/rss",                   source: Cointelegraph, asset_hint: crypto, poll_minutes: 60, body_mode: summary}
   # ── FX / 금리·중앙은행 ──
   - {feed_id: forexlive,    url: "https://investinglive.com/feed/news",       source: InvestingLive, asset_hint: fx, poll_minutes: 60, body_mode: full}   # forexlive.com→investinglive.com 사명변경(301), URL 갱신 2026-06-12
   - {feed_id: forexlive_cb, url: "https://investinglive.com/feed/centralbank", source: InvestingLive, asset_hint: "rates,central_bank", poll_minutes: 60, body_mode: full}
-  - {feed_id: investing_fx, url: "https://www.investing.com/rss/news_1.rss",   source: Investing, asset_hint: fx, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증)
   # ── 채권/매크로/정책 ──
   - {feed_id: fed,           url: "https://www.federalreserve.gov/feeds/press_all.xml", source: Fed, asset_hint: us_policy, poll_minutes: 60, body_mode: summary}
-  - {feed_id: ecb,           url: "https://www.ecb.europa.eu/rss/press.html",            source: ECB, asset_hint: eu_policy, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증); HTTP 200·RSS 정상
-  - {feed_id: investing_bond, url: "https://www.investing.com/rss/bonds.rss",            source: Investing, asset_hint: us_bond, poll_minutes: 60, body_mode: headline}   # per-item 본문 없음(2026-06-12 검증); HTTP 200·RSS 정상
   # ── 중앙은행·1차 데이터 (primary; URL은 프로빙으로 확정) ──
   - {feed_id: bis_cbspeeches, url: "https://www.bis.org/doclist/cbspeeches.rss", source: BIS, asset_hint: global_policy, poll_minutes: 360, body_mode: summary, tier: primary}
-  # bis_pub 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /doclist/press.rss 경로도 없음, 제외
-  # - {feed_id: bis_pub,      url: "https://www.bis.org/doclist/press.rss",                         source: BIS, asset_hint: global_policy, poll_minutes: 720, body_mode: headline, tier: primary}
   - {feed_id: fed_speeches,   url: "https://www.federalreserve.gov/feeds/speeches.xml",        source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
   - {feed_id: fed_fomc,       url: "https://www.federalreserve.gov/feeds/press_monetary.xml", source: Fed, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: primary}
   - {feed_id: eia_today,      url: "https://www.eia.gov/rss/todayinenergy.xml",  source: EIA, asset_hint: energy, poll_minutes: 360, body_mode: summary, tier: primary}
-  # bls_news/opec_press: 배포 스모크에서 프로덕션(Cloud Run IP)도 403 차단 확인(2026-06-28) — 제외
-  # - {feed_id: bls_news,    url: "https://www.bls.gov/feed/news_release.rss",            source: BLS, asset_hint: us_macro, poll_minutes: 720, body_mode: headline, tier: primary}
-  # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ──
+  # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ── description 채워진 요약분만 유지(headline 3종 제거)
   - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: summary}   # description 채워짐 → 승격(2026-06-12 검증)
-  - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech, poll_minutes: 15, body_mode: headline}
-  - {feed_id: bbg_economics,  url: "https://feeds.bloomberg.com/economics/news.rss",  source: Bloomberg, asset_hint: macro, poll_minutes: 15, body_mode: headline}
   - {feed_id: bbg_korea,      url: "https://flipboard.com/@bloomberg/korea-gaa61f1tz.rss", source: Bloomberg, asset_hint: kr_market, poll_minutes: 15, body_mode: summary}
   # Bloomberg 카테고리 추가 (desc 본문 있음, 2026-06-12 테스트: business/politics/bview 30건, crypto 9, wealth 3)
   - {feed_id: bbg_business,   url: "https://feeds.bloomberg.com/business/news.rss",   source: Bloomberg, asset_hint: business, poll_minutes: 15, body_mode: summary}
@@ -89,51 +59,16 @@ feeds:
   - {feed_id: bbg_opinion,    url: "https://feeds.bloomberg.com/bview/news.rss",      source: Bloomberg, asset_hint: opinion,  poll_minutes: 30, body_mode: summary}
   - {feed_id: bbg_crypto,     url: "https://feeds.bloomberg.com/crypto/news.rss",     source: Bloomberg, asset_hint: crypto,   poll_minutes: 30, body_mode: summary}
   - {feed_id: bbg_wealth,     url: "https://feeds.bloomberg.com/wealth/news.rss",     source: Bloomberg, asset_hint: wealth,   poll_minutes: 30, body_mode: summary}
-  - {feed_id: bbg_industries, url: "https://feeds.bloomberg.com/industries/news.rss", source: Bloomberg, asset_hint: industries, poll_minutes: 30, body_mode: headline, tier: wire}
-  # bbg_green 제외(2026-07-19) — https://feeds.bloomberg.com/green/news.rss 가 어디서나 HTTP 404(URL 소멸).
-  # - {feed_id: bbg_green,      url: "https://feeds.bloomberg.com/green/news.rss",      source: Bloomberg, asset_hint: "esg,energy", poll_minutes: 30, body_mode: headline, tier: wire}
-  # ── 매크로/루머 헤드라인 (Google News 쿼리; 본문 없음) ──
-  - {feed_id: gn_rumor,         url: "https://news.google.com/rss/search?q=(reportedly+OR+%22in+talks%22+OR+%22sources+say%22)+(stock+OR+merger+OR+acquisition+OR+raise)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: rumor, poll_minutes: 30, body_mode: headline}
-  - {feed_id: gn_kr_chips,      url: "https://news.google.com/rss/search?q=(%22SK+Hynix%22+OR+Samsung)+(hedge+fund+OR+leverage+OR+chip)+when:12h&hl=en-US&gl=US&ceid=US:en", source: GoogleNews, asset_hint: kr_stock, poll_minutes: 30, body_mode: headline}
-  # ── Reuters (직접 RSS 폐지됨 → Google News site:reuters.com 경유; 본문 없음) ──
-  - {feed_id: reuters_top,      url: "https://news.google.com/rss/search?q=site:reuters.com+when:24h&hl=en-US&gl=US&ceid=US:en", source: Reuters, asset_hint: global, poll_minutes: 20, body_mode: headline}
   # ── 특수: 트럼프 원문 / Axios ──
   - {feed_id: trump_truth, url: "https://trumpstruth.org/feed",        source: TruthSocial, asset_hint: "trump,policy", poll_minutes: 15, body_mode: full}
   - {feed_id: axios,       url: "https://www.axios.com/feeds/feed.rss", source: Axios, asset_hint: "policy,scoop", poll_minutes: 60, body_mode: summary}
   # ── 무료 리서치 (analysis; 프로빙으로 확정, 실패는 주석 제외) ──
   - {feed_id: fed_liberty,     url: "https://libertystreeteconomics.newyorkfed.org/feed/", source: LibertyStreet, asset_hint: us_policy, poll_minutes: 360, body_mode: summary, tier: analysis}
-  # imf_blog 재프로빙 실패(HTTP 403) 2026-06-28 UA적용 — /en/blogs/rss 차단(이전 entries=0에서 403으로 변경), 제외
-  # - {feed_id: imf_blog,     url: "https://www.imf.org/en/blogs/rss",                              source: IMF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: voxeu,        url: "https://cepr.org/rss/vox-content",                              source: VoxEU, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
-  # nber_wp 제외(2026-07-19) — https://www.nber.org/rss/new.xml 이 어디서나 HTTP 403(집·클라우드 모두 차단).
-  # - {feed_id: nber_wp,         url: "https://www.nber.org/rss/new.xml",                    source: NBER, asset_hint: research, poll_minutes: 720, body_mode: headline, tier: analysis}
   - {feed_id: boe_underground, url: "https://bankunderground.co.uk/feed/",                 source: BankUnderground, asset_hint: uk_policy, poll_minutes: 720, body_mode: summary, tier: analysis}
-  # cfr_setser 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /blog/setser.rss 경로 없음, 제외
-  # - {feed_id: cfr_setser,   url: "https://www.cfr.org/blog/setser.rss",                           source: CFR, asset_hint: flows, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: calculated_risk, url: "https://www.calculatedriskblog.com/feeds/posts/default", source: CalculatedRisk, asset_hint: us_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
   - {feed_id: damodaran,       url: "https://aswathdamodaran.blogspot.com/feeds/posts/default", source: Damodaran, asset_hint: equity, poll_minutes: 720, body_mode: summary, tier: analysis}
   - {feed_id: klement,         url: "https://klementoninvesting.substack.com/feed",        source: Klement, asset_hint: macro, poll_minutes: 720, body_mode: summary, tier: analysis}
-  # ── 에너지·원자재 (사용자 신규 토픽; 프로빙) ──
-  # iea_news 재프로빙 실패(HTTP 404) 2026-06-28 UA적용 — /news.rss 경로도 없음, 제외
-  # - {feed_id: iea_news,     url: "https://www.iea.org/news.rss",                                  source: IEA, asset_hint: energy, poll_minutes: 360, body_mode: headline, tier: primary}
-  # opec_press: 배포 스모크에서 프로덕션(Cloud Run IP)도 403 차단 확인(2026-06-28) — 제외
-  # - {feed_id: opec_press,  url: "https://www.opec.org/opec_web/en/press_room/rss.xml", source: OPEC, asset_hint: energy, poll_minutes: 720, body_mode: headline, tier: primary}
-  # kitco_metals 재프로빙 실패(entries=0) 2026-06-28 UA적용 — /news/category/mining/feed 응답 있으나 항목 없음, 제외
-  # - {feed_id: kitco_metals, url: "https://www.kitco.com/news/category/mining/feed",              source: Kitco, asset_hint: metals, poll_minutes: 60, body_mode: summary, tier: wire}
-  # ── 한국 기관 (RSS 경로 불확실 — 프로빙, 미제공 시 주석 제외) ──
-  # kcif_flash 프로빙 실패(HTTP 400) 2026-06-28 — RSS 경로 미확인, 제외
-  # - {feed_id: kcif_flash,   url: "https://www.kcif.or.kr/rss/newsflash.xml",  source: KCIF, asset_hint: global_macro, poll_minutes: 360, body_mode: summary, tier: analysis}
-  # bok_press 프로빙 실패(HTTP 500) 2026-06-28 — 한국은행 RSS 서버 오류, 제외
-  # - {feed_id: bok_press,    url: "https://www.bok.or.kr/portal/bbs/B0000338/rss.do", source: 한국은행, asset_hint: kr_policy, poll_minutes: 360, body_mode: headline, tier: primary}
-  # ── 주요 와이어 (페이월; 공개 RSS 헤드라인/요약만, 스크래핑 금지) ──
-  - {feed_id: wsj_markets,  url: "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",   source: WSJ, asset_hint: us_market, poll_minutes: 15, body_mode: summary, tier: wire}
-  - {feed_id: wsj_world,    url: "https://feeds.a.dj.com/rss/RSSWorldNews.xml",      source: WSJ, asset_hint: global, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: wsj_business, url: "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml",  source: WSJ, asset_hint: us_stock, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: wsj_tech,     url: "https://feeds.a.dj.com/rss/RSSWSJD.xml",           source: WSJ, asset_hint: tech, poll_minutes: 30, body_mode: summary, tier: wire}
-  - {feed_id: wsj_opinion,  url: "https://feeds.a.dj.com/rss/RSSOpinion.xml",        source: WSJ, asset_hint: opinion, poll_minutes: 60, body_mode: summary, tier: analysis}
-  - {feed_id: ft_home,      url: "https://www.ft.com/rss/home",                      source: FT, asset_hint: global, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: ft_markets,   url: "https://www.ft.com/markets?format=rss",            source: FT, asset_hint: global_market, poll_minutes: 30, body_mode: headline, tier: wire}
-  - {feed_id: ft_economy,   url: "https://www.ft.com/global-economy?format=rss",     source: FT, asset_hint: macro, poll_minutes: 30, body_mode: headline, tier: wire}
 
   # ── 스펙(2026-06-28 피드 확장) §4.6 잔여 후보 — 의식적 드롭 (사용자 결정 2026-07-03, #30) ──
   # 아래 후보들은 프로빙을 수행하지 않은 채 드롭한다(미시도≠실패 — 흔적을 남겨 '다뤄진 척' 방지).

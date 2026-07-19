@@ -89,6 +89,7 @@ def test_collect_once_records_feed_health(store):
 
 def test_collect_once_fills_hankyung_body(monkeypatch, store):
     from newsstore.collect import body_fetch
+    monkeypatch.setitem(body_fetch.BODY_SELECTORS, "한국경제", ".article-body")   # 본문만 가지치기로 프로덕션 맵은 비었음 — 메커니즘은 주입으로 검증
     monkeypatch.setattr(body_fetch.time, "sleep", lambda *_: None)
 
     RSS_HK = ("<rss><channel><item><title>제목</title>"
