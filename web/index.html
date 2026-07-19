@@ -475,7 +475,7 @@
         try {
           const ss = await getDoc(doc(db, "meta", "sources"));
           const names = (ss.exists() && Array.isArray(ss.data().sources)) ? ss.data().sources.slice() : [];
-          names.push("네이버");
+          // 네이버 아이템은 실제 발행처(매일경제·서울경제 등)로 저장되므로 "네이버" 행은 두지 않는다.
           const res = await Promise.all(names.map(async (nm) => {
             try {
               const qs = query(collection(db, "items"), where("source", "==", nm), orderBy("fetched_at", "desc"), limit(1));
@@ -489,7 +489,8 @@
             if (r.err) return { lv: "bad", nm: r.nm, det: "조회 오류: " + r.err, wh: "—", k: -2 };
             if (r.ms == null) return { lv: "bad", nm: r.nm, det: "수집 기록 없음", wh: "없음", k: -1 };
             const age = now - r.ms;
-            const lv = age < 6 * 3600e3 ? "ok" : age < 48 * 3600e3 ? "warn" : "bad";
+            // 소스마다 발행 주기가 크게 달라(15분 RSS ~ 주단위 리서치) 임계값을 넉넉히: 24h·7일.
+            const lv = age < 24 * 3600e3 ? "ok" : age < 7 * 86400e3 ? "warn" : "bad";
             return { lv, nm: r.nm, det: r.title ? "최근: " + r.title.slice(0, 46) : "", wh: dsRelTime(r.ms, now), k: r.ms };
           });
           rows.sort((a, b) => a.k - b.k);   // 오래된·오류 먼저 위로
