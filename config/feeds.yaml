@@ -62,7 +62,7 @@ feeds:
   - {feed_id: fed_speeches,   url: "https://www.federalreserve.gov/feeds/speeches.xml",        source: Fed, asset_hint: us_policy, poll_minutes: 15, body_mode: summary, tier: primary}
   - {feed_id: fed_fomc,       url: "https://www.federalreserve.gov/feeds/press_monetary.xml", source: Fed, asset_hint: us_policy, poll_minutes: 15, body_mode: summary, tier: primary}
   - {feed_id: eia_today,      url: "https://www.eia.gov/rss/todayinenergy.xml",  source: EIA, asset_hint: energy, poll_minutes: 15, body_mode: summary, tier: primary}
-  # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ── description 채워진 요약분만 유지(headline 3종 제거)
+  # ── Bloomberg 퍼스트파티 RSS (feed 엔드포인트 열림, 원본 스쿱 포착) ── 전 카테고리 본문 O(2026-07-19 [xml] 재검증 — technology/economics/industries는 CDATA라 이전 'headline' 판정이 오독이었음, 되살림)
   - {feed_id: bbg_markets,    url: "https://feeds.bloomberg.com/markets/news.rss",    source: Bloomberg, asset_hint: global_market, poll_minutes: 15, body_mode: summary}   # description 채워짐 → 승격(2026-06-12 검증)
   - {feed_id: bbg_korea,      url: "https://flipboard.com/@bloomberg/korea-gaa61f1tz.rss", source: Bloomberg, asset_hint: kr_market, poll_minutes: 15, body_mode: summary}
   # Bloomberg 카테고리 추가 (desc 본문 있음, 2026-06-12 테스트: business/politics/bview 30건, crypto 9, wealth 3)
@@ -71,6 +71,9 @@ feeds:
   - {feed_id: bbg_opinion,    url: "https://feeds.bloomberg.com/bview/news.rss",      source: Bloomberg, asset_hint: opinion,  poll_minutes: 15, body_mode: summary}
   - {feed_id: bbg_crypto,     url: "https://feeds.bloomberg.com/crypto/news.rss",     source: Bloomberg, asset_hint: crypto,   poll_minutes: 15, body_mode: summary}
   - {feed_id: bbg_wealth,     url: "https://feeds.bloomberg.com/wealth/news.rss",     source: Bloomberg, asset_hint: wealth,   poll_minutes: 15, body_mode: summary}
+  - {feed_id: bbg_technology, url: "https://feeds.bloomberg.com/technology/news.rss", source: Bloomberg, asset_hint: tech,   poll_minutes: 15, body_mode: summary}
+  - {feed_id: bbg_economics,  url: "https://feeds.bloomberg.com/economics/news.rss",  source: Bloomberg, asset_hint: macro,  poll_minutes: 15, body_mode: summary}
+  - {feed_id: bbg_industries, url: "https://feeds.bloomberg.com/industries/news.rss", source: Bloomberg, asset_hint: industries, poll_minutes: 15, body_mode: summary}
   # ── 특수: 트럼프 원문 / Axios ──
   - {feed_id: trump_truth, url: "https://trumpstruth.org/feed",        source: TruthSocial, asset_hint: "trump,policy", poll_minutes: 15, body_mode: full}
   - {feed_id: axios,       url: "https://www.axios.com/feeds/feed.rss", source: Axios, asset_hint: "policy,scoop", poll_minutes: 15, body_mode: summary}
