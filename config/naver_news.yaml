@@ -1,15 +1,58 @@
 # config/naver_news.yaml — 네이버 검색 뉴스 활성 키워드(SSOT). 켜고 끄기·키워드는 여기서만.
+# 키워드는 카테고리가 아니라 전문검색어(그 단어가 든 기사). 신호 높은 특정어 위주(2026-07-19 뉴스 근거로 큐레이션).
 poll_minutes: 15        # 쿼리별 최소 재수집 간격
 display: 100            # 요청당 결과 수(네이버 최대 100)
 queries:
-  - {q: 증시,     asset_hint: kr_stock}
-  - {q: 코스피,   asset_hint: kr_stock}
-  - {q: 경제,     asset_hint: kr_macro}
-  - {q: 금리,     asset_hint: kr_macro}
-  - {q: 환율,     asset_hint: kr_fx}
-  - {q: 반도체,   asset_hint: kr_tech}
-  - {q: AI,       asset_hint: tech}
-  - {q: 2차전지,  asset_hint: kr_tech}
-  - {q: 부동산,   asset_hint: kr_realestate}
-  - {q: 유가,     asset_hint: commodity}
-  - {q: 원자재,   asset_hint: commodity}
+  # 시장·지표
+  - {q: 코스피,        asset_hint: kr_stock}
+  - {q: 코스닥,        asset_hint: kr_stock}
+  - {q: 원달러환율,    asset_hint: kr_fx}
+  - {q: 기준금리,      asset_hint: kr_macro}
+  - {q: 레버리지ETF,   asset_hint: kr_stock}
+  - {q: 서학개미,      asset_hint: kr_stock}
+  # 반도체·메모리·AI
+  - {q: 반도체,        asset_hint: kr_tech}
+  - {q: 메모리,        asset_hint: kr_tech}
+  - {q: DRAM,          asset_hint: kr_tech}
+  - {q: HBM,           asset_hint: kr_tech}
+  - {q: 하이닉스,      asset_hint: kr_stock}
+  - {q: 삼성전자,      asset_hint: kr_stock}
+  - {q: 엔비디아,      asset_hint: us_stock}
+  - {q: 인공지능,      asset_hint: tech}
+  - {q: AI,            asset_hint: tech}
+  - {q: 데이터센터,    asset_hint: kr_tech}
+  # AI 인프라·특별 테마
+  - {q: 광통신,        asset_hint: kr_tech}
+  - {q: 액침냉각,      asset_hint: kr_tech}
+  - {q: 유리기판,      asset_hint: kr_tech}
+  - {q: 전력설비,      asset_hint: kr_tech}
+  - {q: 전력,          asset_hint: kr_macro}
+  - {q: 온디바이스AI,  asset_hint: tech}
+  - {q: 생산성,        asset_hint: kr_macro}
+  # 로봇
+  - {q: 휴머노이드,    asset_hint: kr_tech}
+  - {q: 로보틱스,      asset_hint: kr_tech}
+  # 원자력·에너지
+  - {q: 원전,          asset_hint: kr_stock}
+  - {q: SMR,           asset_hint: kr_stock}
+  - {q: 우라늄,        asset_hint: commodity}
+  - {q: 해상풍력,      asset_hint: kr_stock}
+  # 성장 섹터
+  - {q: 2차전지,       asset_hint: kr_tech}
+  - {q: 방산,          asset_hint: kr_stock}
+  - {q: 조선,          asset_hint: kr_stock}
+  - {q: 바이오,        asset_hint: kr_stock}
+  - {q: 비만치료제,    asset_hint: kr_stock}
+  - {q: 초전도체,      asset_hint: kr_stock}
+  # 거시·글로벌
+  - {q: 물가,          asset_hint: kr_macro}
+  - {q: 부동산,        asset_hint: kr_realestate}
+  - {q: 관세,          asset_hint: global_macro}
+  - {q: 연준,          asset_hint: us_policy}
+  - {q: 중동전쟁,      asset_hint: geopolitics}
+  # 원자재·크립토
+  - {q: 유가,          asset_hint: commodity}
+  - {q: 비트코인,      asset_hint: crypto}
+  - {q: 크립토,        asset_hint: crypto}
+  - {q: 스테이블코인,  asset_hint: crypto}
+  - {q: 암호화폐,      asset_hint: crypto}
