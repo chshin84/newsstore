@@ -198,6 +198,7 @@
       <div class="tabs">
         <button class="tab active" id="tabFeed">피드</button>
         <button class="tab tabprice" id="tabPrice">상태</button>
+        <button class="tab" id="tabResearch">리서치</button>
       </div>
       <div class="controls" id="feedControls" hidden>
         <label for="src">소스</label>
@@ -215,11 +216,13 @@
       <nav class="navtree" id="navTree">
         <a href="#feed" data-tab="feed" class="navlink navtab navleaf-top">피드</a>
         <a href="#price" data-tab="price" class="navlink navtab navleaf-top">상태</a>
+        <a href="#research" data-tab="research" class="navlink navtab navleaf-top">리서치</a>
       </nav>
     </aside>
     <main><div class="wrap">
       <div id="feedView" hidden><div id="list"></div></div>
       <div id="priceView" hidden><div id="priceDoc"></div></div>
+      <div id="researchView" hidden><div id="researchList"></div></div>
     </div></main>
   </div>
   <div class="navscrim" id="navScrim" hidden></div>
@@ -297,9 +300,10 @@
       tagSel.value = cur;
     }
 
-    function render(items) {
-      if (!items.length) { listEl.innerHTML = `<div class="empty">표시할 뉴스가 없습니다.</div>`; return; }
-      listEl.innerHTML = items.map(it => {
+    function render(items, el) {
+      el = el || listEl;                     // 대상 컨테이너(피드=list, 리서치=researchList)
+      if (!items.length) { el.innerHTML = `<div class="empty">표시할 뉴스가 없습니다.</div>`; return; }
+      el.innerHTML = items.map(it => {
         const pub = it.published_at && it.published_at.toDate ? it.published_at.toDate() : null;
         // TruthSocial은 본문을 제목칸에 싣고 있음 → 제목은 "Truth Social", 미리보기는 그 본문
         const isTS = it.source === "TruthSocial";
@@ -512,25 +516,61 @@
       }
     }
 
+    // ============================ 리서치 뷰 (analysis 티어 소스) ============================
+    // 뉴스와 소비 패턴이 다른 리서치·석학·구루 글을 별도 탭으로. 대상 소스는 meta/sources.tiers에서
+    // tier=="analysis"를 도출(하드코딩 X). Firestore in은 최대 30개라 캡. published_at 최신순.
+    const researchView = document.getElementById("researchView");
+    const researchListEl = document.getElementById("researchList");
+    const tabResearch = document.getElementById("tabResearch");
+    let researchLoaded = false;
+    async function loadResearch(bg) {
+      if (!bg) researchListEl.innerHTML = `<div class="empty">불러오는 중…</div>`;
+      try {
+        const ss = await getDoc(doc(db, "meta", "sources"));
+        const tiers = (ss.exists() && ss.data().tiers) ? ss.data().tiers : {};
+        const anal = Object.keys(tiers).filter(s => tiers[s] === "analysis").slice(0, 30);
+        if (!anal.length) { researchListEl.innerHTML = `<div class="empty">리서치 소스가 아직 없습니다.</div>`; return; }
+        const snap = await getDocs(query(collection(db, "items"),
+          where("source", "in", anal), orderBy("published_at", "desc"), limit(80)));
+        render(snap.docs.map(d => d.data()).filter(keepInFeed), researchListEl);
+      } catch (e) {
+        if (/requires an index|currently building/i.test(e.message)) {
+          researchListEl.innerHTML = `<div class="empty">색인 생성 중이에요 (최초 1회)…</div>`;
+          setTimeout(loadResearch, 20000); return;
+        }
+        researchListEl.innerHTML = `<div class="error">불러오기 실패: <code>${esc(e.message)}</code></div>`;
+      }
+    }
+    researchListEl.addEventListener("click", (e) => {         // 카드 클릭 확장(피드와 동일)
+      if (e.target.closest("a,button,select")) return;
+      const card = e.target.closest(".card.has-body");
+      if (card) card.classList.toggle("open");
+    });
+
     function showTab(which) {
-      const price = which === "price";
-      const feed = !price;
+      const price = which === "price", research = which === "research";
+      const feed = !price && !research;
       feedView.hidden = !feed; feedControls.hidden = !feed;
       priceView.hidden = !price;
+      researchView.hidden = !research;
       tabFeed.classList.toggle("active", feed);
       tabPrice.classList.toggle("active", price);
-      // 사이드바 탭(피드·상태 리프)도 현재 탭에 맞춰 active(헤더 탭과 동기화 — 둘 다 hash 라우팅)
-      const key = feed ? "feed" : "price";
+      tabResearch.classList.toggle("active", research);
+      // 사이드바 탭도 현재 탭에 맞춰 active(헤더 탭과 동기화 — 둘 다 hash 라우팅)
+      const key = feed ? "feed" : which;
       document.querySelectorAll(".navtab").forEach(a => a.classList.toggle("active", a.dataset.tab === key));
-      if (price) loadStatus();     // 상태 패널 — 열 때마다 최신 잡 헬스·신선도 로드(read 2건, 저렴)
+      if (price) loadStatus();     // 상태 패널 — 열 때마다 최신 잡 헬스·신선도 로드
+      if (research && !researchLoaded) { researchLoaded = true; loadResearch(); }
     }
     function routeFromHash() {
-      const tab = location.hash === "#price" ? "price" : "feed";   // 피드가 기본, #price만 상태 탭
+      const h = location.hash;
+      const tab = h === "#price" ? "price" : h === "#research" ? "research" : "feed";
       showTab(tab);
     }
     // 탭 클릭 → 해시 라우팅(hashchange가 showTab 실행)
     tabFeed.addEventListener("click", () => { location.hash = "#feed"; });
     tabPrice.addEventListener("click", () => { location.hash = "#price"; });
+    tabResearch.addEventListener("click", () => { location.hash = "#research"; });
     window.addEventListener("hashchange", routeFromHash);
 
     initSources();
