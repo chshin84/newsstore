@@ -76,7 +76,7 @@ $tok=(& $g auth print-access-token).Trim()
 $H=@{Authorization="Bearer $tok"; "x-goog-user-project"="daily-recap-498506"}
 $site="https://firebasehosting.googleapis.com/v1beta1/projects/daily-recap-498506/sites/daily-recap-498506"
 # 배포 대상 전체 (URL경로 → 로컬파일). 새 정적파일 추가 시 여기만 늘린다.
-$deployFiles=@{ "/index.html"="D:\projects\data-only\web\index.html"; "/config.js"="D:\projects\data-only\web\config.js" }
+$deployFiles=@{ "/index.html"="D:\projects\data-only\web\index.html"; "/config.js"="D:\projects\data-only\web\config.js"; "/dashboard.html"="D:\projects\data-only\web\dashboard.html"; "/dashboard_logic.mjs"="D:\projects\data-only\web\dashboard_logic.mjs" }
 $gzmap=@{}; $hashmap=@{}
 foreach($p in $deployFiles.Keys){
   $raw=[IO.File]::ReadAllBytes($deployFiles[$p])

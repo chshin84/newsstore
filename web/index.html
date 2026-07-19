@@ -123,6 +123,33 @@
       font-size:calc(10.5px*var(--fs)); color:var(--mut); }
     .pc-meta { font-size:calc(10px*var(--fs)); color:var(--mut); margin-top:6px; }
     @media (max-width:680px) { .pcards { grid-template-columns:1fr; } }
+
+    /* ===== 상태 패널 (수집 잡·데이터 신선도) — 웜 팔레트 + semantic 상태색, 이모지 없음 ===== */
+    .ssummary { display:flex; align-items:center; gap:13px; background:var(--card); border:1px solid var(--line);
+      border-radius:12px; padding:15px 17px; margin-bottom:16px; box-shadow:0 1px 2px var(--shadow); }
+    .sbeacon { width:11px; height:11px; border-radius:50%; flex:none; background:var(--green);
+      box-shadow:0 0 0 4px color-mix(in srgb, var(--green) 20%, transparent); }
+    .ssummary.warn .sbeacon { background:var(--imp); box-shadow:0 0 0 4px color-mix(in srgb, var(--imp) 20%, transparent); }
+    .ssummary.bad .sbeacon { background:var(--risk); box-shadow:0 0 0 4px color-mix(in srgb, var(--risk) 20%, transparent); }
+    .ssummary b { font-size:calc(15px*var(--fs)); font-weight:600; letter-spacing:-.2px; }
+    .ssummary span { display:block; color:var(--mut); font-size:calc(12.5px*var(--fs)); margin-top:1px; }
+    .slabel { font-size:calc(11px*var(--fs)); font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+      color:var(--mut); margin:16px 0 8px 2px; }
+    .srows { background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+    .strow { display:flex; align-items:center; gap:11px; padding:13px 15px; }
+    .strow + .strow { border-top:1px solid var(--line); }
+    .sdot { width:8px; height:8px; border-radius:50%; flex:none; background:var(--mut); }
+    .strow.ok .sdot { background:var(--green); } .strow.warn .sdot { background:var(--imp); } .strow.bad .sdot { background:var(--risk); }
+    .sbody { flex:1; min-width:0; }
+    .sname { font-size:calc(14px*var(--fs)); font-weight:550; }
+    .sdetail { font-size:calc(12px*var(--fs)); color:var(--mut); margin-top:2px; word-break:break-word; }
+    .schip { flex:none; font-size:calc(11px*var(--fs)); font-weight:600; padding:2px 9px; border-radius:999px;
+      background:var(--pill); color:var(--pill-fg); }
+    .strow.ok .schip { background:color-mix(in srgb, var(--green) 16%, transparent); color:var(--green); }
+    .strow.warn .schip { background:color-mix(in srgb, var(--imp) 18%, transparent); color:var(--imp); }
+    .strow.bad .schip { background:color-mix(in srgb, var(--risk) 16%, transparent); color:var(--risk); }
+    .swhen { flex:none; font-size:calc(11.5px*var(--fs)); color:var(--mut); text-align:right; min-width:56px;
+      font-variant-numeric:tabular-nums; }
     [hidden] { display:none !important; }
 
     /* ===== 모바일 베이스 (토대) ===== */
@@ -466,7 +493,7 @@
         <!-- 결정⑩(로컬 레이더 작업장 스펙): 사이트 = 피드 리더 + 가격. 스토리·리포트는
              클라우드 인리치 정지로 갱신이 멈추므로 표시만 숨긴다(코드·해시 라우트 보존 — 가역). -->
         <button class="tab active" id="tabFeed">피드</button>
-        <button class="tab tabprice" id="tabPrice">가격</button>
+        <button class="tab tabprice" id="tabPrice">상태</button>
         <button class="tab" id="tabStories" hidden>스토리</button>
         <button class="tab" id="tabReport" hidden>리포트</button>
         <div class="viewtoggle" id="viewToggle" hidden role="group" aria-label="v1 v2 뷰 전환">
@@ -501,7 +528,7 @@
           <div class="navfolder-body" id="navStoryList"><div class="navempty">불러오는 중…</div></div>
         </div>
         <a href="#feed" data-tab="feed" class="navlink navtab navleaf-top">피드</a>
-        <a href="#price" data-tab="price" class="navlink navtab navleaf-top">가격</a>
+        <a href="#price" data-tab="price" class="navlink navtab navleaf-top">상태</a>
       </nav>
     </aside>
     <main><div class="wrap">
@@ -525,6 +552,7 @@
     import { getFirestore, collection, query, orderBy, limit, where, getDocs, doc, getDoc }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { firebaseConfig } from "./config.js";
+    import { JOBS, CARDS, jobVerdict, isOverdue, relTime as dsRelTime, cardFreshness } from "./dashboard_logic.mjs";
 
     const listEl = document.getElementById("list");
     const statusEl = document.getElementById("status");
@@ -1734,10 +1762,63 @@
       const n = Number(pct); if (!Number.isFinite(n)) return "—";
       const c = pctClass(n); return `${c === "up" ? "▲" : c === "down" ? "▼" : "·"}${Math.abs(n).toFixed(2)}%`;
     }
-    async function loadPrices(bg) {
-      // 시세·가격 수집은 별개 로컬 앱(DB-news-data, DuckDB)으로 이관됨 — 이 사이트는 뉴스 전용.
-      // (prices 컬렉션은 규칙에서 제거됐다. 아래 렌더 함수는 아직 남은 잔재 — UI 리팩터 대상.)
-      priceDocEl.innerHTML = `<div class="sempty">시세 데이터는 별개 앱으로 이관됐습니다 — 이 사이트는 뉴스 전용입니다.</div>`;
+    // 시세 탭 → 수집 상태 패널. 시세·가격 수집은 별개 로컬 앱(DB-news-data)으로 이관됐고,
+    // 이 탭은 클라우드 수집 잡의 건강과 데이터 신선도를 보여준다(dashboard_logic 재사용 — 판정 SSOT).
+    const _LVLTXT = { ok: "정상", warn: "주의", bad: "점검 필요" };
+    const _toMs = (ts) => {
+      if (!ts) return null;
+      if (typeof ts.toMillis === "function") return ts.toMillis();
+      const t = Date.parse(ts); return Number.isFinite(t) ? t : null;
+    };
+    function statusRow(level, name, detail, when) {
+      return `<div class="strow ${level}"><span class="sdot"></span>`
+        + `<div class="sbody"><div class="sname">${esc(name)}</div>`
+        + (detail ? `<div class="sdetail">${esc(detail)}</div>` : "") + `</div>`
+        + `<span class="schip">${_LVLTXT[level] || "—"}</span>`
+        + `<span class="swhen">${esc(when)}</span></div>`;
+    }
+    async function loadStatus(bg) {
+      if (!bg) priceDocEl.innerHTML = `<div class="sempty">상태 확인 중…</div>`;
+      const now = Date.now(), rank = { ok: 0, warn: 1, bad: 2 };
+      let worst = "ok";
+      try {
+        const jobRows = [];
+        for (const j of JOBS) {
+          let hd = null;
+          try { const s = await getDoc(doc(db, "job_health", j.key)); hd = s.exists() ? s.data() : null; } catch (e) {}
+          const h = hd ? { lastStatus: hd.last_status, fetchedMs: _toMs(hd.fetched_at) } : null;
+          const v = jobVerdict(h, j.expectedSec, now);
+          if (rank[v.level] > rank[worst]) worst = v.level;
+          const when = h && h.fetchedMs ? dsRelTime(h.fetchedMs, now) : "기록 없음";
+          jobRows.push(statusRow(v.level, j.label, (hd && hd.detail) || v.text, when));
+        }
+        const cardRows = [];
+        for (const c of CARDS) {
+          const results = await Promise.all(c.collections.map(async (coll) => {
+            const snap = await getDocs(query(collection(db, coll), orderBy("fetched_at", "desc"), limit(1)));
+            const d = snap.empty ? null : snap.docs[0].data();
+            return { ms: d ? _toMs(d.fetched_at) : null, doc: d };
+          }));
+          const { lastFetchedMs, anyEmpty } = cardFreshness(results.map(r => r.ms));
+          const level = isOverdue(lastFetchedMs, c, now).overdue ? "bad" : "ok";
+          if (rank[level] > rank[worst]) worst = level;
+          const when = lastFetchedMs == null ? "없음" : dsRelTime(lastFetchedMs, now);
+          const d = results[0].doc;
+          const detail = d ? `최근: ${d.source || ""}${d.title ? " · " + String(d.title).slice(0, 40) : ""}`
+                           : (anyEmpty ? "수집 데이터 없음" : "");
+          cardRows.push(statusRow(level, c.label, detail, when));
+        }
+        const title = worst === "ok" ? "모두 정상" : worst === "warn" ? "주의가 필요합니다" : "점검이 필요합니다";
+        const sub = worst === "ok" ? "수집 잡과 데이터가 정상 주기로 갱신되고 있어요."
+                                   : "아래에서 지연·실패·정지를 확인하세요.";
+        priceDocEl.innerHTML =
+          `<div class="ssummary ${worst}"><span class="sbeacon"></span>`
+          + `<div><b>${title}</b><span>${sub}</span></div></div>`
+          + `<p class="slabel">수집 잡</p><div class="srows">${jobRows.join("")}</div>`
+          + `<p class="slabel">데이터 신선도</p><div class="srows">${cardRows.join("")}</div>`;
+      } catch (e) {
+        priceDocEl.innerHTML = `<div class="sempty">상태 불러오기 실패: <code>${esc(e.message || e.code || "")}</code></div>`;
+      }
     }
     function renderPriceDashboard(prices) {
       // 값 + 차트만. 뉴스와의 정합(over/under-reaction)은 별도 — 여기선 순수 시세.
@@ -1804,7 +1885,7 @@
 
       if (stories && !storiesLoaded) { storiesLoaded = true; loadStories(); }
       if (report && !reportLoaded) { reportLoaded = true; loadReport(); }
-      if (price && !priceLoaded) { priceLoaded = true; loadPrices(); }
+      if (price) loadStatus();     // 상태 패널 — 열 때마다 최신 잡 헬스·신선도 로드(read 2건, 저렴)
     }
     function invalidateHiddenTabs() {
       // WV1: 뷰가 바뀌면 비활성 로드탭을 무효화 → 재진입할 때 현재 뷰로 새로 렌더(재진입 후 v1 회귀·stale 방지).
