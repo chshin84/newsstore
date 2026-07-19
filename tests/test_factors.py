@@ -30,12 +30,16 @@ def test_specs_shapes_and_cadences_are_valid():
     for s in SPECS:
         assert s.shape in {"history", "asof", "snapshot"}
         assert s.cadence in {"daily", "weekly"}
-    # 배당조정 EOD만 일간, 나머지는 주간(계약).
-    assert {s.key for s in SPECS if s.cadence == "daily"} == {"prices_eod"}
+    # 비용 규칙(불변식): 백필 불가 §2(asof)만 daily — 매일 캡처가 필요하고 dedup-read가 없어 저렴.
+    # backfillable(history/snapshot)는 전부 weekly — 매일 전체이력 재조회 = Firestore read 비용 폭탄 회피.
+    assert {s.key for s in SPECS if s.cadence == "daily"} == {s.key for s in SPECS if s.shape == "asof"}
+    assert all(s.cadence == "weekly" for s in SPECS if s.shape != "asof")
 
 
 def test_specs_for_selects_by_cadence():
-    assert {s.key for s in specs_for("daily")} == {"prices_eod"}
+    # daily = §2 asof 캡처만(저렴). weekly = backfillable 전부.
+    assert {s.key for s in specs_for("daily")} == {s.key for s in SPECS if s.shape == "asof"}
+    assert all(s.shape == "asof" for s in specs_for("daily"))
     assert "ratios" in {s.key for s in specs_for("weekly")}
     assert len(specs_for("all")) == len(SPECS)
 

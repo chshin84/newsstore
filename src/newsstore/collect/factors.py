@@ -31,21 +31,27 @@ class FactorSpec:
 
 
 # 계약(docs/firestore-contract.md §1·§2)을 코드로 — 이 리스트가 수집 대상 SSOT.
+#
+# cadence는 비용으로 가른다(핵심):
+#   - history shape는 매 런 filter_new_ids_in로 **전체 이력을 통째 read**해 dedup한다. prices_eod는
+#     종목당 ~1,230행이라 1000종목이면 런당 ~123만 read — 매일 돌리면 Firestore read 비용이 폭발한다.
+#     그래서 backfillable history/snapshot(§1)는 전부 **weekly**(backfillable이라 매일 불필요).
+#   - asof(§2)는 dedup-read가 없고(캡처일 id로 새 문서 1개 write) backfill 불가라 **daily**로 매일 캡처.
 SPECS: list[FactorSpec] = [
-    # §1 백필 가능 — history(행별 문서)
+    # §1 백필 가능 — history(행별 문서). 전부 weekly(매일 전체이력 재조회 = read 비용 폭탄 회피).
     FactorSpec("ratios", "ratios", "history", "weekly", {"period": "annual"}),
     FactorSpec("income", "income-statement", "history", "weekly", {"period": "annual"}),
     FactorSpec("balance", "balance-sheet-statement", "history", "weekly", {"period": "annual"}),
     FactorSpec("cashflow", "cash-flow-statement", "history", "weekly", {"period": "annual"}),
-    FactorSpec("prices_eod", "historical-price-eod/dividend-adjusted", "history", "daily"),
+    FactorSpec("prices_eod", "historical-price-eod/dividend-adjusted", "history", "weekly"),
     FactorSpec("market_cap", "historical-market-capitalization", "history", "weekly"),
     FactorSpec("grades_history", "grades-historical", "history", "weekly"),
     # §1 백필 가능 — snapshot(현재값)
     FactorSpec("profiles", "profile", "snapshot", "weekly"),
-    # §2 백필 불가 — asof(캡처일 스냅샷). 지금부터 축적해야 영영 안 빈다.
-    FactorSpec("estimates", "analyst-estimates", "asof", "weekly", {"period": "annual"}),
-    FactorSpec("price_targets", "price-target-consensus", "asof", "weekly"),
-    FactorSpec("grades_consensus", "grades-consensus", "asof", "weekly"),
+    # §2 백필 불가 — asof(캡처일 스냅샷). dedup-read 없어 저렴 → daily로 매일 캡처(velocity 축적).
+    FactorSpec("estimates", "analyst-estimates", "asof", "daily", {"period": "annual"}),
+    FactorSpec("price_targets", "price-target-consensus", "asof", "daily"),
+    FactorSpec("grades_consensus", "grades-consensus", "asof", "daily"),
 ]
 
 ALLOWED_SHAPES = {"history", "asof", "snapshot"}

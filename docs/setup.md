@@ -111,7 +111,7 @@ gcloud run jobs create newsstore-stocks \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
   --service-account=$SA --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --update-secrets=FMP_API_KEY=fmp-api-key:latest \
-  --command=python --args=-m,newsstore.entrypoints.run_factors,--cadence,all --max-retries=1 --task-timeout=3600
+  --command=python --args=-m,newsstore.entrypoints.run_factors,--cadence,daily --max-retries=1 --task-timeout=3600
 # (d) 스케줄러: 가격(*/15), 팩터(매일 07:00). 수집기 패턴과 동일한 :run 호출.
 gcloud scheduler jobs create http newsstore-prices-hourly --location=<REGION> \
   --schedule="*/15 * * * *" \
@@ -121,8 +121,10 @@ gcloud scheduler jobs create http newsstore-stocks-daily --location=<REGION> \
   --schedule="0 7 * * *" \
   --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-stocks:run" \
   --http-method=POST --oauth-service-account-email=$SA
-# 팩터 cadence는 잡의 --args로 정한다(위 (c)). 현재 배포=all(daily=배당조정 EOD + weekly=재무제표·비율·컨센서스 as-of·유니버스 갱신).
-# ~600 종목 전수 패스가 약 37분이라 task-timeout=3600(5분 기본으로는 타임아웃 사망 — solved_problems 2026-07-19).
+# 팩터 cadence는 잡의 --args로 정한다. 현재 daily 배포=§2 백필불가 asof만(estimates·price_targets·grades_consensus).
+# backfillable(prices_eod·재무제표·시총·등급이력)은 weekly로 분리(별도 잡·스케줄러 필요 시 추가). 이유:
+# history shape는 매 런 전체이력을 dedup-read(get_all)해 prices_eod가 종목당 ~1,230행 → 1000종목이면 런당 ~123만 read.
+# 매일 돌리면 Firestore read 비용이 폭발한다(solved_problems 2026-07-19). §2 asof는 dedup-read 없어 daily가 저렴하다.
 ```
 
 **Gemini 키(임베딩)**: collector 잡의 임베딩 패스는 Gemini API를 호출하므로 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — FMP와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collector` 잡에 주입한다.
