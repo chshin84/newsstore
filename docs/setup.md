@@ -81,50 +81,25 @@ gcloud firestore indexes composite create --collection-group=items \
 ```
 
 ## 7. TTL 정책 (content 컬렉션 60일 만료 — 비용 통제)
-모든 content 컬렉션은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(대부분 저장 시각 + 60일, `price_bars`만 바 날짜 + 60일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타는 만료 대상이 아니다 — 커서가 만료되면 증분 수집이 어긋난다). `price_bars`(5분봉)와 `prices_eod`(배당조정 EOD 백필)가 문서 수가 가장 빨라 TTL이 특히 중요하다. 컬렉션마다 한 번씩 정책을 건다:
+content 컬렉션(`items`·`item_vectors`)은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(저장 시각 + 60일 — 비용 통제). **`feed_state`·`meta`·`job_health`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타·잡 상태는 만료 대상이 아니다). 컬렉션마다 한 번씩 정책을 건다:
 ```
-for c in items prices price_bars item_vectors \
-         income balance cashflow ratios prices_eod market_cap grades_history \
-         profiles estimates price_targets grades_consensus \
-         index_members index_changes delisted ; do
+for c in items item_vectors ; do
   gcloud firestore fields ttl update expire_at --collection-group=$c \
     --enable-ttl --project=<PROJECT_ID>
 done
 ```
 (콘솔 → Firestore → TTL에서도 컬렉션 그룹별 `expire_at` 필드를 지정할 수 있다. 새 컬렉션을 계약에 추가하면 이 목록도 함께 늘린다.)
 
-## 8. 가격·팩터 수집 Job (FMP)
-가격(`run_prices`, 5분봉)·팩터(`run_factors`, 재무제표·비율·조정가·컨센서스·PIT유니버스)는 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — **Secret Manager**로 주입한다(커밋/이미지/로그 금지). 같은 collector 이미지를 쓰고 CMD만 다르다. 팩터는 cadence로 나눈다 — `--cadence daily`(배당조정 EOD), `--cadence weekly`(나머지 + 유니버스 갱신).
+## 8. FMP 뉴스 키 (collector)
+collector의 FMP 뉴스 수집은 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — Secret Manager로 만들어 §3의 `newsstore-collector` 잡에 주입한다(커밋/이미지/로그 금지). (FMP 시장 가격·펀더멘털은 이 repo가 아니라 로컬 레포 `DB-news-data`가 수집한다.)
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
 printf '%s' "<FMP_API_KEY>" | gcloud secrets create fmp-api-key --data-file=- --replication-policy=automatic
 gcloud secrets add-iam-policy-binding fmp-api-key \
   --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
-# (b) 가격 수집 Job (같은 이미지, CMD 오버라이드 + 비밀 주입)
-gcloud run jobs create newsstore-prices \
-  --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
-  --service-account=$SA --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
-  --update-secrets=FMP_API_KEY=fmp-api-key:latest \
-  --command=python --args=-m,newsstore.entrypoints.run_prices --max-retries=1 --task-timeout=600
-# (c) 팩터 수집 Job (cadence는 스케줄러가 --args로 넘긴다 — 아래 (d))
-gcloud run jobs create newsstore-stocks \
-  --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
-  --service-account=$SA --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
-  --update-secrets=FMP_API_KEY=fmp-api-key:latest \
-  --command=python --args=-m,newsstore.entrypoints.run_factors,--cadence,daily --max-retries=1 --task-timeout=3600
-# (d) 스케줄러: 가격(*/15), 팩터(매일 07:00). 수집기 패턴과 동일한 :run 호출.
-gcloud scheduler jobs create http newsstore-prices-hourly --location=<REGION> \
-  --schedule="*/15 * * * *" \
-  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-prices:run" \
-  --http-method=POST --oauth-service-account-email=$SA
-gcloud scheduler jobs create http newsstore-stocks-daily --location=<REGION> \
-  --schedule="0 7 * * *" \
-  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-stocks:run" \
-  --http-method=POST --oauth-service-account-email=$SA
-# 팩터 cadence는 잡의 --args로 정한다. 현재 daily 배포=§2 백필불가 asof만(estimates·price_targets·grades_consensus).
-# backfillable(prices_eod·재무제표·시총·등급이력)은 weekly로 분리(별도 잡·스케줄러 필요 시 추가). 이유:
-# history shape는 매 런 전체이력을 dedup-read(get_all)해 prices_eod가 종목당 ~1,230행 → 1000종목이면 런당 ~123만 read.
-# 매일 돌리면 Firestore read 비용이 폭발한다(solved_problems 2026-07-19). §2 asof는 dedup-read 없어 daily가 저렴하다.
+# (b) collector 잡에 주입
+gcloud run jobs update newsstore-collector --region=<REGION> \
+  --update-secrets=FMP_API_KEY=fmp-api-key:latest
 ```
 
 **Gemini 키(임베딩)**: collector 잡의 임베딩 패스는 Gemini API를 호출하므로 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — FMP와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collector` 잡에 주입한다.

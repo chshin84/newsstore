@@ -7,22 +7,6 @@ service cloud.firestore {
     // 로컬 SQLite 몫 — Firestore 밖). write는 전면 금지(수집기는 Admin SDK라 규칙 우회).
     match /items/{id}            { allow read: if true; allow write: if false; }
     match /meta/{id}             { allow read: if true; allow write: if false; }
-    match /prices/{id}           { allow read: if true; allow write: if false; }
-    match /price_bars/{id}       { allow read: if true; allow write: if false; }
-    match /prices_eod/{id}       { allow read: if true; allow write: if false; }
-    match /income/{id}           { allow read: if true; allow write: if false; }
-    match /balance/{id}          { allow read: if true; allow write: if false; }
-    match /cashflow/{id}         { allow read: if true; allow write: if false; }
-    match /ratios/{id}           { allow read: if true; allow write: if false; }
-    match /market_cap/{id}       { allow read: if true; allow write: if false; }
-    match /grades_history/{id}   { allow read: if true; allow write: if false; }
-    match /profiles/{id}         { allow read: if true; allow write: if false; }
-    match /estimates/{id}        { allow read: if true; allow write: if false; }
-    match /price_targets/{id}    { allow read: if true; allow write: if false; }
-    match /grades_consensus/{id} { allow read: if true; allow write: if false; }
-    match /index_members/{id}    { allow read: if true; allow write: if false; }
-    match /index_changes/{id}    { allow read: if true; allow write: if false; }
-    match /delisted/{id}         { allow read: if true; allow write: if false; }
     match /item_vectors/{id}     { allow read: if true; allow write: if false; }
     match /job_health/{id}       { allow read: if true; allow write: if false; }
 

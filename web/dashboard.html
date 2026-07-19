@@ -39,21 +39,14 @@
     <div id="joblist"></div>
   </section>
   <section id="cards"></section>
-  <section class="card">
-    <h2>종목 드릴다운</h2>
-    <input id="search" placeholder="심볼 또는 이름 검색 (예: AAPL)" autocomplete="off">
-    <div id="suggest" class="suggest" style="display:none"></div>
-    <div id="detail"></div>
-  </section>
 </main>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, query, orderBy, limit, getDocs, doc, getDoc,
-         where, documentId }
+import { getFirestore, collection, query, orderBy, limit, getDocs, doc, getDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
-import { CARDS, JOBS, jobVerdict, isOverdue, relTime, cardFreshness, idRange, universeUnion, searchFilter }
+import { CARDS, JOBS, jobVerdict, isOverdue, relTime, cardFreshness }
   from "./dashboard_logic.mjs";
 
 const app = initializeApp(firebaseConfig);
@@ -69,8 +62,7 @@ const toMs = (ts) => {                        // Firestore Timestamp | ISO 문�
 load().catch(e => { $("cards").innerHTML = `<div class="alert">로드 실패: ${e.code || e.message}</div>`; });
 setInterval(() => load().catch(() => {}), 10 * 60 * 1000);
 
-// ── 로드: 상태 카드 + 유니버스 ──
-let universe = [];
+// ── 로드: 잡 헬스 + 뉴스 카드 ──
 async function latestFetched(coll) {           // 컬렉션 최신 fetched_at(ms) — 바운드(limit 1)
   const snap = await getDocs(query(collection(db, coll), orderBy("fetched_at", "desc"), limit(1)));
   if (snap.empty) return { ms: null, doc: null };
@@ -115,88 +107,15 @@ async function load() {
                  + (sample ? `<div class="sample">${sample}</div>` : "");
     cardsEl.appendChild(el);
   }
-  // 유니버스: index_members 3문서만 읽어 검색 후보 구성(추가 읽기 없음)
-  const um = await getDocs(collection(db, "index_members"));
-  universe = universeUnion(um.docs.map(d => d.data()));
 }
 function cadenceLabel(sec) { return sec <= 300 ? "5분" : sec <= 86400 ? "일" : "주"; }
 function sampleLine(card, results) {
-  if (card.key === "universe") {
-    const im = results[0].doc;                 // index_members 첫 결과(문서 하나의 members)
-    const n = im && im.members ? im.members.length : 0;
-    return im ? `한 지수 구성 ${n}종목 (유니버스 전체는 드릴다운 검색)` : "";
-  }
   const d = results[0].doc;
   if (!d) return "";
   if (card.key === "news")  return `최근: ${d.source || ""} · ${(d.title || "").slice(0, 60)}`;
-  if (card.key === "intraday") return `최근 바: ${d.datetime || d.symbol || ""}`;
-  if (d.symbol) return `샘플 종목: ${d.symbol}${d.date ? " · " + d.date : ""}`;
   return "";
 }
 $("refresh").onclick = () => load().catch(() => {});
-
-// ── 드릴다운 ──
-const DRILL = [                                // {coll, label, shape:'range'|'single', render}
-  { coll: "profiles", label: "프로파일", shape: "single",
-    render: d => `${d.data?.[0]?.companyName || d.symbol || ""} · ${d.data?.[0]?.sector || ""} · 시총 ${fmt(d.data?.[0]?.marketCap)}` },
-  { coll: "ratios", label: "비율", shape: "range",
-    render: d => `P/E ${num(d.priceToEarningsRatio)} · P/S ${num(d.priceToSalesRatio)} · P/B ${num(d.priceToBookRatio)} (${d.date || ""})` },
-  { coll: "income", label: "손익", shape: "range",
-    render: d => `매출 ${fmt(d.revenue)} · 순이익 ${fmt(d.netIncome)} (${d.date || ""})` },
-  { coll: "balance", label: "대차", shape: "range",
-    render: d => `총자산 ${fmt(d.totalAssets)} · 총부채 ${fmt(d.totalLiabilities)} (${d.date || ""})` },
-  { coll: "cashflow", label: "현금흐름", shape: "range",
-    render: d => `영업CF ${fmt(d.operatingCashFlow)} · FCF ${fmt(d.freeCashFlow)} (${d.date || ""})` },
-  { coll: "estimates", label: "추정치(as-of)", shape: "range",
-    render: d => `캡처 ${d.as_of || ""} · FY추정 ${d.data?.[0]?.epsAvg ?? "?"} EPS` },
-  { coll: "price_targets", label: "목표가(as-of)", shape: "range",
-    render: d => `consensus ${num(d.data?.[0]?.targetConsensus)} (H ${num(d.data?.[0]?.targetHigh)}/L ${num(d.data?.[0]?.targetLow)})` },
-  { coll: "grades_consensus", label: "등급 분포(as-of)", shape: "range",
-    render: d => `buy ${d.data?.[0]?.buy ?? "?"} · hold ${d.data?.[0]?.hold ?? "?"} · sell ${d.data?.[0]?.sell ?? "?"}` },
-  { coll: "prices_eod", label: "배당조정 EOD", shape: "range",
-    render: d => `최근 adjClose ${num(d.adjClose)} (${d.date || ""})` },
-];
-function num(v) { return (v == null || Number.isNaN(+v)) ? "?" : (+v).toLocaleString(); }
-function fmt(v) { if (v == null) return "?"; const n = +v; return Math.abs(n) >= 1e9 ? (n/1e9).toFixed(1)+"B" : n.toLocaleString(); }
-
-async function latestOf(coll, symbol) {        // 종목 최신 1건 — doc-id 범위(상한 sentinel)
-  const { low, high } = idRange(symbol);
-  const q = query(collection(db, coll),
-    where(documentId(), ">=", low), where(documentId(), "<", high),
-    orderBy(documentId(), "desc"), limit(1));
-  const snap = await getDocs(q);
-  return snap.empty ? null : snap.docs[0].data();
-}
-async function drill(symbol) {
-  const detail = $("detail"); detail.innerHTML = `<div class="mut">${symbol} 불러오는 중…</div>`;
-  const panel = document.createElement("div"); panel.className = "panel";
-  for (const spec of DRILL) {
-    let data = null;
-    try {
-      data = spec.shape === "single"
-        ? await getDoc(doc(db, spec.coll, symbol)).then(s => s.exists() ? s.data() : null)
-        : await latestOf(spec.coll, symbol);
-    } catch (e) { data = { __err: e.code || "error" }; }
-    const box = document.createElement("div"); box.className = "box";
-    const body = data == null ? `<span class="none">데이터 없음(미수집)</span>`
-              : data.__err ? `<span class="alert">오류: ${data.__err}</span>`
-              : spec.render(data);
-    box.innerHTML = `<b>${spec.label}</b><br>${body}`;
-    panel.appendChild(box);
-  }
-  detail.innerHTML = `<h2 style="margin-top:12px">${symbol}</h2>`; detail.appendChild(panel);
-}
-$("search").oninput = (e) => {
-  const hits = searchFilter(universe, e.target.value).slice(0, 12);
-  const box = $("suggest");
-  if (!hits.length) { box.style.display = "none"; return; }
-  box.innerHTML = ""; box.style.display = "block";
-  for (const h of hits) {
-    const d = document.createElement("div"); d.textContent = `${h.symbol}  ${h.name || ""}`;
-    d.onclick = () => { $("search").value = h.symbol; box.style.display = "none"; drill(h.symbol); };
-    box.appendChild(d);
-  }
-};
 </script>
 </body>
 </html>

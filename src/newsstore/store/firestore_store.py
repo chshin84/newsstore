@@ -6,25 +6,12 @@ from ..contracts.embedding import EMBED_MODEL
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
-_BARS = "price_bars"
 _VECTORS = "item_vectors"
 
 # content 데이터의 보존 기간(60일). Firestore TTL 정책이 각 문서의 expire_at을
 # 가리켜 만료시킨다(비용 통제). feed_state에는 절대 넣지 않는다 — 증분 수집 커서가
 # 유실되면 재수집이 어긋난다.
 _TTL = timedelta(days=60)
-
-
-def _bar_expire_at(dt_str) -> datetime:
-    """price_bars TTL — 바 날짜(datetime 필드) + 30일. 시·분은 만료에 무의미(코스 30일)라
-    날짜 부분만 파싱한다. 파싱 불가면 수집 시각 기준으로 폴백(조용히 안 지워지게)."""
-    if isinstance(dt_str, str) and len(dt_str) >= 10:
-        try:
-            d = datetime.strptime(dt_str[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            return d + _TTL
-        except ValueError:
-            pass
-    return datetime.now(timezone.utc) + _TTL
 
 
 def _to_doc(item: RawItem) -> dict:
@@ -99,101 +86,6 @@ class FirestoreStore:
 
     def set_meta(self, key: str, value: dict) -> None:
         self.db.collection("meta").document(key).set(value)
-
-    def save_price(self, key: str, data: dict) -> None:
-        """prices/{key} 최신 스냅샷 set(가격 앵커 — 뉴스 vs 가격 반응). 통째 덮어쓰기.
-        TTL expire_at은 호출자가 안 넣어도 store가 보장(단일 통제점)."""
-        doc = dict(data)
-        doc["expire_at"] = datetime.now(timezone.utc) + _TTL
-        self.db.collection("prices").document(key).set(doc)
-
-    def get_price(self, key: str) -> dict:
-        snap = self.db.collection("prices").document(key).get()
-        return (snap.to_dict() or {}) if snap.exists else {}
-
-    # ── 팩터·펀더멘털 계약(다운스트림 seam) — 제네릭 컬렉션 적재 ──
-    # 계약의 14개 컬렉션은 구조가 같다(심볼별 날짜 문서 / 현재값 스냅샷)이라 컬렉션명을
-    # 받는 제네릭 메서드로 통일한다. TTL은 컨베이어 모델대로 수집 시각 + 30일(백필 행도
-    # 지금 수집하면 30일 산다). 계약 SSOT: docs/firestore-contract.md.
-
-    def save_docs(self, collection: str, docs: list[dict]) -> int:
-        """collection에 문서 배치 set(각 doc는 'id' 보유). 반환=쓴 수.
-        TTL expire_at = 수집 시각 + 30일(store 단일 통제점). set이라 멱등(같은 id 덮어씀)."""
-        if not docs:
-            return 0
-        exp = datetime.now(timezone.utc) + _TTL
-        col = self.db.collection(collection)
-        n = 0
-        for i in range(0, len(docs), 500):           # Firestore batch ≤500 op
-            batch = self.db.batch()
-            for d in docs[i:i + 500]:
-                doc = {k: v for k, v in d.items() if k != "id"}
-                doc["expire_at"] = exp
-                batch.set(col.document(d["id"]), doc)
-                n += 1
-            batch.commit()
-        return n
-
-    def filter_new_ids_in(self, collection: str, ids: list[str]) -> list[str]:
-        """collection에 아직 없는 id만(입력 순서 보존) — 백필 히스토리에서 새 행만 write."""
-        if not ids:
-            return []
-        col = self.db.collection(collection)
-        refs = [col.document(i) for i in ids]
-        existing = {s.id for s in self.db.get_all(refs) if s.exists}
-        return [i for i in ids if i not in existing]
-
-    def save_snapshot(self, collection: str, doc_id: str, data: dict) -> None:
-        """현재값 스냅샷 한 문서 덮어쓰기(profiles·index_members·index_changes). TTL 주입."""
-        doc = dict(data)
-        doc["expire_at"] = datetime.now(timezone.utc) + _TTL
-        self.db.collection(collection).document(doc_id).set(doc)
-
-    def get_snapshot(self, collection: str, doc_id: str) -> dict:
-        snap = self.db.collection(collection).document(doc_id).get()
-        return (snap.to_dict() or {}) if snap.exists else {}
-
-    def get_docs(self, collection: str, *, field: str | None = None, value=None) -> list[dict]:
-        """collection 문서 조회(field 지정 시 where 필터, 아니면 전체). 소비자·테스트용."""
-        col = self.db.collection(collection)
-        stream = col.where(field, "==", value).stream() if field is not None else col.stream()
-        return [s.to_dict() or {} for s in stream]
-
-    def filter_new_bar_ids(self, ids: list[str]) -> list[str]:
-        """price_bars에 아직 없는 바 id만(입력 순서 보존) — 새 바만 write해 5분 주기 write 비용을
-        묶는다(뉴스 filter_new_ids와 동일 패턴)."""
-        if not ids:
-            return []
-        col = self.db.collection(_BARS)
-        refs = [col.document(i) for i in ids]
-        existing = {s.id for s in self.db.get_all(refs) if s.exists}
-        return [i for i in ids if i not in existing]
-
-    def save_bars(self, bars: list[dict]) -> int:
-        """price_bars/{id} 배치 적재(바 1개=문서 1개, 완전 스트림). 반환=쓴 수.
-        각 bar는 'id'와 'datetime'을 가진다. TTL expire_at은 바 날짜에서 store가 주입(단일 통제점).
-        호출자가 새 바만(filter_new_bar_ids) 넘기지만 set은 멱등이라 재적재도 안전."""
-        if not bars:
-            return 0
-        col = self.db.collection(_BARS)
-        n = 0
-        for i in range(0, len(bars), 500):           # Firestore batch ≤500 op
-            batch = self.db.batch()
-            for b in bars[i:i + 500]:
-                doc = {k: v for k, v in b.items() if k != "id"}
-                doc["expire_at"] = _bar_expire_at(b.get("datetime"))
-                batch.set(col.document(b["id"]), doc)
-                n += 1
-            batch.commit()
-        return n
-
-    def get_bars(self, key: str) -> list[dict]:
-        """price_bars에서 한 심볼(key)의 바를 datetime 오름차순으로. 소비자·테스트용."""
-        out = []
-        for snap in self.db.collection(_BARS).where("key", "==", key).stream():
-            out.append(snap.to_dict() or {})
-        out.sort(key=lambda d: d.get("datetime") or "")
-        return out
 
     # ── 임베딩 계약(spec 2026-07-16) — item_vectors + embed_pending 대기 큐 ──────
 

@@ -5,36 +5,22 @@ export const TTL_DAYS = 60;
 export const OVERDUE_FACTOR = 3;    // §1: 기대주기의 몇 배까지 정상으로 볼지(보수적)
 export const LEAD_FRACTION = 0.4;   // §2: 지연 문턱 = TTL_DAYS × 이 비율(데드라인 대비 리드타임 확보)
 
-// 실제 수집 스케줄(Cloud Scheduler cron / run_factors cadence)의 UI측 사본(초).
+// 실제 수집 스케줄(Cloud Scheduler cron)의 UI측 사본(초).
 // 클라이언트는 스케줄러를 못 읽어 불가피한 두 번째 출처 — 스케줄을 바꾸면 여기도 바꾼다.
-// (setup.md §8 스케줄러 생성 · operations.md 리소스 표의 Cloud Scheduler 행과 일치해야 함.)
-export const SCHEDULE = { intraday: 300, daily: 86400, weekly: 604800 };
+// (operations.md 리소스 표의 Cloud Scheduler `newsstore-5min` 행과 일치해야 함.)
+export const SCHEDULE = { intraday: 300 };
 
-// 카드 SSOT — 계약 17개 컬렉션을 7카드로 빠짐없이 묶는다.
-// marketData=주말 완화 대상, backfillImpossible=§2(30일 데드라인 문턱).
+// 카드 SSOT — 뉴스 수집 표면(`items`)만 본다.
+// marketData=주말 완화 대상, backfillImpossible=데드라인 문턱(뉴스는 둘 다 해당 없음).
 export const CARDS = [
   { key: 'news',       label: '뉴스',              collections: ['items'],
     expectedSec: SCHEDULE.intraday, marketData: false, backfillImpossible: false },
-  { key: 'intraday',   label: '시세(5분봉)',        collections: ['price_bars', 'prices'],
-    expectedSec: SCHEDULE.intraday, marketData: true,  backfillImpossible: false },
-  { key: 'eod',        label: '배당조정 EOD',       collections: ['prices_eod'],
-    expectedSec: SCHEDULE.daily,    marketData: true,  backfillImpossible: false },
-  { key: 'statements', label: '재무제표',           collections: ['income', 'balance', 'cashflow'],
-    expectedSec: SCHEDULE.weekly,   marketData: false, backfillImpossible: false },
-  { key: 'ratios',     label: '프로파일·비율·시총·등급이력', collections: ['profiles', 'ratios', 'market_cap', 'grades_history'],
-    expectedSec: SCHEDULE.weekly,   marketData: false, backfillImpossible: false },   // grades_history=§1 백필 가능
-  { key: 'consensus',  label: '컨센서스(추정·목표·등급분포)', collections: ['estimates', 'price_targets', 'grades_consensus'],
-    expectedSec: SCHEDULE.weekly,   marketData: false, backfillImpossible: true },   // §2 백필 불가 3종만
-  { key: 'universe',   label: '유니버스',           collections: ['index_members', 'index_changes', 'delisted'],
-    expectedSec: SCHEDULE.weekly,   marketData: false, backfillImpossible: false },
 ];
 
 // 스케줄 잡 헬스 — 각 잡이 실행 상태를 job_health/{key}에 남긴다(entrypoints/_health.job_health).
 // 백필(backfill_embed)은 수동 일회성이라 제외한다(스케줄이 없어 항상 stale=오탐).
 export const JOBS = [
   { key: 'collector', label: '뉴스 수집',    expectedSec: SCHEDULE.intraday },
-  { key: 'prices',    label: '가격(5분봉)',   expectedSec: 900 },              // 15분마다
-  { key: 'factors',   label: '팩터·펀더멘털',  expectedSec: SCHEDULE.daily },
 ];
 
 // 잡 헬스 판정. h={lastStatus, fetchedMs}(Firestore Timestamp→ms 변환은 호출자).
@@ -90,31 +76,4 @@ export function cardFreshness(fetchedMsList) {
   }
   if (fetchedMsList.length === 0) anyEmpty = true;
   return { lastFetchedMs: anyEmpty ? null : oldest, anyEmpty };
-}
-
-// 문서 id {symbol}__{YYYYMMDD}의 종목별 범위. 상한 sentinel 필수(없으면 0건).
-// U+F8FF를 안 보이는 문자로 쓰지 말고 fromCharCode로 명시(스펙 리뷰 교훈).
-export const HIGH_SENTINEL = String.fromCharCode(0xF8FF);
-export function idRange(symbol) {
-  return { low: symbol + '__', high: symbol + '__' + HIGH_SENTINEL };
-}
-
-// index_members 문서들(각 {members:[{symbol,name}]})에서 유니버스 도출(중복제거·심볼 정렬).
-export function universeUnion(memberDocs) {
-  const bySym = new Map();
-  for (const d of (memberDocs || [])) {
-    for (const m of (d && d.members ? d.members : [])) {
-      if (m && m.symbol && !bySym.has(m.symbol)) bySym.set(m.symbol, m.name || '');
-    }
-  }
-  return [...bySym.entries()]
-    .map(([symbol, name]) => ({ symbol, name }))
-    .sort((a, b) => (a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0));
-}
-
-export function searchFilter(universe, q) {
-  const s = (q || '').trim().toUpperCase();
-  if (!s) return [];
-  return universe.filter(x =>
-    x.symbol.toUpperCase().includes(s) || (x.name || '').toUpperCase().includes(s));
 }
