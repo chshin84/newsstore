@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import pytest
 from newsstore.collect.naver_news import (
-    map_row, _parse_pubdate, load_naver_config, run_naver_pass, DEFAULT_POLL_MINUTES)
+    map_row, _parse_pubdate, _publisher, load_naver_config, run_naver_pass, DEFAULT_POLL_MINUTES)
 
 NOW = datetime(2026, 7, 19, tzinfo=timezone.utc)
 
@@ -18,11 +18,26 @@ def test_map_row_strips_tags_and_entities():
     assert item.title == '"오라클 강등", 증시 경고'
     assert item.body == "뉴욕 증시의 S&P500지수는 최고치에서 2% 하락"
     assert item.url == "https://businessplus.kr/a/1"   # originallink 우선
-    assert item.source == "네이버"
+    assert item.source == "businessplus.kr"            # 미등록 도메인 → 도메인 그대로(본 뉴스)
     assert item.feed_id == "naver:증시"
     assert item.asset_hint == "kr_stock"
     assert item.language == "ko"
     assert item.symbol == ""
+
+
+def test_publisher_derives_from_originallink_domain():
+    assert _publisher("https://www.mk.co.kr/news/1") == "매일경제"      # 매핑 + www 제거
+    assert _publisher("https://biz.chosun.com/x") == "조선비즈"         # 서브도메인 완전일치 우선
+    assert _publisher("https://view.asiae.co.kr/a") == "아시아경제"     # view. 제거 후 매핑
+    assert _publisher("https://unknown-outlet.co.kr/a") == "unknown-outlet.co.kr"  # 미등록 → 도메인
+    assert _publisher("https://n.news.naver.com/y") == "네이버"          # 네이버 호스팅 → 네이버
+    assert _publisher("") == "네이버"                                    # 빈 url → 네이버
+
+
+def test_map_row_maps_known_publisher():
+    row = {"title": "t", "originallink": "https://www.hankyung.com/article/1",
+           "link": "", "description": "d", "pubDate": ""}
+    assert map_row(row, "증시", "kr_stock", NOW).source == "한국경제"
 
 
 def test_map_row_url_falls_back_to_link():
