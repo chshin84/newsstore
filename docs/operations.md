@@ -36,13 +36,13 @@ newsstore는 **수집 전용**이다 — 뉴스 수집기, 가격 수집기(FMP)
 ---
 
 ## A. 수집기 재배포 (config/feeds.yaml 또는 수집기 코드 변경 시)
-`config/feeds.yaml`은 이미지에 `COPY` 되므로 **반드시 재빌드 후 Job 갱신**해야 반영된다. 세 수집 Job(collector·prices·stocks)이 같은 이미지를 쓰므로, 코드 변경 시 이미지 1개를 재빌드하고 세 Job 모두를 새 이미지로 갱신한다.
+`config/feeds.yaml`은 이미지에 `COPY` 되므로 **반드시 재빌드 후 Job 갱신**해야 반영된다. 네 수집 Job(collector·prices·stocks·fmp-news)이 같은 이미지를 쓰므로, 코드 변경 시 이미지 1개를 재빌드하고 네 Job 모두를 새 이미지로 갱신한다.
 ```
 # 1) 이미지 재빌드 ([gcp] 타깃 = google-cloud-firestore 포함, `infra/cloudbuild.yaml`이 INSTALL_EMBED=true도 함께 빌드 — 임베딩 패스의 google-genai 포함)
 gcloud builds submit --config infra/cloudbuild.yaml \
   --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest .
-# 2) 세 Job을 새 이미지 digest로 재고정
-for j in newsstore-collector newsstore-prices newsstore-stocks; do
+# 2) 네 Job을 새 이미지 digest로 재고정
+for j in newsstore-collector newsstore-prices newsstore-stocks newsstore-fmp-news; do
   gcloud run jobs update "$j" \
     --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest \
     --region=asia-northeast3
@@ -116,7 +116,7 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 현재 인덱스: `source+published_at`(소스 필터). 가격·펀더멘털은 문서 키 직접 조회라 복합 인덱스가 없다.
 
 ## E. 가격·펀더멘털 수집 재배포 (FMP)
-가격(`run_prices`)·펀더멘털(`run_factors`)은 **수집기와 같은 이미지**를 쓰고 CMD만 다르다. 코드 변경 반영은 §A의 재빌드 → 세 Job 이미지 갱신으로 함께 처리된다. 아래는 각 잡의 수동 실행·확인이다.
+가격(`run_prices`)·펀더멘털(`run_factors`)은 **수집기와 같은 이미지**를 쓰고 CMD만 다르다. 코드 변경 반영은 §A의 재빌드 → 네 Job 이미지 갱신으로 함께 처리된다. 아래는 각 잡의 수동 실행·확인이다.
 ```
 # 수동 1회 실행
 gcloud run jobs execute newsstore-prices --region=asia-northeast3 --wait
@@ -132,6 +132,11 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 - **커버리지**: 대부분 심볼은 FMP 5분봉(`historical-chart/5min`), 국채(us2y/us10y/us30y)는 FMP treasury-rates에서 도출(5분봉이 없어 일봉 1바/일), kosdaq·dxy·wti 3종만 Yahoo 5분봉 폴백이다(FMP Premium 미커버). 심볼·소스 매핑 SSOT는 `config/prices.yaml`.
 - **저장**: 5분봉 완전 스트림은 `price_bars`에 바 1개=문서 1개로 적재(새 바만 write), 웹 확인용 최신 스냅샷은 `prices/{key}`에 갱신한다. `price_bars`는 문서가 가장 빨리 늘어 TTL(§F)이 특히 중요하다.
 
+### FMP 뉴스 수집 잡(run_fmp_news)
+- 이미지: 세 수집 잡과 동일(같은 이미지, CMD만 `python -m newsstore.entrypoints.run_fmp_news`).
+- 배포: `gcloud run jobs update newsstore-fmp-news --image <IMAGE> --command python --args -m,newsstore.entrypoints.run_fmp_news` (없으면 create) → 스케줄러 하루 1회.
+- 시크릿: FMP_API_KEY(Secret Manager). config: config/fmp_news.yaml.
+
 ## F. TTL 정책 (content 컬렉션 60일 만료)
 모든 content 컬렉션(`items`·`prices`·`price_bars`·`item_vectors` + 팩터 계약 컬렉션)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — `price_bars`는 바 날짜 + 60일, 나머지는 저장 시각 + 60일). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
 ```
@@ -141,7 +146,7 @@ gcloud firestore fields ttl list --collection-group=items
 ## G. 잡 실패 알림 (Cloud Monitoring)
 **왜:** Cloud Scheduler는 잡을 `:run`으로 **시작**시키고 HTTP 200(=시작 수락)만 받는다. 잡이 시작 직후 죽어도 스케줄러는 초록(성공)으로 보여 **조용한 실패**가 된다(Fail-Loud 위반). → Cloud Run Job **실패 실행 수>0**이면 알림.
 
-지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 세 잡(collector·prices·stocks) 공통 적용(job_name 필터 없이 전체).
+지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 네 잡(collector·prices·stocks·fmp-news) 공통 적용(job_name 필터 없이 전체).
 
 ```bash
 # 1) 알림 채널(이메일) — 1회. 채널 ID를 받아둔다.

@@ -35,6 +35,7 @@ def _to_doc(item: RawItem) -> dict:
         "feed_id": item.feed_id, "source": item.source,
         "asset_hint": item.asset_hint, "language": item.language,
         "url": item.url, "title": item.title, "body": item.body,
+        "symbol": item.symbol,
         "published_at": item.published_at, "fetched_at": item.fetched_at,
         "kind": kind,
         # TTL: 수집 시각 기준 30일 뒤 만료. 원본은 이때까지 보존된다.
@@ -64,6 +65,31 @@ class FirestoreStore:
             ref.set(_to_doc(it))
             new += 1
         return new
+
+    def upsert_items_batched(self, items: list["RawItem"]) -> int:
+        """청크 배치 중복제거 저장. get_all 존재검사를 300개씩 청크(대량 batchGet 한도·
+        타임아웃 회피 — 파이어호스 lookback 전량 재스캔 대응), 신규만 batch set(≤500).
+        배치 내 중복 url은 1건으로. upsert_items(per-item get)와 달리 read를 라운드트립 수로 축소."""
+        if not items:
+            return 0
+        col = self.db.collection(_ITEMS)
+        uniq: dict[str, "RawItem"] = {}
+        for it in items:
+            uniq.setdefault(it.id, it)          # 입력 순서 보존, 배치 내 중복 접기
+        ids = list(uniq)
+        existing: set[str] = set()
+        for i in range(0, len(ids), 300):       # get_all 청크
+            chunk = ids[i:i + 300]
+            existing |= {s.id for s in self.db.get_all([col.document(x) for x in chunk]) if s.exists}
+        fresh = [uniq[i] for i in ids if i not in existing]
+        n = 0
+        for i in range(0, len(fresh), 500):     # Firestore batch ≤500 op
+            batch = self.db.batch()
+            for it in fresh[i:i + 500]:
+                batch.set(col.document(it.id), _to_doc(it))
+                n += 1
+            batch.commit()
+        return n
 
     def count(self) -> int:
         # 집계 쿼리(1000건당 1 read) — 전 문서 stream()은 문서수 비례 read 과금에

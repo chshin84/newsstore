@@ -64,6 +64,11 @@ story 기사당 벡터 1문서. 문서 키 = item id. **분석이 아니라 수�
 ### `fundamentals` (폐기 — income·balance·cashflow가 대체)
 레거시 컬렉션. 티커별 재무제표를 배열로 담고 있었으나, 이제 하단 「팩터·펀더멘털 수집 계약」의 `income`·`balance`·`cashflow` 개별 컬렉션(날짜별 개별 문서)으로 대체됨. 기존 공개 read 규칙에서 제거됨(보안규칙 `firestore.rules` 참조).
 
+### FMP 뉴스(2026-07-19)
+- `items` 문서에 `symbol`(옵션, str) 추가 — FMP 뉴스의 티커 태깅. RSS 아이템은 "".
+- `feed_state`에 `fmp:{endpoint}` 문서 — FMP 뉴스 엔드포인트별 is_due 스케줄·건강(커서 아님, 고정 lookback).
+- 신규 컬렉션 없음(기존 items 재사용). TTL·kind·embed_pending 계약 동일.
+
 ## Store 표면 (`firestore_store.FirestoreStore`)
 - `upsert_items(items) -> int` — `_to_doc`가 `kind` 분류 + `expire_at`을 박는다.
 - `get_feed_state`, `set_feed_state`, `count`, `filter_new_ids`, `set_meta`.
