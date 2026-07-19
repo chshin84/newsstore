@@ -37,6 +37,18 @@ feeds:
   # ── 기타 미국·글로벌 종합 (2026-07-19 프로빙: 본문 스니펫 확인) ──
   - {feed_id: guardian_business, url: "https://www.theguardian.com/uk/business/rss", source: Guardian, asset_hint: global, language: en, poll_minutes: 15, body_mode: summary}
   - {feed_id: npr_economy,       url: "https://feeds.npr.org/1017/rss.xml",           source: NPR, asset_hint: us_macro, language: en, poll_minutes: 15, body_mode: summary}
+  # ── WSJ (2026-07-19 재발견: feeds.content.dowjones.io 는 per-item 본문 O. 옛 feeds.a.dj.com은 카테고리 라벨뿐+클라우드 IP 차단이라 폐기) ──
+  - {feed_id: wsj_markets,  url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",   source: WSJ, asset_hint: us_market, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: wsj_business, url: "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",  source: WSJ, asset_hint: us_stock, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: wsj_world,    url: "https://feeds.content.dowjones.io/public/rss/RSSWorldNews",     source: WSJ, asset_hint: global, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: wsj_tech,     url: "https://feeds.content.dowjones.io/public/rss/RSSWSJD",          source: WSJ, asset_hint: tech, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: wsj_economy,  url: "https://feeds.content.dowjones.io/public/rss/socialeconomyfeed", source: WSJ, asset_hint: macro, language: en, poll_minutes: 15, body_mode: summary}
+  # ── FT (2026-07-19 재발견: ?format=rss 는 per-item 본문 O — CDATA라 이전 'headline' 판정이 오독. www.ft.com/<category>?format=rss 로 임의 주제 가능) ──
+  - {feed_id: ft_markets,   url: "https://www.ft.com/markets?format=rss",        source: FT, asset_hint: global_market, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: ft_tech,      url: "https://www.ft.com/technology?format=rss",     source: FT, asset_hint: tech, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: ft_world,     url: "https://www.ft.com/world?format=rss",          source: FT, asset_hint: global, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: ft_economy,   url: "https://www.ft.com/global-economy?format=rss", source: FT, asset_hint: macro, language: en, poll_minutes: 15, body_mode: summary}
+  - {feed_id: ft_companies, url: "https://www.ft.com/companies?format=rss",      source: FT, asset_hint: global_equity, language: en, poll_minutes: 15, body_mode: summary}
   # ── 크립토 전용 ──
   - {feed_id: coindesk,      url: "https://www.coindesk.com/arc/outboundfeeds/rss/", source: CoinDesk, asset_hint: crypto, poll_minutes: 15, body_mode: summary}
   - {feed_id: cointelegraph, url: "https://cointelegraph.com/rss",                   source: Cointelegraph, asset_hint: crypto, poll_minutes: 15, body_mode: summary}
