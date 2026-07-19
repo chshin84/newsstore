@@ -36,7 +36,8 @@ feeds:
   - {feed_id: nyt_yourmoney,  url: "https://rss.nytimes.com/services/xml/rss/nyt/YourMoney.xml",  source: NYT, asset_hint: personal_finance, language: en, poll_minutes: 15, body_mode: summary}
   # ── 기타 미국·글로벌 종합 (2026-07-19 프로빙: 본문 스니펫 확인) ──
   - {feed_id: guardian_business, url: "https://www.theguardian.com/uk/business/rss", source: Guardian, asset_hint: global, language: en, poll_minutes: 15, body_mode: summary}
-  - {feed_id: npr_economy,       url: "https://feeds.npr.org/1017/rss.xml",           source: NPR, asset_hint: us_macro, language: en, poll_minutes: 15, body_mode: summary}
+  # NPR 제외(2026-07-19) — RSS는 살아있으나(브라우저 정상) Cloud Run 데이터센터 IP를 HTTP 403 차단(feed_state fail=13). 브라우저 UA 이미 사용중이라 UA 문제 아님. 로컬 수집 시 되살릴 것.
+  # - {feed_id: npr_economy,       url: "https://feeds.npr.org/1017/rss.xml",           source: NPR, asset_hint: us_macro, language: en, poll_minutes: 15, body_mode: summary}
   # ── WSJ (2026-07-19 재발견: feeds.content.dowjones.io 는 per-item 본문 O. 옛 feeds.a.dj.com은 카테고리 라벨뿐+클라우드 IP 차단이라 폐기) ──
   - {feed_id: wsj_markets,  url: "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",   source: WSJ, asset_hint: us_market, language: en, poll_minutes: 15, body_mode: summary}
   - {feed_id: wsj_business, url: "https://feeds.content.dowjones.io/public/rss/WSJcomUSBusiness",  source: WSJ, asset_hint: us_stock, language: en, poll_minutes: 15, body_mode: summary}
@@ -84,6 +85,28 @@ feeds:
   - {feed_id: calculated_risk, url: "https://www.calculatedriskblog.com/feeds/posts/default", source: CalculatedRisk, asset_hint: us_macro, poll_minutes: 15, body_mode: summary, tier: analysis}
   - {feed_id: damodaran,       url: "https://aswathdamodaran.blogspot.com/feeds/posts/default", source: Damodaran, asset_hint: equity, poll_minutes: 15, body_mode: summary, tier: analysis}
   - {feed_id: klement,         url: "https://klementoninvesting.substack.com/feed",        source: Klement, asset_hint: macro, poll_minutes: 15, body_mode: summary, tier: analysis}
+  # ── 무료 리서치 추가 (2026-07-19 [xml] 프로빙: 본문·신선도 확인) ──
+  - {feed_id: econbrowser,   url: "https://econbrowser.com/feed",              source: Econbrowser, asset_hint: us_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: ritholtz,      url: "https://ritholtz.com/feed/",               source: Ritholtz, asset_hint: us_market, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: ben_carlson,   url: "https://awealthofcommonsense.com/feed/",   source: BenCarlson, asset_hint: us_market, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: chartbook,     url: "https://adamtooze.substack.com/feed",      source: Chartbook, asset_hint: global_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: noahpinion,    url: "https://www.noahpinion.blog/feed",         source: Noahpinion, asset_hint: global_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: overshoot,     url: "https://theovershoot.co/feed",             source: Overshoot, asset_hint: global_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: bruegel,       url: "https://www.bruegel.org/rss.xml",          source: Bruegel, asset_hint: eu_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: marginal_rev,  url: "https://marginalrevolution.com/feed",      source: MarginalRevolution, asset_hint: economics, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  # ── 석학·구루·미래학 (2026-07-19 [xml] 프로빙: 본문·신선도 확인) ──
+  - {feed_id: project_syndicate, url: "https://www.project-syndicate.org/rss",       source: ProjectSyndicate, asset_hint: global_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: krugman,       url: "https://paulkrugman.substack.com/feed",           source: Krugman, asset_hint: us_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: delong,        url: "https://braddelong.substack.com/feed",            source: DeLong, asset_hint: us_macro, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: acx,           url: "https://www.astralcodexten.com/feed",             source: AstralCodexTen, asset_hint: ideas, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: import_ai,     url: "https://jack-clark.net/feed/",                    source: ImportAI, asset_hint: ai, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: zvi,           url: "https://thezvi.wordpress.com/feed/",              source: Zvi, asset_hint: ai, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: mollick,       url: "https://www.oneusefulthing.org/feed",             source: EthanMollick, asset_hint: ai, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: simonw,        url: "https://simonwillison.net/atom/everything/",      source: SimonWillison, asset_hint: ai, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: ben_evans,     url: "https://www.ben-evans.com/benedictevans?format=rss", source: BenedictEvans, asset_hint: tech, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: stratechery,   url: "https://stratechery.com/feed/",                   source: Stratechery, asset_hint: tech, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: notboring,     url: "https://www.notboring.co/feed",                   source: NotBoring, asset_hint: tech, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
+  - {feed_id: exponential,   url: "https://www.exponentialview.co/feed",             source: ExponentialView, asset_hint: tech, language: en, poll_minutes: 15, body_mode: summary, tier: analysis}
 
   # ── 스펙(2026-06-28 피드 확장) §4.6 잔여 후보 — 의식적 드롭 (사용자 결정 2026-07-03, #30) ──
   # 아래 후보들은 프로빙을 수행하지 않은 채 드롭한다(미시도≠실패 — 흔적을 남겨 '다뤄진 척' 방지).
