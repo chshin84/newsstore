@@ -4,6 +4,21 @@ from newsstore.collect import fmp_news
 from newsstore.collect.fmp_news import map_standard_row, _parse_dt, _clean
 from newsstore.collect.fmp_news import map_article_row, _first_ticker
 from newsstore.collect.fmp_news import run_fmp_news_pass, _fetch_all_pages, PAGE_LIMIT
+from newsstore.collect.fmp_news import load_fmp_news_config
+
+
+def test_load_config_defaults_and_endpoints(tmp_path):
+    p = tmp_path / "fmp_news.yaml"
+    p.write_text("endpoints:\n  - stock-latest\n  - fmp-articles\n", encoding="utf-8")
+    cfg = load_fmp_news_config(p)
+    assert cfg["endpoints"] == ["stock-latest", "fmp-articles"]
+    assert cfg["lookback_days"] == 3 and cfg["poll_minutes"] == 1440
+
+def test_load_config_empty_endpoints_fails(tmp_path):
+    import pytest
+    p = tmp_path / "bad.yaml"; p.write_text("endpoints: []\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_fmp_news_config(p)
 
 def test_parse_dt_converts_et_to_utc():
     # FMP publishedDate는 미 동부시간(2026-07-19 실측: 저장 UTC 대비 +4h=EDT). 값(offset)으로 검증.

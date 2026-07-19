@@ -2,8 +2,10 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo
 import httpx
+import yaml
 from bs4 import BeautifulSoup
 from .collector import is_due          # 순수 스케줄 함수 재사용(collector 동작 불침범)
 from .feeds import make_id
@@ -79,6 +81,17 @@ _DEFAULT_CAP = 100                        # date-bounded 엔드포인트 최대 
 PAGE_CAP = {"fmp-articles": 2}            # from/to 미지원 → 최신 소수 페이지만. 캡 도달은 정상(오탐 아님).
 DEFAULT_LOOKBACK_DAYS = 3
 _GET_ALL_UNBOUNDED = {"fmp-articles"}     # date-bound 없어 절단을 건강 이상으로 기록하지 않는 엔드포인트
+
+
+def load_fmp_news_config(path) -> dict:
+    """활성 엔드포인트 config(SSOT) 로더. 빈 endpoints는 fail-loud(ValueError)."""
+    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    endpoints = data.get("endpoints") or []
+    if not endpoints:
+        raise ValueError("fmp_news config: endpoints 비어있음(fail-loud)")
+    return {"endpoints": list(endpoints),
+            "lookback_days": int(data.get("lookback_days", DEFAULT_LOOKBACK_DAYS)),
+            "poll_minutes": int(data.get("poll_minutes", 1440))}
 
 
 def _map_row(endpoint: str, row: dict, fetched_at: datetime) -> RawItem | None:
