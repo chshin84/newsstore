@@ -1735,18 +1735,9 @@
       const c = pctClass(n); return `${c === "up" ? "▲" : c === "down" ? "▼" : "·"}${Math.abs(n).toFixed(2)}%`;
     }
     async function loadPrices(bg) {
-      if (!bg) priceDocEl.innerHTML = `<div class="sempty">불러오는 중…</div>`;
-      try {
-        const snap = await getDocs(collection(db, "prices"));
-        const prices = {}; snap.docs.forEach(d => prices[d.id] = d.data());
-        if (!Object.keys(prices).length) {
-          priceDocEl.innerHTML = `<div class="sempty">가격 데이터 준비 중이에요.</div>`;
-          return;
-        }
-        renderPriceDashboard(prices);
-      } catch (e) {
-        priceDocEl.innerHTML = `<div class="sempty">불러오기 실패: <code>${esc(e.message)}</code></div>`;
-      }
+      // 시세·가격 수집은 별개 로컬 앱(DB-news-data, DuckDB)으로 이관됨 — 이 사이트는 뉴스 전용.
+      // (prices 컬렉션은 규칙에서 제거됐다. 아래 렌더 함수는 아직 남은 잔재 — UI 리팩터 대상.)
+      priceDocEl.innerHTML = `<div class="sempty">시세 데이터는 별개 앱으로 이관됐습니다 — 이 사이트는 뉴스 전용입니다.</div>`;
     }
     function renderPriceDashboard(prices) {
       // 값 + 차트만. 뉴스와의 정합(over/under-reaction)은 별도 — 여기선 순수 시세.
