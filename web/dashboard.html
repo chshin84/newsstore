@@ -3,42 +3,129 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>newsstore 수집 대시보드</title>
+<title>newsstore — 수집 상태</title>
+<script>
+  // FOUC 방지: 저장된 테마를 루트에 즉시 반영.
+  document.documentElement.dataset.theme = localStorage.getItem("ns_theme")
+    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+</script>
 <style>
-  :root { --bg:#0f1115; --card:#1a1e26; --line:#2a2f3a; --fg:#e6e9ef; --mut:#8b93a3; --alert:#ff6b6b; }
+  /* 쿨 뉴트럴 + 의미론적 상태색(green/amber/red)만 채도 — 웜크림/테라코타 AI 기본 팔레트 탈피. */
+  :root {
+    --bg:#f5f6f8; --surface:#ffffff; --surface-2:#fafbfc; --line:#e5e8ec; --line-2:#d7dbe1;
+    --ink:#181b21; --sub:#414650; --mut:#878e9a; --accent:#2f5fe0;
+    --ok:#12885a; --ok-bg:#e7f4ee; --warn:#b26b09; --warn-bg:#fbf0dd; --bad:#cc3646; --bad-bg:#fbe9eb;
+    --shadow:rgba(24,27,33,.06);
+    color-scheme:light;
+  }
+  :root[data-theme="dark"] {
+    --bg:#101216; --surface:#191c22; --surface-2:#15181d; --line:#282d36; --line-2:#333a44;
+    --ink:#e9ebef; --sub:#b4bac4; --mut:#767d8a; --accent:#6f9bff;
+    --ok:#3fb583; --ok-bg:#152a22; --warn:#d99a3e; --warn-bg:#2c2415; --bad:#e5646f; --bad-bg:#2d1a1d;
+    --shadow:rgba(0,0,0,.4);
+    color-scheme:dark;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
-  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
-  h1 { font-size:16px; margin:0; } h2 { font-size:14px; margin:0; }
-  .mut { color:var(--mut); } .alert { color:var(--alert); font-weight:600; }
-  button { background:#252b36; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; }
-  main { padding:16px 20px; max-width:920px; margin:0 auto; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
-  .card .row { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
-  .sample { color:var(--mut); font-size:13px; margin-top:4px; }
-  #signin { text-align:center; padding:64px 20px; }
-  input { background:#252b36; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; width:100%; }
-  .suggest { border:1px solid var(--line); border-radius:6px; margin-top:4px; max-height:180px; overflow:auto; }
-  .suggest div { padding:6px 10px; cursor:pointer; } .suggest div:hover { background:#252b36; }
-  .panel { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
-  .box { background:#141821; border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
-  .box .none { color:var(--mut); font-style:italic; }
-  a { color:#6db3ff; }
+  html { scrollbar-gutter:stable; }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num { font-variant-numeric:tabular-nums; }
+  .wrap { max-width:640px; margin:0 auto; padding:0 20px; }
+
+  header { border-bottom:1px solid var(--line); background:var(--surface); }
+  .head { display:flex; align-items:center; justify-content:space-between; padding:18px 0 16px; gap:12px; }
+  .brand { display:flex; flex-direction:column; gap:2px; }
+  .brand h1 { font-size:17px; font-weight:650; letter-spacing:-.2px; margin:0; }
+  .brand p { margin:0; font-size:12.5px; color:var(--mut); }
+  .head-actions { display:flex; align-items:center; gap:8px; }
+  button {
+    font:inherit; font-size:13px; color:var(--sub); background:var(--surface-2);
+    border:1px solid var(--line); border-radius:8px; padding:7px 12px; cursor:pointer;
+    transition:background .12s, transform .06s;
+  }
+  @media (hover:hover) { button:hover { background:var(--bg); } }
+  button:active { transform:translateY(1px); }
+
+  main { padding:22px 0 40px; display:flex; flex-direction:column; gap:22px; }
+
+  /* 전체 상태 요약 — 한눈에 초록/경고. */
+  .summary {
+    display:flex; align-items:center; gap:14px;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:18px 20px; box-shadow:0 1px 2px var(--shadow);
+  }
+  .summary .beacon { width:12px; height:12px; border-radius:50%; flex:none; box-shadow:0 0 0 4px var(--ok-bg); background:var(--ok); }
+  .summary.warn .beacon { background:var(--warn); box-shadow:0 0 0 4px var(--warn-bg); }
+  .summary.bad .beacon { background:var(--bad); box-shadow:0 0 0 4px var(--bad-bg); }
+  .summary .stext { min-width:0; }
+  .summary .stext b { font-size:16px; font-weight:600; letter-spacing:-.2px; }
+  .summary .stext span { display:block; font-size:12.5px; color:var(--mut); margin-top:1px; }
+
+  .section-label {
+    font-size:11.5px; font-weight:650; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--mut); margin:0 0 10px 2px;
+  }
+
+  /* 상태 행 — 이모지 대신 semantic 도트 + 칩. */
+  .rows { background:var(--surface); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:12px; padding:15px 18px; }
+  .row + .row { border-top:1px solid var(--line); }
+  .dot { width:9px; height:9px; border-radius:50%; flex:none; background:var(--mut); }
+  .row.ok  .dot { background:var(--ok); }
+  .row.warn .dot { background:var(--warn); }
+  .row.bad .dot { background:var(--bad); }
+  .row .name { font-size:14.5px; font-weight:550; }
+  .row .detail { font-size:12.5px; color:var(--mut); margin-top:2px; word-break:break-word; }
+  .row .body { min-width:0; flex:1; }
+  .chip {
+    flex:none; font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:999px;
+    background:var(--surface-2); color:var(--sub); border:1px solid var(--line-2);
+  }
+  .row.ok  .chip { background:var(--ok-bg);  color:var(--ok);  border-color:transparent; }
+  .row.warn .chip { background:var(--warn-bg); color:var(--warn); border-color:transparent; }
+  .row.bad .chip { background:var(--bad-bg); color:var(--bad); border-color:transparent; }
+  .when { flex:none; font-size:12px; color:var(--mut); text-align:right; min-width:64px; }
+
+  .foot { color:var(--mut); font-size:12px; text-align:center; padding-top:4px; }
+  .foot a { color:var(--accent); text-decoration:none; }
+  .load-err { color:var(--bad); font-size:13px; padding:16px 2px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>newsstore 수집 대시보드</h1>
-  <span class="mut">최근 데이터(공개) · 10분마다 자동 갱신</span>
-</header>
+<header><div class="wrap">
+  <div class="head">
+    <div class="brand">
+      <h1>수집 상태</h1>
+      <p>newsstore · 뉴스 수집 파이프라인</p>
+    </div>
+    <div class="head-actions">
+      <span class="when num" id="loaded"></span>
+      <button id="theme" title="테마 전환">테마</button>
+      <button id="refresh">새로고침</button>
+    </div>
+  </div>
+</div></header>
 
-<main id="app">
-  <p class="mut">불러온 시각: <span id="loaded"></span> · <button id="refresh">새로고침</button></p>
-  <section class="card">
-    <h2>잡 헬스 <span class="mut" style="font-weight:400">— 각 수집 잡의 최근 실행 상태</span></h2>
-    <div id="joblist"></div>
+<main class="wrap">
+  <div class="summary" id="summary">
+    <span class="beacon"></span>
+    <div class="stext"><b id="sum-title">확인 중…</b><span id="sum-sub"></span></div>
+  </div>
+
+  <section>
+    <p class="section-label">수집 잡</p>
+    <div class="rows" id="joblist"></div>
   </section>
-  <section id="cards"></section>
+
+  <section>
+    <p class="section-label">데이터 신선도</p>
+    <div class="rows" id="cardlist"></div>
+  </section>
+
+  <p class="foot">10분마다 자동 갱신 · <a href="./index.html">뉴스 보기</a></p>
 </main>
 
 <script type="module">
@@ -52,70 +139,88 @@ import { CARDS, JOBS, jobVerdict, isOverdue, relTime, cardFreshness }
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const $ = (id) => document.getElementById(id);
-const toMs = (ts) => {                        // Firestore Timestamp | ISO 문자열 | null → ms
+const toMs = (ts) => {
   if (!ts) return null;
   if (typeof ts.toMillis === "function") return ts.toMillis();
   const t = Date.parse(ts); return Number.isFinite(t) ? t : null;
 };
+const LEVEL_RANK = { ok: 0, warn: 1, bad: 2 };
+const LEVEL_TEXT = { ok: "정상", warn: "주의", bad: "점검 필요" };
 
-// ── 공개: 로그인 없이 최근 데이터 표시(30일 버퍼). 10분마다 자동 갱신 ──
-load().catch(e => { $("cards").innerHTML = `<div class="alert">로드 실패: ${e.code || e.message}</div>`; });
+// 테마 토글(뉴스 리더와 공유 키).
+$("theme").onclick = () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next; localStorage.setItem("ns_theme", next);
+};
+
+load().catch(showLoadError);
 setInterval(() => load().catch(() => {}), 10 * 60 * 1000);
+$("refresh").onclick = () => load().catch(showLoadError);
 
-// ── 로드: 잡 헬스 + 뉴스 카드 ──
-async function latestFetched(coll) {           // 컬렉션 최신 fetched_at(ms) — 바운드(limit 1)
+function showLoadError(e) {
+  $("joblist").innerHTML = `<div class="row"><div class="load-err">불러오기 실패: ${e.code || e.message}</div></div>`;
+}
+function rowHtml(level, name, detail, when) {
+  const chip = LEVEL_TEXT[level] || "—";
+  return `<div class="row ${level}">
+    <span class="dot"></span>
+    <div class="body"><div class="name">${name}</div>${detail ? `<div class="detail">${detail}</div>` : ""}</div>
+    <span class="chip">${chip}</span>
+    <span class="when num">${when}</span>
+  </div>`;
+}
+
+async function latestFetched(coll) {
   const snap = await getDocs(query(collection(db, coll), orderBy("fetched_at", "desc"), limit(1)));
   if (snap.empty) return { ms: null, doc: null };
   const d = snap.docs[0].data();
   return { ms: toMs(d.fetched_at), doc: d };
 }
+
 async function load() {
-  $("loaded").textContent = new Date().toLocaleString("ko-KR");
+  $("loaded").textContent = new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
   const now = Date.now();
-  // 잡 헬스: 각 스케줄 잡의 job_health/{key} — 조용한 실패·멈춤·미실행을 즉시 표시.
-  const jobsEl = $("joblist"); jobsEl.innerHTML = "";
+  let worst = "ok";
+
+  // 잡 헬스
+  const jobRows = [];
   for (const j of JOBS) {
     let hd = null;
     try { const s = await getDoc(doc(db, "job_health", j.key)); hd = s.exists() ? s.data() : null; }
     catch (e) { hd = null; }
     const h = hd ? { lastStatus: hd.last_status, fetchedMs: toMs(hd.fetched_at) } : null;
     const v = jobVerdict(h, j.expectedSec, now);
-    const dot = v.level === "ok" ? "🟢" : v.level === "warn" ? "🟡" : "🔴";
+    if (LEVEL_RANK[v.level] > LEVEL_RANK[worst]) worst = v.level;
     const when = h && h.fetchedMs ? relTime(h.fetchedMs, now) : "기록 없음";
-    const cls = v.level === "bad" ? "alert" : "mut";
-    const row = document.createElement("div"); row.className = "row";
-    row.innerHTML = `<span>${dot} <b>${j.label}</b> <span class="${cls}">${v.text}</span></span>`
-                  + `<span class="mut">${when}</span>`;
-    jobsEl.appendChild(row);
-    if (hd && hd.detail) {
-      const d = document.createElement("div"); d.className = "sample"; d.textContent = hd.detail;
-      jobsEl.appendChild(d);
-    }
+    const detail = (hd && hd.detail) ? hd.detail : v.text;
+    jobRows.push(rowHtml(v.level, j.label, detail, when));
   }
-  // 카드별: 묶인 컬렉션의 최신 fetched_at을 모아 신선도·지연 판정
-  const cardsEl = $("cards"); cardsEl.innerHTML = "";
+  $("joblist").innerHTML = jobRows.join("");
+
+  // 데이터 신선도
+  const cardRows = [];
   for (const c of CARDS) {
     const results = await Promise.all(c.collections.map(latestFetched));
     const { lastFetchedMs, anyEmpty } = cardFreshness(results.map(r => r.ms));
     const verdict = isOverdue(lastFetchedMs, c, now);
-    const when = lastFetchedMs == null ? "데이터 없음" : relTime(lastFetchedMs, now);
-    const flag = verdict.overdue
-      ? `<span class="alert">⚠️ ${anyEmpty ? "데이터 없음/기한 초과" : "지연"}</span>` : "";
-    const sample = sampleLine(c, results);
-    const el = document.createElement("div"); el.className = "card";
-    el.innerHTML = `<div class="row"><h2>${c.label}</h2><span class="mut">마지막 수집: ${when} · 기대: ${cadenceLabel(c.expectedSec)} ${flag}</span></div>`
-                 + (sample ? `<div class="sample">${sample}</div>` : "");
-    cardsEl.appendChild(el);
+    const level = verdict.overdue ? "bad" : "ok";
+    if (LEVEL_RANK[level] > LEVEL_RANK[worst]) worst = level;
+    const when = lastFetchedMs == null ? "없음" : relTime(lastFetchedMs, now);
+    const d = results[0].doc;
+    const detail = d ? `최근: ${d.source || ""}${d.title ? " · " + d.title.slice(0, 44) : ""}`
+                     : (anyEmpty ? "수집된 데이터 없음" : "");
+    cardRows.push(rowHtml(level, c.label, detail, when));
   }
+  $("cardlist").innerHTML = cardRows.join("");
+
+  // 전체 요약
+  const sum = $("summary");
+  sum.className = "summary " + worst;
+  $("sum-title").textContent = worst === "ok" ? "모두 정상" : worst === "warn" ? "주의가 필요합니다" : "점검이 필요합니다";
+  $("sum-sub").textContent = worst === "ok"
+    ? "수집 잡과 데이터가 정상 주기로 갱신되고 있습니다."
+    : "아래 항목에서 지연·실패·정지를 확인하세요.";
 }
-function cadenceLabel(sec) { return sec <= 300 ? "5분" : sec <= 86400 ? "일" : "주"; }
-function sampleLine(card, results) {
-  const d = results[0].doc;
-  if (!d) return "";
-  if (card.key === "news")  return `최근: ${d.source || ""} · ${(d.title || "").slice(0, 60)}`;
-  return "";
-}
-$("refresh").onclick = () => load().catch(() => {});
 </script>
 </body>
 </html>
