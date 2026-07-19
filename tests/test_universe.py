@@ -1,7 +1,8 @@
 """PIT 유니버스 도출 — constituent에서 종목 도출 + index_members/index_changes/delisted 적재. HTTP 주입."""
 import pytest
 
-from newsstore.collect.universe import collect_universe, INDEX_ENDPOINTS
+from newsstore.collect.universe import (
+    collect_universe, collect_universe_screener, INDEX_ENDPOINTS)
 
 FA = "2026-07-13T00:00:00+00:00"
 
@@ -70,3 +71,26 @@ def test_collect_universe_fails_loud_on_unknown_index():
     with pytest.raises(ValueError, match="인덱스"):
         collect_universe(_Store(), lambda idx: [], lambda idx: [], lambda: [],
                          indices=["russell2000"], fetched_at=FA)
+
+
+def test_collect_universe_screener_sorts_by_mcap_and_caps():
+    store = _Store()
+    rows = [
+        {"symbol": "SMALL", "companyName": "Small", "marketCap": 1_000, "sector": "T"},
+        {"symbol": "BIG", "companyName": "Big", "marketCap": 9_000, "sector": "T"},
+        {"symbol": "MID", "companyName": "Mid", "marketCap": 5_000, "sector": "T"},
+    ]
+    uni = collect_universe_screener(store, lambda: rows, limit=2, fetched_at=FA)
+    assert uni == ["BIG", "MID"]                              # 시총 상위 2, 티커 정렬 반환
+    members = store.snaps["index_members"]["screener"]["members"]
+    assert [m["symbol"] for m in members] == ["BIG", "MID"]   # 스냅샷=시총 내림차순 상위 N
+    assert store.snaps["index_members"]["screener"]["limit"] == 2
+
+
+def test_collect_universe_screener_snapshots_membership_for_pit():
+    store = _Store()
+    collect_universe_screener(
+        store, lambda: [{"symbol": "AAPL", "companyName": "Apple", "marketCap": 1}],
+        limit=1000, fetched_at=FA)
+    snap = store.snaps["index_members"]["screener"]
+    assert snap["index"] == "screener" and snap["fetched_at"] == FA   # 생존편향 PIT 스냅샷

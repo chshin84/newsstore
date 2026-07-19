@@ -19,27 +19,37 @@ import httpx
 import yaml
 
 from ..collect.factors import specs_for, run_factor_pass
-from ..collect.universe import collect_universe, INDEX_ENDPOINTS
+from ..collect.universe import collect_universe, collect_universe_screener, INDEX_ENDPOINTS
 from ..store.factory import make_store
+from ._health import job_health
 
 log = logging.getLogger("newsstore.entrypoints.run_factors")
 BASE_FMP = "https://financialmodelingprep.com/stable/"
 
 
-def load_factors_config(path: str) -> tuple[list[str], int]:
-    """config/factors.yaml → (indices, max_symbols). fail-loud(모르는 인덱스·형식 오류)."""
+def load_factors_config(path: str) -> dict:
+    """config/factors.yaml → {universe, indices, screener_limit, max_symbols}. fail-loud(형식 오류).
+    universe=screener면 indices 불요, constituent면 indices 필수."""
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
-    indices = raw.get("indices")
-    if not isinstance(indices, list) or not indices:
-        raise ValueError(f"{path}: 'indices' 리스트가 필요하다")
-    for idx in indices:
-        if idx not in INDEX_ENDPOINTS:
-            raise ValueError(f"{path}: 모르는 인덱스 {idx!r} — {sorted(INDEX_ENDPOINTS)} 중 하나")
+    universe = raw.get("universe", "constituent")
+    if universe not in ("screener", "constituent"):
+        raise ValueError(f"{path}: universe는 screener|constituent 중 하나여야 한다 — {universe!r}")
+    indices = raw.get("indices") or []
+    if universe == "constituent":
+        if not isinstance(indices, list) or not indices:
+            raise ValueError(f"{path}: universe=constituent는 'indices' 리스트가 필요하다")
+        for idx in indices:
+            if idx not in INDEX_ENDPOINTS:
+                raise ValueError(f"{path}: 모르는 인덱스 {idx!r} — {sorted(INDEX_ENDPOINTS)} 중 하나")
+    screener_limit = raw.get("screener_limit", 1000)
+    if not isinstance(screener_limit, int) or screener_limit <= 0:
+        raise ValueError(f"{path}: screener_limit는 양의 정수여야 한다 — {screener_limit!r}")
     max_symbols = raw.get("max_symbols", 0)
     if not isinstance(max_symbols, int) or max_symbols < 0:
         raise ValueError(f"{path}: max_symbols는 0 이상 정수여야 한다 — {max_symbols!r}")
-    return indices, max_symbols
+    return {"universe": universe, "indices": indices,
+            "screener_limit": screener_limit, "max_symbols": max_symbols}
 
 
 def main(argv=None) -> int:
@@ -51,7 +61,7 @@ def main(argv=None) -> int:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
     api_key = os.environ["FMP_API_KEY"]              # fail-loud: 없으면 KeyError로 즉시 중단
-    indices, max_symbols = load_factors_config(args.config)
+    cfg = load_factors_config(args.config)
     specs = specs_for(args.cadence)
 
     now = datetime.now(timezone.utc)
@@ -70,26 +80,33 @@ def main(argv=None) -> int:
     def fetch_current(idx):  return _get(INDEX_ENDPOINTS[idx][0], {})
     def fetch_changes(idx):  return _get(INDEX_ENDPOINTS[idx][1], {})
     def fetch_delisted():    return _get("delisted-companies", {})
+    def fetch_screener():                            # company-screener 시총 상위(universe=screener)
+        return _get("company-screener", {"exchange": "NASDAQ,NYSE", "isEtf": "false",
+                    "isFund": "false", "isActivelyTrading": "true", "limit": cfg["screener_limit"]})
 
     def fetch_spec(spec, symbol):                    # per-symbol 스펙 fetch(엔진이 호출)
         return _get(spec.endpoint, {"symbol": symbol, **spec.params})
 
     try:
-        with make_store() as store:
-            universe = collect_universe(store, fetch_current, fetch_changes, fetch_delisted,
-                                        indices, fetched_at=fetched_at)
-            if max_symbols:
-                universe = universe[:max_symbols]
+        with make_store() as store, job_health(store, "factors") as h:
+            if cfg["universe"] == "screener":
+                universe = collect_universe_screener(store, fetch_screener,
+                                                     limit=cfg["screener_limit"], fetched_at=fetched_at)
+            else:
+                universe = collect_universe(store, fetch_current, fetch_changes, fetch_delisted,
+                                            cfg["indices"], fetched_at=fetched_at)
+            if cfg["max_symbols"]:
+                universe = universe[:cfg["max_symbols"]]
                 log.info("universe capped to %d (max_symbols)", len(universe))
             counts = run_factor_pass(store, fetch_spec, universe, specs,
                                      capture_date=capture_date, fetched_at=fetched_at,
                                      delay_s=delay_s)
+            total = sum(counts.values())
+            h["detail"] = f"cadence={args.cadence} universe={len(universe)} docs={total} {counts}"
+            log.info("factor collect done (cadence=%s): %d doc(s) over %d symbols; per-collection %s",
+                     args.cadence, total, len(universe), counts)
     finally:
         fmp.close()
-
-    total = sum(counts.values())
-    log.info("factor collect done (cadence=%s): %d doc(s) over %d symbols; per-collection %s",
-             args.cadence, total, len(universe), counts)
     return 0
 
 

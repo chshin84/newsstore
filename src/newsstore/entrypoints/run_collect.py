@@ -6,6 +6,7 @@ from ..collect.feeds import load_feeds, distinct_sources, source_tiers
 from ..collect.ssl_config import make_client
 from ..store.factory import make_store
 from ..collect.collector import collect_once
+from ._health import job_health
 
 log = logging.getLogger("newsstore")
 
@@ -30,7 +31,7 @@ def main(argv=None) -> int:
     feeds = load_feeds(args.feeds)
     client = make_client()
     embed_failed = False
-    with make_store() as store:                  # Firestore(에뮬레이터 or 실)
+    with make_store() as store, job_health(store, "collector") as h:   # Firestore(에뮬레이터 or 실)
         # SSOT: 사이트 소스 목록·tier를 feeds.yaml에서 도출해 기록 (하드코딩 X). tier 전파 #17.
         store.set_meta("sources", {"sources": distinct_sources(feeds),
                                    "tiers": source_tiers(feeds)})
@@ -71,6 +72,9 @@ def main(argv=None) -> int:
         except Exception:
             log.exception("embed pass failed (collection results preserved)")
             embed_failed = True
+
+        h["detail"] = (f"new={total_new} failed={len(new_failed)} "
+                       f"chronic={len(chronic)} embed={'fail' if embed_failed else 'ok'}")
 
     # 시스템 장애만 런을 실패시킨다: 정상 피드가 최소 시도 이상에서 다수 실패할 때.
     if healthy_attempted >= MIN_ATTEMPTED_FOR_ALERT and \

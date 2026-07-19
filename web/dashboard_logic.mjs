@@ -1,7 +1,7 @@
 // 수집 대시보드 순수 로직 — SSOT 상수 + 판정. 페이지·node 테스트가 공유한다.
-// 문턱은 계약값(주기·30일 TTL 데드라인)에서 도출(매직넘버 금지). 계약: docs/firestore-contract.md.
+// 문턱은 계약값(주기·60일 TTL 데드라인)에서 도출(매직넘버 금지). 계약: docs/firestore-contract.md.
 
-export const TTL_DAYS = 30;
+export const TTL_DAYS = 60;
 export const OVERDUE_FACTOR = 3;    // §1: 기대주기의 몇 배까지 정상으로 볼지(보수적)
 export const LEAD_FRACTION = 0.4;   // §2: 지연 문턱 = TTL_DAYS × 이 비율(데드라인 대비 리드타임 확보)
 
@@ -28,6 +28,26 @@ export const CARDS = [
   { key: 'universe',   label: '유니버스',           collections: ['index_members', 'index_changes', 'delisted'],
     expectedSec: SCHEDULE.weekly,   marketData: false, backfillImpossible: false },
 ];
+
+// 스케줄 잡 헬스 — 각 잡이 실행 상태를 job_health/{key}에 남긴다(entrypoints/_health.job_health).
+// 백필(backfill_embed)은 수동 일회성이라 제외한다(스케줄이 없어 항상 stale=오탐).
+export const JOBS = [
+  { key: 'collector', label: '뉴스 수집',    expectedSec: SCHEDULE.intraday },
+  { key: 'prices',    label: '가격(5분봉)',   expectedSec: 900 },              // 15분마다
+  { key: 'factors',   label: '팩터·펀더멘털',  expectedSec: SCHEDULE.daily },
+];
+
+// 잡 헬스 판정. h={lastStatus, fetchedMs}(Firestore Timestamp→ms 변환은 호출자).
+// 우선순위: 실패 > 멈춤(running 고착=하드 kill) > 지연(안 돎)·미실행 > 정상. level: ok|warn|bad.
+export function jobVerdict(h, expectedSec, nowMs, overdueFactor = OVERDUE_FACTOR) {
+  if (!h || h.lastStatus == null) return { level: 'bad', text: '미실행' };
+  const staleMs = expectedSec * 1000 * overdueFactor;
+  const age = (h.fetchedMs == null || !Number.isFinite(h.fetchedMs)) ? Infinity : (nowMs - h.fetchedMs);
+  if (h.lastStatus === 'fail') return { level: 'bad', text: '실패' };
+  if (h.lastStatus === 'running')
+    return age > staleMs ? { level: 'bad', text: '멈춤(정지)' } : { level: 'warn', text: '실행 중' };
+  return age > staleMs ? { level: 'bad', text: '지연(안 돎)' } : { level: 'ok', text: '정상' };
+}
 
 export function isWeekend(ms) {
   const d = new Date(ms).getUTCDay();   // 0=일, 6=토 (UTC 근사 — 완화용이라 충분)

@@ -22,6 +22,28 @@ INDEX_ENDPOINTS = {
 }
 
 
+def collect_universe_screener(store, fetch_screener, *, limit: int, fetched_at: str) -> list[str]:
+    """company-screener(시총 상위)에서 유니버스를 도출한다 — 지수 구성 대신 시총 상위 N.
+    생존편향 PIT는 그 시점 스크린 명단을 index_members/screener 스냅샷으로 보존해 constituent와 같은
+    방식으로 재구성한다(편입·편출은 스냅샷 간 diff). 반환 = 정렬된 티커.
+
+    fetch_screener() -> [{symbol,companyName,marketCap,sector,...}]  (시총 내림차순)
+    개별 실패는 예외로 전파(유니버스 없이 팩터 수집은 무의미 — fail-loud)."""
+    rows = fetch_screener()
+    members = [{"symbol": r["symbol"], "name": r.get("companyName"),
+                "sector": r.get("sector"), "marketCap": r.get("marketCap")}
+               for r in (rows or []) if isinstance(r, dict) and r.get("symbol")]
+    # 엔드포인트가 시총 내림차순을 주지만, 방어적으로 재정렬 후 상위 N(무순서 회귀 대비).
+    members.sort(key=lambda m: (m.get("marketCap") or 0), reverse=True)
+    members = members[:limit]
+    store.save_snapshot("index_members", "screener",
+                        {"index": "screener", "members": members, "limit": limit,
+                         "source": "fmp", "fetched_at": fetched_at})
+    out = sorted({m["symbol"] for m in members})
+    log.info("universe(screener): %d symbols (top %d by market cap)", len(out), limit)
+    return out
+
+
 def collect_universe(store, fetch_current, fetch_changes, fetch_delisted,
                      indices: list[str], *, fetched_at: str) -> list[str]:
     """indices의 현재 구성종목에서 유니버스(중복 제거·정렬)를 도출하고 PIT 컬렉션을 적재한다.

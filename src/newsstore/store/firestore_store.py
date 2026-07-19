@@ -265,6 +265,19 @@ class FirestoreStore:
         existing = {s.id for s in self.db.get_all(refs) if s.exists}
         return [i for i in ids if i not in existing]
 
+    # ── 잡 헬스(대시보드 표시) — 각 잡의 실행 상태를 job_health/{job}에 남긴다 ──
+    # feed_state처럼 상태라 expire_at을 넣지 않는다(만료되면 '한 번도 안 돎'과 구분 불가).
+    # 하드 kill(타임아웃·OOM)이면 'fail' 기록이 안 남아 'running'이 고착 → 대시보드가 '멈춤'으로 잡는다.
+    def get_job_health(self, job: str) -> dict:
+        snap = self.db.collection("job_health").document(job).get()
+        return (snap.to_dict() or {}) if snap.exists else {}
+
+    def set_job_health(self, job: str, **fields) -> None:
+        cur = self.get_job_health(job)        # read-modify-write (부분 갱신)
+        cur["job"] = job
+        cur.update(fields)
+        self.db.collection("job_health").document(job).set(cur)
+
     def close(self) -> None:
         pass
 

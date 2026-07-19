@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ── 전면 공개 read (대시보드·뉴스 리더는 로그인 없이 최근 데이터를 본다) ──
-    // newsstore는 30일 버퍼만 유지하므로 공개해도 노출은 최근 데이터에 한정된다(깊은 아카이브는
+    // newsstore는 60일 버퍼만 유지하므로 공개해도 노출은 최근 데이터에 한정된다(깊은 아카이브는
     // 로컬 SQLite 몫 — Firestore 밖). write는 전면 금지(수집기는 Admin SDK라 규칙 우회).
     match /items/{id}            { allow read: if true; allow write: if false; }
     match /meta/{id}             { allow read: if true; allow write: if false; }
@@ -24,6 +24,7 @@ service cloud.firestore {
     match /index_changes/{id}    { allow read: if true; allow write: if false; }
     match /delisted/{id}         { allow read: if true; allow write: if false; }
     match /item_vectors/{id}     { allow read: if true; allow write: if false; }
+    match /job_health/{id}       { allow read: if true; allow write: if false; }
 
     // 그 외(feed_state 폴링 커서 등)는 기본 거부(공개 불요).
     match /{document=**} { allow read, write: if false; }

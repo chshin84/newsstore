@@ -34,6 +34,10 @@
 
 <main id="app">
   <p class="mut">불러온 시각: <span id="loaded"></span> · <button id="refresh">새로고침</button></p>
+  <section class="card">
+    <h2>잡 헬스 <span class="mut" style="font-weight:400">— 각 수집 잡의 최근 실행 상태</span></h2>
+    <div id="joblist"></div>
+  </section>
   <section id="cards"></section>
   <section class="card">
     <h2>종목 드릴다운</h2>
@@ -49,7 +53,7 @@ import { getFirestore, collection, query, orderBy, limit, getDocs, doc, getDoc,
          where, documentId }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
-import { CARDS, isOverdue, relTime, cardFreshness, idRange, universeUnion, searchFilter }
+import { CARDS, JOBS, jobVerdict, isOverdue, relTime, cardFreshness, idRange, universeUnion, searchFilter }
   from "./dashboard_logic.mjs";
 
 const app = initializeApp(firebaseConfig);
@@ -76,6 +80,26 @@ async function latestFetched(coll) {           // 컬렉션 최신 fetched_at(ms
 async function load() {
   $("loaded").textContent = new Date().toLocaleString("ko-KR");
   const now = Date.now();
+  // 잡 헬스: 각 스케줄 잡의 job_health/{key} — 조용한 실패·멈춤·미실행을 즉시 표시.
+  const jobsEl = $("joblist"); jobsEl.innerHTML = "";
+  for (const j of JOBS) {
+    let hd = null;
+    try { const s = await getDoc(doc(db, "job_health", j.key)); hd = s.exists() ? s.data() : null; }
+    catch (e) { hd = null; }
+    const h = hd ? { lastStatus: hd.last_status, fetchedMs: toMs(hd.fetched_at) } : null;
+    const v = jobVerdict(h, j.expectedSec, now);
+    const dot = v.level === "ok" ? "🟢" : v.level === "warn" ? "🟡" : "🔴";
+    const when = h && h.fetchedMs ? relTime(h.fetchedMs, now) : "기록 없음";
+    const cls = v.level === "bad" ? "alert" : "mut";
+    const row = document.createElement("div"); row.className = "row";
+    row.innerHTML = `<span>${dot} <b>${j.label}</b> <span class="${cls}">${v.text}</span></span>`
+                  + `<span class="mut">${when}</span>`;
+    jobsEl.appendChild(row);
+    if (hd && hd.detail) {
+      const d = document.createElement("div"); d.className = "sample"; d.textContent = hd.detail;
+      jobsEl.appendChild(d);
+    }
+  }
   // 카드별: 묶인 컬렉션의 최신 fetched_at을 모아 신선도·지연 판정
   const cardsEl = $("cards"); cardsEl.innerHTML = "";
   for (const c of CARDS) {

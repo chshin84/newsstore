@@ -16,6 +16,7 @@ import httpx
 
 from ..collect.prices import load_price_symbols, run_price_pass
 from ..store.factory import make_store
+from ._health import job_health
 
 log = logging.getLogger("newsstore.entrypoints.run_prices")
 
@@ -73,12 +74,13 @@ def main(argv=None) -> int:
     # 콜 간 지연(레이트리밋 대응 — env, 기본 0.2s). 심볼 수 적어 하한만.
     delay_s = float(os.environ.get("NEWSSTORE_PRICE_DELAY_S", "0.2"))
     try:
-        with make_store() as store:
+        with make_store() as store, job_health(store, "prices") as h:
             n = run_price_pass(store, fetchers, symbols, delay_s=delay_s)
+            h["detail"] = f"{n} new bar(s) across {len(symbols)} symbols"
+            log.info("price collect done: %d new bar(s) across %d symbols", n, len(symbols))
     finally:
         fmp.close()
         yahoo.close()
-    log.info("price collect done: %d new bar(s) across %d symbols", n, len(symbols))
     return 0
 
 
