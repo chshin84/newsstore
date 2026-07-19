@@ -49,3 +49,29 @@ def test_map_article_row_variant_fields():
     assert item.symbol == "META"
     assert "Citigroup cut META" in item.body
     assert item.feed_id == "fmp:fmp-articles"
+
+
+# --- FakeDb로 upsert_items_batched의 get_all 배치 read 경로 검증(리뷰 CC6) ---
+
+class _FakeRef:
+    def __init__(self, id): self.id = id
+class _FakeCol:
+    def document(self, i): return _FakeRef(i)
+class _FakeBatch:
+    def set(self, ref, doc): pass
+    def commit(self): pass
+class _FakeDb:
+    def __init__(self): self.get_all_calls = 0; self.per_item_gets = 0
+    def collection(self, name): return _FakeCol()
+    def get_all(self, refs): self.get_all_calls += 1; return []   # 아무것도 없음 → 전부 신규
+    def batch(self): return _FakeBatch()
+
+def test_upsert_batched_uses_get_all_not_per_item():
+    from newsstore.store.firestore_store import FirestoreStore
+    from newsstore.contracts.models import RawItem
+    db = _FakeDb(); store = FirestoreStore(db)
+    now = datetime(2026,7,19,tzinfo=timezone.utc)
+    items = [RawItem(id=str(i), feed_id="fmp:stock-latest", source="X",
+                     url=f"http://x/{i}", title="t", fetched_at=now) for i in range(5)]
+    assert store.upsert_items_batched(items) == 5
+    assert db.get_all_calls >= 1 and db.per_item_gets == 0        # 배치 read, per-item get 없음

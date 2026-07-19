@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from newsstore.contracts.models import RawItem
 from newsstore.store.firestore_store import FirestoreStore, _to_doc
+from newsstore.collect.feeds import make_id
 
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
 
@@ -239,3 +240,14 @@ def test_to_doc_persists_symbol():
     it = RawItem(id="a", feed_id="fmp:stock-latest", source="X", symbol="AAPL",
                  url="http://x/1", title="t", fetched_at=datetime.now(timezone.utc))
     assert _to_doc(it)["symbol"] == "AAPL"
+
+
+# --- upsert_items_batched(청크 배치 upsert, 비용 통제) ---
+
+def test_upsert_items_batched_dedups_and_is_idempotent(store):
+    now = datetime.now(timezone.utc)
+    def mk(u): return RawItem(id=make_id(u), feed_id="fmp:stock-latest", source="X",
+                              url=u, title="t", fetched_at=now)
+    items = [mk("http://x/1"), mk("http://x/2"), mk("http://x/1")]   # 배치 내 중복 1건
+    assert store.upsert_items_batched(items) == 2      # 고유 2건만
+    assert store.upsert_items_batched(items) == 0      # 멱등 재-pull(불변식: 재저장 0)
