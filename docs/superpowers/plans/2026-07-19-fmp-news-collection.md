@@ -27,6 +27,7 @@
 - **Create** `src/newsstore/entrypoints/run_fmp_news.py` — HTTP 배선(fetchers), store, 패스 실행.
 - **Create** `config/fmp_news.yaml` — 활성 엔드포인트·lookback·poll(SSOT).
 - **Modify** `src/newsstore/contracts/models.py` — `RawItem`에 `symbol: str = ""`.
+- **Modify** `pyproject.toml` (+ `infra/requirements.lock`) — `tzdata` 의존성(ZoneInfo, slim 이미지용).
 - **Modify** `src/newsstore/store/firestore_store.py` — `_to_doc`가 `symbol` 저장 + `upsert_items_batched`(청크 배치 중복제거).
 - **Create** `tests/test_fmp_news.py` — 매핑·페이지네이션·오케스트레이션·비밀·분류(순수, 페이크 store/db/fetcher).
 - **Modify** `tests/test_firestore_store.py` — `symbol` 저장 + `upsert_items_batched`(에뮬레이터).
@@ -139,7 +140,7 @@ $doc=Invoke-RestMethod "https://firestore.googleapis.com/v1/projects/$proj/datab
 # 두 값 차이가 0 → UTC. +4/+5h → 미 동부시간(ET).
 ```
 
-오프셋 0이면 `FMP_NEWS_TZ = timezone.utc`, ET면 `timezone(timedelta(hours=-5))`(또는 DST -4)로 확정하고, **측정한 오프셋을 상수 주석에 인용**한다. 대조 항목을 못 찾으면 다른 겹침 매체(stock-latest의 CNBC)로 반복. 최후에도 불가하면 UTC로 두되 주석에 "미확정" 명시.
+**확정(2026-07-19 실측)**: 겹침 CNBC 20건 전부 FMP `publishedDate`가 저장 UTC 대비 **일관 +4h** → FMP 뉴스 시각은 **미 동부시간(7월=EDT=UTC-4)**이다. DST(EST -5 / EDT -4)를 자동 처리하려면 고정 오프셋이 아니라 `ZoneInfo("America/New_York")`를 쓴다. `python:3.12-slim`엔 IANA tz DB가 없으므로 **`pyproject.toml` 의존성에 `tzdata`를 추가**한다(ZoneInfo 데이터).
 
 - [ ] **Step 2: 실패 테스트 작성** — `tests/test_fmp_news.py` 신규. **tz는 tzinfo가 아니라 변환 값(offset)을 assert**한다(리뷰 AA2 — `_parse_dt`는 항상 UTC로 정규화하므로 tzinfo 단언만으론 오프셋 오류를 못 잡는다).
 
@@ -148,12 +149,11 @@ from datetime import datetime, timezone
 from newsstore.collect import fmp_news
 from newsstore.collect.fmp_news import map_standard_row, _parse_dt, _clean
 
-def test_parse_dt_converts_by_configured_tz():
-    # FMP_NEWS_TZ가 UTC라면 22:45 naive → 22:45 UTC. tz가 ET였다면 값이 달라진다(값으로 검증).
-    assert fmp_news.FMP_NEWS_TZ.utcoffset(None) == timezone.utc.utcoffset(None), \
-        "이 테스트는 FMP_NEWS_TZ=UTC 확정을 전제한다(Task2 Step1). 다른 tz면 아래 기대값을 오프셋만큼 조정."
-    dt = _parse_dt("2026-07-18 22:45:00")
-    assert dt == datetime(2026, 7, 18, 22, 45, tzinfo=timezone.utc)   # 정확한 값(오프셋 반영)
+def test_parse_dt_converts_et_to_utc():
+    # FMP publishedDate는 미 동부시간(2026-07-19 실측: 저장 UTC 대비 +4h=EDT). 값(offset)으로 검증.
+    assert _parse_dt("2026-07-18 22:45:00") == datetime(2026, 7, 19, 2, 45, tzinfo=timezone.utc)   # EDT +4h
+    # 겨울(EST=UTC-5) DST 전환도 ZoneInfo가 처리 — 고정 오프셋이면 이 케이스가 어긋난다.
+    assert _parse_dt("2026-01-15 22:45:00") == datetime(2026, 1, 16, 3, 45, tzinfo=timezone.utc)   # EST +5h
 
 def test_parse_dt_bad_returns_none():
     assert _parse_dt("") is None and _parse_dt("nonsense") is None
@@ -192,14 +192,15 @@ Expected: FAIL (`fmp_news` 모듈 없음)
 ```python
 from __future__ import annotations
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 from bs4 import BeautifulSoup
 from .feeds import make_id
 from ..contracts.models import RawItem
 
-# FMP 뉴스 publishedDate/date는 tz 표기가 없다(2026-07-19 실측). Task 2 Step 1 프로브로
-# 확정한 오프셋을 여기 박는다. 측정 오프셋=0h(UTC)로 확정 시 아래 그대로, ET면
-# timezone(timedelta(hours=-5))로 교체하고 이 주석에 측정값을 남긴다.
-FMP_NEWS_TZ = timezone.utc
+# FMP 뉴스 publishedDate/date는 미 동부시간이다(2026-07-19 실측: 저장 UTC 대비 일관 +4h=EDT,
+# 겹침 CNBC 20건 대조). ZoneInfo로 EST(-5)/EDT(-4) DST를 자동 처리 — 고정 오프셋은 DST 경계에서
+# 어긋난다. slim 이미지엔 IANA tz DB가 없어 pyproject 의존성에 tzdata 필요(Task2 Step4b).
+FMP_NEWS_TZ = ZoneInfo("America/New_York")
 
 def _clean(html: str) -> str:
     text = BeautifulSoup(html or "", "lxml").get_text(" ", strip=True)
@@ -232,10 +233,12 @@ def map_standard_row(row: dict, endpoint: str, fetched_at: datetime) -> RawItem 
     )
 ```
 
+- [ ] **Step 4b: tzdata 의존성 추가** — `pyproject.toml`의 런타임 dependencies에 `tzdata` 추가(`python:3.12-slim`엔 IANA tz DB가 없어 `ZoneInfo("America/New_York")`가 `ZoneInfoNotFoundError`를 낸다). 에뮬레이터 test 이미지도 slim 기반이면 필요. 추가 후 `infra/requirements.lock`도 해당 관례대로 갱신(락 사용 시).
+
 - [ ] **Step 5: 통과 확인**
 
 Run: `MSYS_NO_PATHCONV=1 docker compose run --rm test pytest tests/test_fmp_news.py -v`
-Expected: PASS (6 passed)
+Expected: PASS (6 passed) — tz 값(EDT +4h / EST +5h) 포함
 
 - [ ] **Step 6: 커밋**
 
