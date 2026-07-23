@@ -10,7 +10,7 @@
 | `feed_state` | collect Job | collect Job | **없음** | etag/last_modified 폴링 커서 — 만료시키면 증분 수집이 어긋난다 |
 | `meta` | collect Job | web UI | 없음 | 소스 목록·tier 발행 |
 | `item_vectors` | collect Job(임베딩 패스) | 공개(다운스트림) | 있음(`expire_at` — **원본 item 미러링**) | story 기사 임베딩 벡터(768차원) — 기사와 함께 만료 |
-| `job_health` | collect·FMP 뉴스 Job | web UI(대시보드) | 없음 | 잡별 최근 실행 상태(조용한 실패 감지) |
+| `job_health` | collect_all 통합 Job | web UI(대시보드) | 없음 | 잡별 최근 실행 상태(조용한 실패 감지) |
 
 ## TTL 규칙 (2개월, 비용 통제)
 
@@ -48,8 +48,8 @@ story 기사당 벡터 1문서. 문서 키 = item id. **분석이 아니라 수�
 - `feed_state`에 `fmp:{endpoint}` 문서 — FMP 뉴스 엔드포인트별 is_due 스케줄·건강(커서 아님, 고정 lookback).
 - 신규 컬렉션 없음(기존 items 재사용). TTL·kind·embed_pending 계약 동일.
 
-### `job_health` (collect·FMP 뉴스 Job이 기록, 공개 read)
-잡별 최근 실행 상태 1문서(문서 키 = 잡 key, 예: `collector`). 대시보드(`web/dashboard.html`)가 읽어 조용한 실패·멈춤·미실행을 표시한다(operations §G).
+### `job_health` (collect_all 통합 Job이 기록, 공개 read)
+잡별 최근 실행 상태 1문서(문서 키 = 잡 key, 예: `collect_all`). 대시보드(`web/dashboard.html`)가 읽어 조용한 실패·멈춤·미실행을 표시한다(operations §G).
 - **필드**: `last_status`(예: ok|running|fail), `fetched_at`(마지막 실행 기록 시각), `detail`(옵션 요약 문자열). **`expire_at` 없음**(상태 문서라 만료 불요).
 
 ## Store 표면 (`firestore_store.FirestoreStore`)

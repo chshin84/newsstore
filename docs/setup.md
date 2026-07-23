@@ -37,18 +37,22 @@ gcloud iam service-accounts create newsstore-job
 SA=newsstore-job@<PROJECT_ID>.iam.gserviceaccount.com
 gcloud projects add-iam-policy-binding <PROJECT_ID> --member="serviceAccount:$SA" --role="roles/datastore.user"
 gcloud projects add-iam-policy-binding <PROJECT_ID> --member="serviceAccount:$SA" --role="roles/run.invoker"
-gcloud run jobs create newsstore-collector \
+gcloud run jobs create newsstore-collect-all \
   --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
+  --command=python --args=-m,newsstore.entrypoints.run_collect_all \
   --service-account=$SA \
   --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --max-retries=1 --task-timeout=600
-gcloud run jobs execute newsstore-collector --region=<REGION> --wait   # 스모크: Firestore에 items 쌓이는지
+# 네이버 자격증명(NAVER_CLIENT_ID/NAVER_CLIENT_SECRET)은 §8과 같은 패턴으로 Secret Manager에
+# 만들어 --set-secrets로 이 잡에 추가 주입해야 한다(이 문서는 그 비밀 생성 절차를 아직
+# 다루지 않는다 — 누락하면 이 잡은 NAVER_CLIENT_ID 미설정으로 fail-loud 실패한다).
+gcloud run jobs execute newsstore-collect-all --region=<REGION> --wait   # 스모크: Firestore에 items 쌓이는지
 ```
 
-## 4. Cloud Scheduler (5분마다)
+## 4. Cloud Scheduler (15분마다)
 ```
-gcloud scheduler jobs create http newsstore-5min --location=<REGION> --schedule="*/5 * * * *" \
-  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-collector:run" \
+gcloud scheduler jobs create http newsstore-collect-all-15min --location=<REGION> --schedule="*/15 * * * *" \
+  --uri="https://<REGION>-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/<PROJECT_ID>/jobs/newsstore-collect-all:run" \
   --http-method=POST --oauth-service-account-email=$SA
 ```
 
@@ -90,26 +94,26 @@ done
 ```
 (콘솔 → Firestore → TTL에서도 컬렉션 그룹별 `expire_at` 필드를 지정할 수 있다. 새 컬렉션을 계약에 추가하면 이 목록도 함께 늘린다.)
 
-## 8. FMP 뉴스 키 (collector)
-collector의 FMP 뉴스 수집은 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — Secret Manager로 만들어 §3의 `newsstore-collector` 잡에 주입한다(커밋/이미지/로그 금지). (FMP 시장 가격·펀더멘털은 이 repo가 아니라 로컬 레포 `DB-news-data`가 수집한다.)
+## 8. FMP 뉴스 키 (collect_all)
+collect_all의 FMP 뉴스 수집은 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — Secret Manager로 만들어 §3의 `newsstore-collect-all` 잡에 주입한다(커밋/이미지/로그 금지). (FMP 시장 가격·펀더멘털은 이 repo가 아니라 로컬 레포 `DB-news-data`가 수집한다.)
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
 printf '%s' "<FMP_API_KEY>" | gcloud secrets create fmp-api-key --data-file=- --replication-policy=automatic
 gcloud secrets add-iam-policy-binding fmp-api-key \
   --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
-# (b) collector 잡에 주입
-gcloud run jobs update newsstore-collector --region=<REGION> \
+# (b) collect_all 잡에 주입
+gcloud run jobs update newsstore-collect-all --region=<REGION> \
   --update-secrets=FMP_API_KEY=fmp-api-key:latest
 ```
 
-**Gemini 키(임베딩)**: collector 잡의 임베딩 패스는 Gemini API를 호출하므로 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — FMP와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collector` 잡에 주입한다.
+**Gemini 키(임베딩)**: collect_all 잡의 임베딩 패스는 Gemini API를 호출하므로 `GEMINI_API_KEY`(백엔드 전용 비밀)가 필요하다 — FMP와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collect-all` 잡에 주입한다.
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
 printf '%s' "<GEMINI_API_KEY>" | gcloud secrets create gemini-api-key --data-file=- --replication-policy=automatic
 gcloud secrets add-iam-policy-binding gemini-api-key \
   --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
-# (b) collector 잡에 주입
-gcloud run jobs update newsstore-collector \
+# (b) collect_all 잡에 주입
+gcloud run jobs update newsstore-collect-all \
   --set-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>
 ```
 
