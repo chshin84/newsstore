@@ -10,6 +10,12 @@ from .body_fetch import enrich_bodies
 
 log = logging.getLogger(__name__)
 
+
+class CollectorTimeoutError(Exception):
+    """콜렉터가 자체 시간 예산(deadline)을 넘겨 중단했음을 알리는 예외.
+    이 시점까지 처리된 항목은 이미 Firestore에 저장돼 있다(루프 안에서 그때그때 커밋)."""
+
+
 def _mark_ok(store, feed_id, *, now, **cursor) -> None:
     """수집 성공 — last_fetched + 건강 리셋(연속실패 0·마지막 성공 시각). cursor(etag·last_modified)는
     준 것만 갱신한다(304는 안 줘서 기존 커서를 보존)."""
@@ -29,10 +35,16 @@ def _mark_fail(store, feed_id, *, now, error) -> None:
 
 
 def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
-                 now: datetime | None = None) -> dict:
+                 now: datetime | None = None, deadline: datetime | None = None,
+                 clock=None) -> dict:
     now = now or datetime.now(timezone.utc)
+    clock = clock or (lambda: datetime.now(timezone.utc))
     summary: dict[str, int] = {}
     for feed in feeds:
+        if deadline is not None and clock() >= deadline:
+            log.error("collect_once: 시간 예산(deadline) 초과 — 남은 피드 스킵, 지금까지 %d건 처리(fail-loud)",
+                      len(summary))
+            raise CollectorTimeoutError(f"collect_once exceeded deadline before feed {feed.feed_id}")
         # 한 피드의 실패(파싱/저장 예외 포함)가 다른 피드 수집을 막지 않도록 격리한다.
         try:
             state = store.get_feed_state(feed.feed_id)

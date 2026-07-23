@@ -1,8 +1,9 @@
 from datetime import datetime, timezone, timedelta
 import httpx
+import pytest
 from newsstore.collect.feeds import FeedConfig
 from newsstore.store.firestore_store import FirestoreStore
-from newsstore.collect.collector import collect_once
+from newsstore.collect.collector import collect_once, CollectorTimeoutError
 
 NOW = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
 RSS = (b'<?xml version="1.0"?><rss version="2.0"><channel>'
@@ -102,3 +103,22 @@ def test_collect_once_fills_hankyung_body(monkeypatch, store):
     saved = [d.to_dict() for d in store.db.collection("items").stream()]
     hk = [d for d in saved if d.get("feed_id") == "hk_economy"][0]
     assert "한경 본문" in hk["body"]
+
+
+def test_collect_once_raises_when_deadline_already_passed(store):
+    feeds = [FeedConfig(feed_id=f"f{i}", url=f"https://e/{i}.rss", source="S") for i in range(3)]
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=RSS)))
+    deadline = datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
+    after_deadline = lambda: datetime(2026, 6, 12, 7, 1, tzinfo=timezone.utc)   # deadline보다 1분 뒤
+    with pytest.raises(CollectorTimeoutError):
+        collect_once(client, store, feeds, now=NOW, deadline=deadline, clock=after_deadline)
+    assert store.count() == 0   # 첫 피드 진입 전에 바로 중단 — 아무것도 처리 안 됨
+
+
+def test_collect_once_completes_within_deadline(store):
+    feed = FeedConfig(feed_id="f1", url="https://e/x.rss", source="S")
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, content=RSS)))
+    deadline = datetime(2026, 6, 12, 8, 0, tzinfo=timezone.utc)
+    before_deadline = lambda: datetime(2026, 6, 12, 7, 0, tzinfo=timezone.utc)
+    s = collect_once(client, store, [feed], now=NOW, deadline=deadline, clock=before_deadline)
+    assert s == {"f1": 1}
