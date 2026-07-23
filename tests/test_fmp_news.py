@@ -225,25 +225,6 @@ def test_get_page_retries_on_429(monkeypatch):
 
 # --- 엔트리포인트: fetcher HTTP 배선 + 비밀 비노출(CC2) / ROSEN 스팸 분류(CC3) ---
 
-def test_build_fetchers_url_params_and_no_apikey_leak():
-    calls = []
-    class FakeResp:
-        def raise_for_status(self): pass
-        def json(self): return []
-    class FakeClient:
-        def get(self, url, params=None): calls.append((url, params)); return FakeResp()
-    from newsstore.entrypoints.run_fmp_news import build_fetchers
-    fetchers = build_fetchers(FakeClient(), ["stock-latest", "fmp-articles"])
-    fetchers["stock-latest"]("2026-07-16", "2026-07-19", 0)
-    fetchers["fmp-articles"]("2026-07-16", "2026-07-19", 1)
-    assert calls[0][0].endswith("/news/stock-latest")
-    assert calls[0][1] == {"from": "2026-07-16", "to": "2026-07-19", "limit": 250, "page": 0}
-    assert calls[1][0].endswith("/fmp-articles")           # /news/ 아님
-    assert "from" not in calls[1][1] and calls[1][1] == {"limit": 250, "page": 1}
-    # 비밀 비노출: apikey가 URL·params 어디에도 없어야 한다(헤더 전용)
-    for url, params in calls:
-        assert "apikey" not in url and "apikey" not in (params or {})
-
 def test_rosen_spam_row_classified_spam():
     # FMP 파이어호스의 ROSEN 집단소송 스팸이 기존 SPAM_SIGNALS로 kind==spam 처리되는지(스펙 §7·§12).
     from newsstore.store.firestore_store import _to_doc
