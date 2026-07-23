@@ -48,3 +48,38 @@ def test_fail_path_records_fail_and_reraises():
     assert st["last_status"] == "fail"
     assert "boom" in st["detail"] and "partial" in st["detail"]   # 부분 진행 + 에러 둘 다
     assert "last_success_at" not in st                            # 실패는 성공 시각을 안 남김
+
+
+from newsstore.entrypoints._health import classify_systemic_failure, JobDegraded
+
+
+class _FeedStateStore:
+    """classify_systemic_failure 검증용 — get_feed_state만 필요."""
+    def __init__(self, states): self._states = states
+    def get_feed_state(self, feed_id): return self._states.get(feed_id, {})
+
+
+def test_classify_systemic_failure_separates_chronic_from_new():
+    # f1은 만성 죽음(연속실패 5 이상), f2는 방금 실패(새로운 장애).
+    store = _FeedStateStore({"f1": {"consecutive_failures": 5}, "f2": {"consecutive_failures": 1}})
+    summary = {"ok1": 3, "f1": -1, "f2": -1}
+    new_failed, chronic = classify_systemic_failure(summary, store)
+    assert new_failed == ["f2"]
+    assert chronic == {"f1"}
+
+
+def test_job_health_records_fail_when_degraded_raised_inside_block():
+    class _HStore:
+        def __init__(self): self.h = {}
+        def get_job_health(self, job): return dict(self.h.get(job, {}))
+        def set_job_health(self, job, **fields):
+            cur = self.h.setdefault(job, {"job": job}); cur.update(fields)
+
+    s = _HStore()
+    with pytest.raises(JobDegraded):
+        with job_health(s, "collect_all") as h:
+            h["detail"] = "rss=fail naver=ok fmp=ok embed=ok"
+            raise JobDegraded(h["detail"])
+    st = s.h["collect_all"]
+    assert st["last_status"] == "fail"
+    assert "rss=fail" in st["detail"]

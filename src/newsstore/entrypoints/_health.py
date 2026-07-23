@@ -13,6 +13,31 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+# 런의 성공/실패 ≠ 개별 항목(피드/쿼리/엔드포인트)의 건강. 런은 '시스템 장애'(프록시·인증·
+# 네트워크 다운으로 평소 멀쩡하던 다수가 갑자기 실패)에서만 fail 처리한다. 한두 개·만성
+# 죽은 항목이 죽어도 런은 정상(ok)이고, 그건 로그·대시보드로 surface한다. RSS 전용이던
+# 것을 2026-07-23 수집 파이프라인 통합에서 세 소스(RSS·네이버·FMP) 공통으로 승격.
+FAIL_RATE_ALERT = 0.5
+CHRONIC_DEAD_STREAK = 5       # 연속 실패 이상이면 '만성 죽음' — 시스템 장애 판정에서 제외(이미 아는 죽음)
+MIN_ATTEMPTED_FOR_ALERT = 10  # 정상 시도가 이 수 미만이면 실패율 알람 없음(소수 배치 우연 전멸 오판 방지)
+
+
+class JobDegraded(Exception):
+    """세 소스 중 하나 이상이 시스템 장애 수준으로 판정됐거나 임베딩이 실패했음을 알리는 예외.
+    job_health(...) 블록 안에서 raise해야 last_status='fail'이 정확히 기록된다."""
+
+
+def classify_systemic_failure(summary: dict, store) -> tuple[list[str], set[str]]:
+    """summary({id: count|-1})와 store.get_feed_state로 '만성 죽음'과 '새로운 실패'를 가른다.
+    반환: (new_failed 정렬 리스트, chronic id 집합). 시스템 장애 판정은 이 결과 +
+    FAIL_RATE_ALERT/MIN_ATTEMPTED_FOR_ALERT를 조합해 호출부가 내린다(collector.py의
+    FAIL_RATE_ALERT 로직을 세 소스 공통으로 일반화)."""
+    failed = [k for k, v in summary.items() if v == -1]
+    chronic = {k for k in failed
+               if (store.get_feed_state(k).get("consecutive_failures") or 0) >= CHRONIC_DEAD_STREAK}
+    new_failed = sorted(k for k in failed if k not in chronic)
+    return new_failed, chronic
+
 
 @contextmanager
 def job_health(store, job: str):
