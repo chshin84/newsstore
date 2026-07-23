@@ -16,6 +16,7 @@ Fail-loud: 타임아웃으로 포기한 뒤 그 스레드가 나중에 실제로
 """
 from __future__ import annotations
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from ..collect.collector import CollectorTimeoutError
@@ -35,23 +36,31 @@ def _log_late_outcome(name: str):
     return _cb
 
 
-def run_sources_parallel(sources: dict, *, timeout: float) -> dict:
+def run_sources_parallel(sources: dict[str, callable], *, timeout: float) -> dict[str, tuple[dict, str | None]]:
     """sources: {이름: 인자없는 콜러블(호출 시 summary dict 반환)}.
     반환: {이름: (summary_dict, error_marker)} — error_marker는 성공 시 None,
     소스 자신의 deadline 초과(CollectorTimeoutError)면 "deadline",
-    오케스트레이터 대기 타임아웃이면 "timeout", 그 외 예외면 "error"."""
+    오케스트레이터 대기 타임아웃이면 "timeout", 그 외 예외면 "error".
+
+    모든 소스는 하나의 `timeout`초 예산을 공유한다(소스별로 새로 시작되는 창이 아니다) —
+    function 진입 시점에 단일 deadline을 잡고, 각 future 대기는 그 deadline까지 남은
+    시간만큼만 기다린다. 그렇지 않으면 느린 소스가 N개일 때 최악의 경우 총 대기시간이
+    timeout의 N배로 늘어나(compounding) 계약("호출자를 timeout초 넘게 막지 않는다")을
+    위반한다."""
     ex = ThreadPoolExecutor(max_workers=max(1, len(sources)))
     futures = {ex.submit(fn): name for name, fn in sources.items()}
     results: dict = {}
+    deadline = time.monotonic() + timeout
     for fut, name in futures.items():
+        remaining = max(0, deadline - time.monotonic())
         try:
-            results[name] = (fut.result(timeout=timeout), None)
+            results[name] = (fut.result(timeout=remaining), None)
         except FuturesTimeoutError:
-            log.error("%s: 오케스트레이터 대기 타임아웃(%.0f초) — fail-loud, 다른 소스는 계속 진행", name, timeout)
+            log.error("%s: 오케스트레이터 대기 타임아웃(%.2f초) — fail-loud, 다른 소스는 계속 진행", name, timeout)
             results[name] = ({}, "timeout")
             fut.add_done_callback(_log_late_outcome(name))   # 늦게 끝나도 fail-loud로 남긴다
         except CollectorTimeoutError:
-            log.error("%s: 소스 자신의 3분 예산(deadline) 초과로 중단(fail-loud) — "
+            log.error("%s: 소스 자신의 내부 예산(deadline) 초과로 중단(fail-loud) — "
                      "그 시점까지 처리분은 이미 저장돼 있음", name)
             results[name] = ({}, "deadline")
         except Exception:

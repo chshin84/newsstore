@@ -46,6 +46,21 @@ def test_slow_source_times_out_without_blocking_fast_one():
     assert elapsed < 0.5   # 함수 자체는 slow를 기다리지 않고 빨리 반환한다(설계 문서 "2단 백스톱" 참고)
 
 
+def test_multiple_slow_sources_share_one_timeout_budget_not_compounded():
+    def slow(n):
+        def _f():
+            time.sleep(n)
+            return {"never": "seen"}
+        return _f
+    t0 = time.time()
+    results = run_sources_parallel({"s1": slow(0.3), "s2": slow(0.3), "s3": slow(0.3)}, timeout=0.1)
+    elapsed = time.time() - t0
+    assert results["s1"] == ({}, "timeout")
+    assert results["s2"] == ({}, "timeout")
+    assert results["s3"] == ({}, "timeout")
+    assert elapsed < 0.3   # NOT ~0.3 (3 x 0.1 compounded) — must share one 0.1s budget
+
+
 def test_late_exception_after_timeout_is_still_logged(caplog):
     """Fail-loud 검증: 오케스트레이터가 포기하고 넘어간 뒤에도, 그 스레드가 나중에 실제로
     예외를 던지면 조용히 사라지지 않고 반드시 로그로 남아야 한다."""
