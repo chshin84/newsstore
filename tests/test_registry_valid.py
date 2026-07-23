@@ -8,7 +8,6 @@ def test_registry_loads_and_is_unique():
     for f in feeds:
         assert f.url.startswith("http")
         assert f.body_mode in {"full", "summary", "headline"}   # 계약(FeedConfig Literal)과 동일 — 테스트가 더 느슨하면 안 됨
-        assert f.poll_minutes >= 1
 
 def test_distinct_sources_is_ssot_for_registry():
     from newsstore.collect.feeds import load_feeds, distinct_sources

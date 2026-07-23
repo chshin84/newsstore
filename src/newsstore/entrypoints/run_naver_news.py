@@ -42,8 +42,7 @@ def main(argv=None) -> int:
     try:
         with make_store() as store:
             summary = run_naver_pass(
-                store, fetch, cfg["queries"], now=datetime.now(timezone.utc),
-                poll_minutes=cfg["poll_minutes"], delay_s=delay_s)
+                store, fetch, cfg["queries"], now=datetime.now(timezone.utc), delay_s=delay_s)
     finally:
         client.close()
     total = sum(v for v in summary.values() if v > 0)

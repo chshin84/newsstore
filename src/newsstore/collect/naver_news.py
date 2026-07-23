@@ -8,14 +8,12 @@ from pathlib import Path
 from urllib.parse import urlparse
 import yaml
 from bs4 import BeautifulSoup
-from .collector import is_due          # 순수 스케줄 함수 재사용(collector 동작 불침범)
 from .feeds import make_id
 from .fmp_news import _mark_ok, _mark_fail   # 건강기록 재사용(SSOT — 드리프트 방지)
 from ..contracts.models import RawItem
 
 log = logging.getLogger(__name__)
 
-DEFAULT_POLL_MINUTES = 30
 DEFAULT_DISPLAY = 100
 
 
@@ -50,7 +48,6 @@ def load_naver_config(path) -> dict:
     if not queries:
         raise ValueError("naver_news config: queries 비어있음(fail-loud)")
     return {"queries": list(queries),
-            "poll_minutes": int(data.get("poll_minutes", DEFAULT_POLL_MINUTES)),
             "display": int(data.get("display", DEFAULT_DISPLAY))}
 
 
@@ -111,10 +108,10 @@ def map_row(row: dict, query: str, asset_hint: str, fetched_at: datetime) -> Raw
 
 
 def run_naver_pass(store, fetch, queries: list[dict], *, now: datetime,
-                   poll_minutes: int = DEFAULT_POLL_MINUTES,
                    delay_s: float = 0.2) -> dict[str, int]:
     """키워드별 검색 뉴스 수집 → RawItem → 청크 배치 upsert. 커서 없음(멱등 URL 중복제거는
-    store.upsert_items_batched의 존재검사에 위임). naver:{query} feed_state에 is_due·건강 기록.
+    store.upsert_items_batched의 존재검사에 위임). naver:{query} feed_state엔 건강만 기록—
+    Job 자체가 config 주기(naver_news.yaml poll_minutes)에 맞춰 스케줄되므로 별도 due 체크 없음.
     한 쿼리 실패는 격리(다음 쿼리로 진행)."""
     summary: dict[str, int] = {}
     for q in queries:
@@ -125,9 +122,6 @@ def run_naver_pass(store, fetch, queries: list[dict], *, now: datetime,
             continue
         feed_id = f"naver:{query}"
         try:
-            state = store.get_feed_state(feed_id)
-            if not is_due(state, poll_minutes, now):
-                continue
             rows = fetch(query) or []
             items = [m for r in rows if (m := map_row(r, query, asset_hint, now)) is not None]
             new = store.upsert_items_batched(items)

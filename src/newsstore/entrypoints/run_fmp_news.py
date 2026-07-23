@@ -46,7 +46,9 @@ def main(argv=None) -> int:
         with make_store() as store:
             summary = run_fmp_news_pass(
                 store, fetchers, cfg["endpoints"], now=datetime.now(timezone.utc),
-                lookback_days=cfg["lookback_days"], poll_minutes=cfg["poll_minutes"], delay_s=delay_s)
+                lookback_days=cfg["lookback_days"],
+                blackout_start_hour=cfg["blackout_start_hour"], blackout_end_hour=cfg["blackout_end_hour"],
+                delay_s=delay_s)
     finally:
         client.close()
     total = sum(v for v in summary.values() if v > 0)

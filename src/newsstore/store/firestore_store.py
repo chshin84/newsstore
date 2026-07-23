@@ -124,7 +124,7 @@ class FirestoreStore:
 
         n = 0
         for i in range(0, len(entries), 50):         # 768차원 벡터는 커서 250건이면 Firestore 커밋 10MiB 초과("Transaction too big") — 50건으로 축소
-            chunk = entries[i:i + 250]
+            chunk = entries[i:i + 50]
             batch = self.db.batch()
             for e in chunk:
                 _ops(batch, e)

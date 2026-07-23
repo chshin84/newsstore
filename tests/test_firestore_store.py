@@ -122,6 +122,21 @@ def test_save_vectors_writes_vector_and_clears_flag(store):
     assert store.get_pending_embed_items(limit=10) == []
 
 
+def test_save_vectors_no_duplicate_writes_across_chunk_boundary(store):
+    """청크 경계(50건)를 넘는 배치에서 겹쳐 쓰기 회귀 방지. range(0,len,50)에 슬라이스가
+    [i:i+250]로 남아있으면(과거 버그) 같은 항목이 여러 청크에 겹쳐 들어가 n이 entries 수보다
+    커진다 — 실제 Firestore 쓰기도 중복 커밋돼 비용·지연이 배로 든다."""
+    n_entries = 60
+    items = [_story(f"c{i}") for i in range(n_entries)]
+    store.upsert_items(items)
+    pending = store.get_pending_embed_items(limit=100)
+    assert len(pending) == n_entries
+    entries = [{"item_id": p["item_id"], "vector": [0.1] * 768, "expire_at": p["expire_at"]}
+               for p in pending]
+    n = store.save_vectors(entries)
+    assert n == n_entries
+
+
 def test_save_vectors_skips_missing_item_and_keeps_rest(store):
     """만료 경합 격리: 원본이 사라진 항목이 나머지 벡터 저장을 막지 않는다."""
     store.upsert_items([_story("m1"), _story("m2")])

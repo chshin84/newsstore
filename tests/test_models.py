@@ -13,7 +13,7 @@ def test_make_id_falls_back_to_title_when_no_link():
 
 def test_feedconfig_defaults():
     f = FeedConfig(feed_id="bz_news", url="https://e/x.rss", source="Benzinga")
-    assert f.poll_minutes == 60 and f.body_mode == "summary" and f.language == "en"
+    assert f.body_mode == "summary" and f.language == "en"
 
 def test_rawitem_roundtrips():
     now = datetime(2026, 6, 12, tzinfo=timezone.utc)

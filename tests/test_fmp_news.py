@@ -12,7 +12,7 @@ def test_load_config_defaults_and_endpoints(tmp_path):
     p.write_text("endpoints:\n  - stock-latest\n  - fmp-articles\n", encoding="utf-8")
     cfg = load_fmp_news_config(p)
     assert cfg["endpoints"] == ["stock-latest", "fmp-articles"]
-    assert cfg["lookback_days"] == 3 and cfg["poll_minutes"] == 1440
+    assert cfg["lookback_days"] == 3
 
 def test_load_config_empty_endpoints_fails(tmp_path):
     import pytest
@@ -118,11 +118,11 @@ def test_pass_collects_and_marks_health():
     assert store.state["fmp:stock-latest"]["last_success"] == NOW
 
 def test_pass_idempotent_rescan():
-    # poll_minutes=0 → 항상 due. 2차 패스가 dedup 경로에 실제 도달해 멱등 불변식을 검증(리뷰 AA1).
+    # 호출마다 항상 재수집(due 체크 없음) — 2차 패스가 dedup 경로에 실제 도달해 멱등 불변식을 검증.
     store = FakeStore()
     def fetch(frm,to,page): return [_row("http://x/1")] if page==0 else []
-    run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=NOW, poll_minutes=0, delay_s=0)
-    s2 = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=NOW, poll_minutes=0, delay_s=0)
+    run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=NOW, delay_s=0)
+    s2 = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=NOW, delay_s=0)
     assert s2["fmp:stock-latest"] == 0        # 재스캔 무-write(불변식)
 
 def test_pass_isolates_endpoint_failure():
@@ -141,14 +141,44 @@ def test_pass_separate_feed_state_keys():
                       ["stock-latest","general-latest"], now=NOW, delay_s=0)
     assert "fmp:stock-latest" in store.state and "fmp:general-latest" in store.state
 
-def test_pass_respects_poll_not_due():
+def test_load_config_blackout_defaults_to_none(tmp_path):
+    p = tmp_path / "fmp_news.yaml"
+    p.write_text("endpoints:\n  - stock-latest\n", encoding="utf-8")
+    cfg = load_fmp_news_config(p)
+    assert cfg["blackout_start_hour"] is None and cfg["blackout_end_hour"] is None
+
+def test_load_config_blackout_hours_from_yaml(tmp_path):
+    p = tmp_path / "fmp_news.yaml"
+    p.write_text("endpoints:\n  - stock-latest\nblackout_start_hour: 7\nblackout_end_hour: 9\n",
+                 encoding="utf-8")
+    cfg = load_fmp_news_config(p)
+    assert cfg["blackout_start_hour"] == 7 and cfg["blackout_end_hour"] == 9
+
+def test_pass_skips_during_kst_blackout_window():
+    # 다른(별개) 프로세스의 FMP API 호출과 겹침을 피하려고 KST 7~9시엔 통째로 스킵한다.
     store = FakeStore()
-    store.state["fmp:stock-latest"] = {"last_fetched": datetime(2026,7,19,tzinfo=timezone.utc)}
-    def fetch(frm,to,page): raise AssertionError("should not fetch")
-    later = datetime(2026,7,19,0,30,tzinfo=timezone.utc)   # 30분 < poll 1440 → 스킵
-    summary = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"],
-                                now=later, poll_minutes=1440, delay_s=0)
-    assert "fmp:stock-latest" not in summary
+    def fetch(frm,to,page): raise AssertionError("should not fetch during blackout")
+    kst_8am = datetime(2026,7,18,23,0,tzinfo=timezone.utc)   # = KST 2026-07-19 08:00
+    summary = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=kst_8am,
+                                blackout_start_hour=7, blackout_end_hour=9, delay_s=0)
+    assert summary == {}
+    assert "fmp:stock-latest" not in store.state   # feed_state도 안 건드림(진짜 no-op)
+
+def test_pass_runs_outside_kst_blackout_window():
+    store = FakeStore()
+    def fetch(frm,to,page): return [_row("http://x/1")] if page==0 else []
+    kst_10am = datetime(2026,7,19,1,0,tzinfo=timezone.utc)   # = KST 10:00, 블랙아웃 밖
+    summary = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=kst_10am,
+                                blackout_start_hour=7, blackout_end_hour=9, delay_s=0)
+    assert summary["fmp:stock-latest"] == 1
+
+def test_pass_ignores_blackout_when_not_configured():
+    # blackout_start_hour/end_hour를 안 넘기면(기존 호출부 하위호환) 블랙아웃 미적용.
+    store = FakeStore()
+    def fetch(frm,to,page): return [_row("http://x/1")] if page==0 else []
+    kst_8am = datetime(2026,7,18,23,0,tzinfo=timezone.utc)
+    summary = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=kst_8am, delay_s=0)
+    assert summary["fmp:stock-latest"] == 1
 
 def test_fetch_all_pages_flags_truncation():
     # 매 페이지 가득(PAGE_LIMIT) → max_pages 소진 → truncated True(리뷰 CC1).

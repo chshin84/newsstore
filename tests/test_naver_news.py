@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import pytest
 from newsstore.collect.naver_news import (
-    map_row, _parse_pubdate, _publisher, load_naver_config, run_naver_pass, DEFAULT_POLL_MINUTES)
+    map_row, _parse_pubdate, _publisher, load_naver_config, run_naver_pass)
 
 NOW = datetime(2026, 7, 19, tzinfo=timezone.utc)
 
@@ -80,7 +80,7 @@ def test_load_config_defaults_and_queries(tmp_path):
     p.write_text("queries:\n  - {q: 증시, asset_hint: kr_stock}\n", encoding="utf-8")
     cfg = load_naver_config(p)
     assert cfg["queries"] == [{"q": "증시", "asset_hint": "kr_stock"}]
-    assert cfg["poll_minutes"] == DEFAULT_POLL_MINUTES and cfg["display"] == 100
+    assert cfg["display"] == 100
 
 
 def test_load_config_empty_queries_fails(tmp_path):
@@ -118,13 +118,11 @@ def test_pass_collects_and_marks_health():
 
 
 def test_pass_idempotent_rescan():
-    # poll_minutes=0 → 항상 due. 2차 패스가 dedup 경로에 도달해 멱등 불변식 검증.
+    # 호출마다 항상 재수집(due 체크 없음) — 2차 패스가 dedup 경로에 도달해 멱등 불변식 검증.
     store = FakeStore()
     def fetch(query): return [_row("https://x/1")]
-    run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}],
-                   now=NOW, poll_minutes=0, delay_s=0)
-    s2 = run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}],
-                        now=NOW, poll_minutes=0, delay_s=0)
+    run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}], now=NOW, delay_s=0)
+    s2 = run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}], now=NOW, delay_s=0)
     assert s2["naver:증시"] == 0        # 재적재 무-write(불변식)
 
 
@@ -140,16 +138,6 @@ def test_pass_isolates_query_failure():
                              now=NOW, delay_s=0)
     assert summary["naver:증시"] == 1 and summary["naver:코스피"] == -1
     assert store.state["naver:코스피"]["consecutive_failures"] == 1
-
-
-def test_pass_respects_poll_not_due():
-    store = FakeStore()
-    store.state["naver:증시"] = {"last_fetched": NOW}
-    def fetch(query): raise AssertionError("should not fetch")
-    later = datetime(2026, 7, 19, 0, 10, tzinfo=timezone.utc)   # 10분 < poll 30 → 스킵
-    summary = run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}],
-                             now=later, poll_minutes=30, delay_s=0)
-    assert "naver:증시" not in summary
 
 
 def test_pass_handles_none_fetch_result():

@@ -3,6 +3,10 @@
 cap 근거: collector Cloud Run 잡은 task-timeout 600초·5분 주기라, 상한 없이 백필
 백로그를 물면 타임아웃 반복(thrash)에 빠진다. 잔여분은 다음 런(또는 백필 drain
 루프)이 이어받는다. store는 Protocol 주입(모듈 경계 — embed는 store를 import 안 함).
+
+cap=5000 실측 근거(2026-07-22, 라이브 Cloud Run 실행): 5,000건 처리(임베딩+저장)에
+98.2초 — 600초 타임아웃의 16%. 동시성을 50→500으로 올려도 Gemini 처리량은 그대로라
+(서버측 rate limit이 병목), 클라이언트 동시성 상향 대신 cap을 올리는 쪽을 택했다.
 """
 from __future__ import annotations
 import logging
@@ -11,7 +15,7 @@ from .embedder import embed_items
 
 log = logging.getLogger("newsstore.embed")
 
-DEFAULT_CAP = 500
+DEFAULT_CAP = 5000
 
 
 def embed_pass(store, client, cap: int = DEFAULT_CAP) -> dict:

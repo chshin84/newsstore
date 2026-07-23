@@ -1,6 +1,6 @@
 from __future__ import annotations
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import httpx
 from .feeds import FeedConfig
 from ..contracts.ports import Store
@@ -9,12 +9,6 @@ from .parser import parse_feed, FeedParseError
 from .body_fetch import enrich_bodies
 
 log = logging.getLogger(__name__)
-
-def is_due(state: dict, poll_minutes: int, now: datetime) -> bool:
-    last = state.get("last_fetched")
-    if not last:
-        return True
-    return (now - last) >= timedelta(minutes=poll_minutes)
 
 def _mark_ok(store, feed_id, *, now, **cursor) -> None:
     """수집 성공 — last_fetched + 건강 리셋(연속실패 0·마지막 성공 시각). cursor(etag·last_modified)는
@@ -35,15 +29,13 @@ def _mark_fail(store, feed_id, *, now, error) -> None:
 
 
 def collect_once(client: httpx.Client, store: Store, feeds: list[FeedConfig],
-                 now: datetime | None = None, force: bool = False) -> dict:
+                 now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     summary: dict[str, int] = {}
     for feed in feeds:
         # 한 피드의 실패(파싱/저장 예외 포함)가 다른 피드 수집을 막지 않도록 격리한다.
         try:
             state = store.get_feed_state(feed.feed_id)
-            if not force and not is_due(state, feed.poll_minutes, now):
-                continue
             res = fetch_feed(client, feed, state.get("etag"), state.get("last_modified"))
             if res.status == 304:
                 _mark_ok(store, feed.feed_id, now=now)          # 도달 성공(내용만 무변경)

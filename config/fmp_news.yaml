@@ -1,6 +1,7 @@
 # FMP 뉴스 활성 엔드포인트(SSOT). 켜고 끄기는 여기서만.
 lookback_days: 3        # 매 패스 재스캔 창(지각·역순·다운타임 갭필). from/to 미지원 fmp-articles엔 무영향.
-poll_minutes: 1440      # 하루 1회
+blackout_start_hour: 7  # KST 오전 7시~9시는 통째로 스킵 — 같은 FMP API를 쓰는 별도 프로세스와 겹침 회피
+blackout_end_hour: 9
 endpoints:
   - stock-latest
   - press-releases-latest

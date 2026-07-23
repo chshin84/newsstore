@@ -12,7 +12,7 @@ log = logging.getLogger("newsstore")
 
 # 런의 성공/실패 ≠ 개별 피드의 건강. 런은 '시스템 장애'(프록시·인증·네트워크 다운으로 평소 멀쩡하던
 # 피드 다수가 갑자기 실패)에서만 exit 1. 한두 개·만성 죽은 피드가 죽어도 런은 성공(exit 0)이고,
-# 그건 로그·대시보드로 surface한다. 아래 두 문턱이 오판(특히 --force 없는 소수 배치)을 막는다.
+# 그건 로그·대시보드로 surface한다. 아래 두 문턱이 오판(특히 소수 배치)을 막는다.
 FAIL_RATE_ALERT = 0.5
 CHRONIC_DEAD_STREAK = 5       # 연속 실패 이상이면 '만성 죽음' — 시스템 장애 판정에서 제외(이미 아는 죽음)
 MIN_ATTEMPTED_FOR_ALERT = 10  # 정상 피드 시도가 이 수 미만이면 실패율 알람 없음(소수 배치 우연 전멸 오판 방지)
@@ -20,7 +20,6 @@ MIN_ATTEMPTED_FOR_ALERT = 10  # 정상 피드 시도가 이 수 미만이면 실
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="newsstore collector (one pass)")
     ap.add_argument("--feeds", default="config/feeds.yaml")
-    ap.add_argument("--force", action="store_true", help="ignore poll intervals (fetch all)")
     args = ap.parse_args(argv)
 
     logging.basicConfig(
@@ -36,13 +35,13 @@ def main(argv=None) -> int:
         store.set_meta("sources", {"sources": distinct_sources(feeds),
                                    "tiers": source_tiers(feeds)})
         try:
-            summary = collect_once(client, store, feeds, force=args.force)
+            summary = collect_once(client, store, feeds)
         finally:
             client.close()
 
         total_new = sum(v for v in summary.values() if v > 0)
         failed = [k for k, v in summary.items() if v == -1]
-        attempted = len(summary)      # skipped (not-due) feeds are absent from summary
+        attempted = len(summary)      # 이제 모든 피드가 매번 시도되므로 attempted == len(feeds)
         # 만성 죽은 피드(연속실패 ≥ CHRONIC_DEAD_STREAK)는 시스템 장애 판정에서 제외한다.
         # (collect_once가 이번 실패로 연속실패를 이미 올려둠 — store 열린 여기서 읽는다.)
         chronic = {k for k in failed
