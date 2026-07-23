@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 import yaml
 from bs4 import BeautifulSoup
+from .collector import CollectorTimeoutError
 from .feeds import make_id
 from .fmp_news import _mark_ok, _mark_fail   # 건강기록 재사용(SSOT — 드리프트 방지)
 from ..contracts.models import RawItem
@@ -108,13 +109,20 @@ def map_row(row: dict, query: str, asset_hint: str, fetched_at: datetime) -> Raw
 
 
 def run_naver_pass(store, fetch, queries: list[dict], *, now: datetime,
+                   deadline: datetime | None = None, clock=None,
                    delay_s: float = 0.2) -> dict[str, int]:
     """키워드별 검색 뉴스 수집 → RawItem → 청크 배치 upsert. 커서 없음(멱등 URL 중복제거는
     store.upsert_items_batched의 존재검사에 위임). naver:{query} feed_state엔 건강만 기록—
-    Job 자체가 config 주기(naver_news.yaml poll_minutes)에 맞춰 스케줄되므로 별도 due 체크 없음.
-    한 쿼리 실패는 격리(다음 쿼리로 진행)."""
+    Job 자체가 스케줄러 주기에 맞춰 실행되므로 별도 due 체크 없음. 한 쿼리 실패는 격리(다음
+    쿼리로 진행). deadline/clock은 collector.collect_once와 동일한 3분 예산 체크(2026-07-23
+    수집 파이프라인 통합 설계 참고)."""
+    clock = clock or (lambda: datetime.now(timezone.utc))
     summary: dict[str, int] = {}
     for q in queries:
+        if deadline is not None and clock() >= deadline:
+            log.error("run_naver_pass: 시간 예산(deadline) 초과 — 남은 쿼리 스킵, 지금까지 %d건 처리(fail-loud)",
+                      len(summary))
+            raise CollectorTimeoutError("run_naver_pass exceeded deadline")
         query = (q.get("q") or "").strip()
         asset_hint = (q.get("asset_hint") or "").strip()
         if not query:                    # 잘못된 config 항목은 조용히 넘기지 않고 표면화

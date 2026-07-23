@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import pytest
+from newsstore.collect.collector import CollectorTimeoutError
 from newsstore.collect.naver_news import (
     map_row, _parse_pubdate, _publisher, load_naver_config, run_naver_pass)
 
@@ -147,3 +148,24 @@ def test_pass_handles_none_fetch_result():
     summary = run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}],
                              now=NOW, delay_s=0)
     assert summary["naver:증시"] == 0
+
+
+def test_pass_raises_when_deadline_already_passed():
+    store = FakeStore()
+    def fetch(query): raise AssertionError("should not fetch")
+    deadline = datetime(2026, 7, 19, 1, 0, tzinfo=timezone.utc)
+    after_deadline = lambda: datetime(2026, 7, 19, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(CollectorTimeoutError):
+        run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}],
+                       now=NOW, deadline=deadline, clock=after_deadline, delay_s=0)
+    assert store.saved == []
+
+
+def test_pass_completes_within_deadline():
+    store = FakeStore()
+    def fetch(query): return [_row("https://x/1")]
+    deadline = datetime(2026, 7, 19, 2, 0, tzinfo=timezone.utc)
+    before_deadline = lambda: datetime(2026, 7, 19, 1, 0, tzinfo=timezone.utc)
+    summary = run_naver_pass(store, fetch, [{"q": "증시", "asset_hint": "kr_stock"}],
+                             now=NOW, deadline=deadline, clock=before_deadline, delay_s=0)
+    assert summary["naver:증시"] == 1
