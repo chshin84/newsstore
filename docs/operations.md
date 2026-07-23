@@ -8,11 +8,11 @@ newsstore는 **뉴스 수집 전용**이다 — 뉴스 RSS 수집기, FMP 뉴스
 ## 전제
 - `gcloud`가 사용자 프로필에 인증돼 있어야 함 (`chshin84@gmail.com`, 프로젝트 `daily-recap-498506`).
   - gcloud 풀경로(머신별): 집=`C:\Users\ho381\...`, 사내=`C:\Users\CHSHIN\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd`.
-  - **사내(office)에서 gcloud SSL 차단 시 우회:** ePrism MITM 프록시가 최신 gcloud(urllib3 v2 strict)의 AKI 검증(`certificate verify failed: Missing Authority Key Identifier`)을 막으면 **옛 gcloud(402) 컨테이너 + ePrism CA** 편법으로 우회한다(`scripts/deploy-office.ps1`, Cloud Run Jobs는 `beta` 트랙). 집은 MITM 없어 평범하게 §A/§E, 사내는 위 스크립트.
+  - **사내(office)에서 gcloud SSL 차단 시 우회:** ePrism MITM 프록시가 최신 gcloud(urllib3 v2 strict)의 AKI 검증(`certificate verify failed: Missing Authority Key Identifier`)을 막으면 **옛 gcloud(402) 컨테이너 + ePrism CA** 편법으로 우회한다(`scripts/deploy-office.ps1`, Cloud Run Jobs는 `beta` 트랙). 집은 MITM 없어 평범하게 §A, 사내는 위 스크립트.
 - **Firebase 관리/규칙/호스팅 REST 호출 시 quota project 헤더 필수**: `x-goog-user-project: daily-recap-498506` (없으면 403). 토큰은 `gcloud auth print-access-token`.
 - 프로젝트/리전 변수는 루트 **`.env`**(`GOOGLE_CLOUD_PROJECT`, `GCP_REGION`). PowerShell 로드법은 `docs/setup.md` 참조.
-- FMP 뉴스 잡은 `FMP_API_KEY`(백엔드 전용 비밀)를 **Secret Manager**(`fmp-api-key`)로 주입한다. 커밋/이미지/로그 금지.
-- collector 잡은 `GEMINI_API_KEY`(백엔드 전용 비밀)를 **Secret Manager**(`gemini-api-key`)로 주입한다(임베딩 패스). FMP 뉴스 잡에는 넣지 않는다.
+- `newsstore-collect-all` 잡은 `FMP_API_KEY`(백엔드 전용 비밀)를 **Secret Manager**(`fmp-api-key`)로 주입한다. 커밋/이미지/로그 금지.
+- 같은 `newsstore-collect-all` 잡이 `GEMINI_API_KEY`(백엔드 전용 비밀)도 **Secret Manager**(`gemini-api-key`)로 주입한다(임베딩 패스). RSS·네이버·FMP·임베딩이 한 잡으로 통합됐으므로 두 비밀 모두 이 잡 하나에 들어간다.
 
 ## 리소스 인벤토리
 | 종류 | 이름 |
@@ -20,10 +20,9 @@ newsstore는 **뉴스 수집 전용**이다 — 뉴스 RSS 수집기, FMP 뉴스
 | GCP 프로젝트 | `daily-recap-498506` (asia-northeast3) |
 | Firestore | `(default)` Native — 컬렉션 `items`·`feed_state`·`meta`·`item_vectors`·`job_health` |
 | Artifact Registry | `newsstore` → 이미지 `asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest` |
-| Cloud Run Job | `newsstore-collector` — 뉴스 수집 + 임베딩 패스(`run_collect`, secret `gemini-api-key`) |
-| Cloud Run Job | `newsstore-fmp-news` — FMP 뉴스 수집(`run_fmp_news`, secret `fmp-api-key`) |
+| Cloud Run Job | `newsstore-collect-all` — RSS+네이버+FMP 병렬 수집 + 임베딩 패스(`run_collect_all`, secrets `gemini-api-key`·`fmp-api-key`·네이버 자격증명) |
 | Cloud Run Job | `newsstore-backfill-embed` — 임베딩 백필 일회성 잡(`run_backfill_embed`, secret `gemini-api-key`) |
-| Cloud Scheduler | `newsstore-5min` (`*/5 * * * *`) — 수집기 |
+| Cloud Scheduler | `newsstore-collect-all-15min` (`*/15 * * * *`) — 통합 수집기 |
 | Secret Manager | `fmp-api-key` (FMP 뉴스 Job에 `--set-secrets`로 주입; SA에 secretAccessor) |
 | Secret Manager | `gemini-api-key` (collector Job에 `--set-secrets`로 주입 — 임베딩 패스; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
@@ -32,29 +31,29 @@ newsstore는 **뉴스 수집 전용**이다 — 뉴스 RSS 수집기, FMP 뉴스
 
 ---
 
-## A. 수집기 재배포 (config/feeds.yaml 또는 수집기 코드 변경 시)
-`config/feeds.yaml`은 이미지에 `COPY` 되므로 **반드시 재빌드 후 Job 갱신**해야 반영된다. 두 수집 Job(collector·fmp-news)이 같은 이미지를 쓰므로, 코드 변경 시 이미지 1개를 재빌드하고 두 Job 모두를 새 이미지로 갱신한다.
+## A. 수집기 재배포 (config/*.yaml 또는 수집기 코드 변경 시)
+`config/feeds.yaml`·`config/naver_news.yaml`·`config/fmp_news.yaml`은 이미지에 `COPY`되므로
+**반드시 재빌드 후 Job 갱신**해야 반영된다. RSS·네이버·FMP가 이제 `newsstore-collect-all`
+Job 하나로 통합돼 있다(2026-07-23, 이전 3개 Job에서 병합).
 ```
-# 1) 이미지 재빌드 ([gcp] 타깃 = google-cloud-firestore 포함, `infra/cloudbuild.yaml`이 INSTALL_EMBED=true도 함께 빌드 — 임베딩 패스의 google-genai 포함)
+# 1) 이미지 재빌드
 gcloud builds submit --config infra/cloudbuild.yaml \
   --substitutions=_IMAGE=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest .
-# 2) 두 Job을 새 이미지 digest로 재고정
-for j in newsstore-collector newsstore-fmp-news; do
-  gcloud run jobs update "$j" \
-    --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest \
-    --region=asia-northeast3
-done
+# 2) Job을 새 이미지 digest로 재고정
+gcloud beta run jobs update newsstore-collect-all \
+  --image=asia-northeast3-docker.pkg.dev/daily-recap-498506/newsstore/collector:latest \
+  --region=asia-northeast3
 # 3) 즉시 1회 실행 (안 하면 다음 스케줄에 반영)
-gcloud run jobs execute newsstore-collector --region=asia-northeast3 --wait
-# 4) 확인 (실패 피드 / 수집 수)
-gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-collector"' \
-  --freshness=5m --format="value(textPayload)" | Select-String "feed\(s\) failed|collected .* new item"
+gcloud beta run jobs execute newsstore-collect-all --region=asia-northeast3 --wait
+# 4) 확인
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-collect-all"' \
+  --freshness=5m --format="value(textPayload)"
 ```
 
-### 임베딩 패스 (collector 잡 내)
-- 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 500건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 5분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
+### 임베딩 패스 (newsstore-collect-all 잡 내)
+- 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 500건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 15분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
 - **키 부재 + 대기분 존재 = run 실패(exit 1)** — 조용한 무임베딩 고착을 스케줄러가 감지한다(대기 0건이면 경고 후 정상 종료 — 키 없는 로컬 수집 스모크 보존).
-- **최초 롤아웃 순서**: 시크릿 바인딩을 **이미지 배포보다 먼저** 한다 — 순서가 뒤집히면 새 이미지가 대기분을 쌓으며 매 5분 런이 exit 1로 끝난다(수집분은 보존되고 키 바인딩 즉시 자가치유되는 의도된 fail-loud지만, 알림 소음을 피하려면 순서를 지킨다).
+- **최초 롤아웃 순서**: 시크릿 바인딩을 **이미지 배포보다 먼저** 한다 — 순서가 뒤집히면 새 이미지가 대기분을 쌓으며 매 15분 런이 exit 1로 끝난다(수집분은 보존되고 키 바인딩 즉시 자가치유되는 의도된 fail-loud지만, 알림 소음을 피하려면 순서를 지킨다).
 - **비밀**: `GEMINI_API_KEY`는 Secret Manager `gemini-api-key`로 주입한다(생성은 `docs/setup.md §8`). 키를 재발급했으면 새 버전을 올리고 잡을 재실행한다:
   ```
   printf '%s' "<NEW_GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-
@@ -62,7 +61,7 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 - **배포 직후 실측(MEASURE-FIRST)**: 첫 런 로그에서 (collect 소요 + embed 소요) < task-timeout 600초를 확인하고, 넘치면 embed_pass cap을 낮춘다.
 
 ### 임베딩 백필 (일회성 — 배포 직후)
-로컬 Docker로 실행한다(Cloud Run 타임아웃 제약 없음). 멱등 — 재실행 안전. 무진전(지속 장애)이면 exit 1로 끝나며 잔여분은 정규 5분 런이 이어받는다.
+로컬 Docker로 실행한다(Cloud Run 타임아웃 제약 없음). 멱등 — 재실행 안전. 무진전(지속 장애)이면 exit 1로 끝나며 잔여분은 정규 15분 런이 이어받는다.
 ```bash
 MSYS_NO_PATHCONV=1 docker compose run --rm collect python -m newsstore.entrypoints.run_backfill_embed
 ```
@@ -112,21 +111,6 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
 현재 인덱스: `source+published_at`(소스 필터).
 
-## E. FMP 뉴스 수집 재배포 (run_fmp_news)
-FMP 뉴스(`run_fmp_news`)는 **수집기와 같은 이미지**를 쓰고 CMD만 다르다. 코드 변경 반영은 §A의 재빌드 → 두 Job 이미지 갱신으로 함께 처리된다.
-- 이미지: collector 잡과 동일(같은 이미지, CMD만 `python -m newsstore.entrypoints.run_fmp_news`).
-- 배포: `gcloud run jobs update newsstore-fmp-news --image <IMAGE> --command python --args -m,newsstore.entrypoints.run_fmp_news` (없으면 create) → 스케줄러 하루 1회. config: `config/fmp_news.yaml`.
-- **비밀**: `FMP_API_KEY`는 Secret Manager `fmp-api-key`로 주입한다(생성은 `docs/setup.md §8`). 키를 재발급했으면 새 버전을 올리고 잡을 재실행한다:
-  ```
-  printf '%s' "<NEW_FMP_API_KEY>" | gcloud secrets versions add fmp-api-key --data-file=-
-  ```
-```
-# 수동 1회 실행·확인 (수집 수 / 티커 태깅)
-gcloud run jobs execute newsstore-fmp-news --region=asia-northeast3 --wait
-gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="newsstore-fmp-news"' \
-  --freshness=10m --format="value(textPayload)"
-```
-
 ## F. TTL 정책 (content 컬렉션 60일 만료)
 모든 content 컬렉션(`items`·`item_vectors`)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — 저장 시각 + 60일; `item_vectors`는 원본 item의 `expire_at` 미러링). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
 ```
@@ -136,7 +120,7 @@ gcloud firestore fields ttl list --collection-group=items
 ## G. 잡 실패 알림 (Cloud Monitoring)
 **왜:** Cloud Scheduler는 잡을 `:run`으로 **시작**시키고 HTTP 200(=시작 수락)만 받는다. 잡이 시작 직후 죽어도 스케줄러는 초록(성공)으로 보여 **조용한 실패**가 된다(Fail-Loud 위반). → Cloud Run Job **실패 실행 수>0**이면 알림.
 
-지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 잡(collector·fmp-news) 공통 적용(job_name 필터 없이 전체).
+지표: `run.googleapis.com/job/completed_execution_count` (resource `cloud_run_job`, metric label `result="failed"`). 잡(collect-all·backfill-embed) 공통 적용(job_name 필터 없이 전체).
 
 ```bash
 # 1) 알림 채널(이메일) — 1회. 채널 ID를 받아둔다.
