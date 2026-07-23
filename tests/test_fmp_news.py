@@ -1,10 +1,12 @@
 from datetime import datetime, timezone
+import pytest
 import httpx
 from newsstore.collect import fmp_news
 from newsstore.collect.fmp_news import map_standard_row, _parse_dt, _clean
 from newsstore.collect.fmp_news import map_article_row, _first_ticker
 from newsstore.collect.fmp_news import run_fmp_news_pass, _fetch_all_pages, PAGE_LIMIT
 from newsstore.collect.fmp_news import load_fmp_news_config
+from newsstore.collect.collector import CollectorTimeoutError
 
 
 def test_load_config_defaults_and_endpoints(tmp_path):
@@ -250,3 +252,24 @@ def test_rosen_spam_row_classified_spam():
            "text":"lead plaintiff deadline", "url":"https://x/rosen-gpk"}
     item = map_standard_row(row, "press-releases-latest", datetime(2026,7,19,tzinfo=timezone.utc))
     assert _to_doc(item)["kind"] == "spam"
+
+
+def test_pass_raises_when_deadline_already_passed():
+    store = FakeStore()
+    def fetch(frm,to,page): raise AssertionError("should not fetch")
+    deadline = datetime(2026,7,19,1,0,tzinfo=timezone.utc)
+    after_deadline = lambda: datetime(2026,7,19,1,1,tzinfo=timezone.utc)
+    with pytest.raises(CollectorTimeoutError):
+        run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=NOW,
+                          deadline=deadline, clock=after_deadline, delay_s=0)
+    assert store.saved == []
+
+
+def test_pass_completes_within_deadline():
+    store = FakeStore()
+    def fetch(frm,to,page): return [_row("http://x/1")] if page==0 else []
+    deadline = datetime(2026,7,19,2,0,tzinfo=timezone.utc)
+    before_deadline = lambda: datetime(2026,7,19,1,0,tzinfo=timezone.utc)
+    summary = run_fmp_news_pass(store, {"stock-latest": fetch}, ["stock-latest"], now=NOW,
+                                deadline=deadline, clock=before_deadline, delay_s=0)
+    assert summary["fmp:stock-latest"] == 1

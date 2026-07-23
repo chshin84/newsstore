@@ -8,6 +8,7 @@ import httpx
 import yaml
 from bs4 import BeautifulSoup
 from .feeds import make_id
+from .collector import CollectorTimeoutError
 from ..contracts.models import RawItem
 
 log = logging.getLogger(__name__)
@@ -150,14 +151,18 @@ def _mark_fail(store, feed_id, *, now, error):
 def run_fmp_news_pass(store, fetchers: dict, endpoints: list[str], *, now: datetime,
                       lookback_days: int = DEFAULT_LOOKBACK_DAYS,
                       blackout_start_hour: int | None = None, blackout_end_hour: int | None = None,
+                      deadline: datetime | None = None, clock=None,
                       delay_s: float = 0.2) -> dict[str, int]:
     """엔드포인트별 고정 lookback 재스캔 → RawItem → 청크 배치 upsert. 커서 없음(멱등 URL 중복제거).
-    fmp:{endpoint} feed_state엔 건강만 기록 — Job 자체가 config 주기에 맞춰 스케줄되므로 별도
-    due 체크 없음. 한 엔드포인트 실패는 격리.
+    fmp:{endpoint} feed_state엔 건강만 기록. 한 엔드포인트 실패는 격리.
 
     blackout_start_hour/end_hour(KST, [start,end) 반개구간)가 주어지면, 그 시간대엔 통째로
     스킵한다(2026-07-22: 같은 FMP API를 쓰는 별도 프로세스와의 겹침 회피). feed_state도
-    건드리지 않는 순수 no-op."""
+    건드리지 않는 순수 no-op.
+
+    deadline/clock은 collector.collect_once와 동일한 3분 예산 체크(2026-07-23 수집
+    파이프라인 통합 설계 참고)."""
+    clock = clock or (lambda: datetime.now(timezone.utc))
     if blackout_start_hour is not None and blackout_end_hour is not None:
         local_hour = now.astimezone(BLACKOUT_TZ).hour
         if blackout_start_hour <= local_hour < blackout_end_hour:
@@ -168,6 +173,10 @@ def run_fmp_news_pass(store, fetchers: dict, endpoints: list[str], *, now: datet
     frm = (now - timedelta(days=lookback_days)).date().isoformat()
     to = now.date().isoformat()
     for ep in endpoints:
+        if deadline is not None and clock() >= deadline:
+            log.error("run_fmp_news_pass: 시간 예산(deadline) 초과 — 남은 엔드포인트 스킵, 지금까지 %d건 처리(fail-loud)",
+                      len(summary))
+            raise CollectorTimeoutError("run_fmp_news_pass exceeded deadline")
         feed_id = f"fmp:{ep}"
         try:
             rows, truncated = _fetch_all_pages(
