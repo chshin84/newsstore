@@ -57,12 +57,22 @@ def build_fmp_fetchers(client, endpoints: list[str]) -> dict:
 
 
 def _summary_verdict(name: str, summary: dict, store) -> tuple[str, bool]:
-    """한 소스의 summary를 시스템 장애 여부로 판정. 반환: (detail 조각, degraded?)."""
+    """한 소스의 summary를 시스템 장애 여부로 판정. 반환: (detail 조각, degraded?).
+
+    두 조건 중 하나면 시스템 장애: (1) 시도분 중 일정 비율 이상 실패(MIN_ATTEMPTED_FOR_ALERT
+    이상인 소스용 — 피드·쿼리가 수십 개인 RSS·네이버), (2) 시도분이 있는데 전부 실패(개수
+    무관 — FMP처럼 엔드포인트가 6개뿐이라 MIN_ATTEMPTED_FOR_ALERT를 절대 못 넘는 소스가
+    전체 장애에도 항상 ok로 잡히는 사각지대를 막는다. FMP_API_KEY가 유효하지 않으면
+    missing-key와 달리 fail-loud하지 않고 엔드포인트 전부가 -1로 조용히 죽는다)."""
     new_failed, chronic = classify_systemic_failure(summary, store)
     attempted = len(summary)
     healthy_attempted = attempted - len(chronic)
-    if healthy_attempted >= MIN_ATTEMPTED_FOR_ALERT and healthy_attempted and \
-            len(new_failed) / healthy_attempted >= FAIL_RATE_ALERT:
+    if healthy_attempted == 0:
+        return f"{name}=ok", False
+    all_failed = len(new_failed) == healthy_attempted
+    rate_alert = healthy_attempted >= MIN_ATTEMPTED_FOR_ALERT and \
+        len(new_failed) / healthy_attempted >= FAIL_RATE_ALERT
+    if all_failed or rate_alert:
         return f"{name}=fail({len(new_failed)}/{healthy_attempted})", True
     return f"{name}=ok", False
 

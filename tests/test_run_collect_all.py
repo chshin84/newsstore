@@ -150,6 +150,51 @@ def test_run_once_summary_fail_rate_degrades_without_task_exception():
     assert "naver=fail(" in store.h["collect_all"]["detail"]
 
 
+def test_run_once_small_source_total_failure_degrades_despite_low_count():
+    """FMP처럼 엔드포인트가 6개뿐인 소스는 MIN_ATTEMPTED_FOR_ALERT(10)를 절대 못 넘어
+    기존 비율 판정으로는 영영 시스템 장애로 안 잡히는 사각지대였다(최종 리뷰 지적) —
+    시도분 전부가 실패하면 개수 무관하게 장애로 잡혀야 한다."""
+    store = _HStore()
+    fmp_summary = {f"fmp:e{i}": -1 for i in range(6)}   # 6개 엔드포인트 전부 실패
+    embed_calls = []
+    def fake_embed_pass(store_, client_):
+        embed_calls.append(1)
+        return {"pending": 0, "embedded": 0, "permanent": 0, "retryable": 0}
+
+    with pytest.raises(JobDegraded):
+        _run_once(
+            store,
+            rss_task=lambda: {"f1": 1},
+            naver_task=lambda: {"naver:q": 1},
+            fmp_task=lambda: fmp_summary,
+            api_key="k",
+            gemini_client_factory=lambda k: object(),
+            embed_pass_fn=fake_embed_pass,
+        )
+    assert embed_calls == [1]
+    assert store.h["collect_all"]["last_status"] == "fail"
+    assert "fmp=fail(6/6)" in store.h["collect_all"]["detail"]
+
+
+def test_run_once_small_source_partial_failure_stays_ok():
+    """전부는 아니고 일부만 실패하면(6개 중 3개), 개수가 MIN_ATTEMPTED_FOR_ALERT 미만이라
+    비율 판정 문턱도 안 넘으므로 여전히 ok — 전체 실패 판정이 부분 실패까지 과민하게
+    잡아내지 않는지 확인(위 테스트의 반대 사례)."""
+    store = _HStore()
+    fmp_summary = {f"fmp:e{i}": (-1 if i < 3 else 1) for i in range(6)}   # 6개 중 3개만 실패
+    detail = _run_once(
+        store,
+        rss_task=lambda: {"f1": 1},
+        naver_task=lambda: {"naver:q": 1},
+        fmp_task=lambda: fmp_summary,
+        api_key="k",
+        gemini_client_factory=lambda k: object(),
+        embed_pass_fn=lambda s, c: {"pending": 0, "embedded": 0, "permanent": 0, "retryable": 0},
+    )
+    assert store.h["collect_all"]["last_status"] == "ok"
+    assert "fmp=ok" in detail
+
+
 def test_build_fmp_fetchers_url_params_and_no_apikey_leak():
     """옛 tests/test_fmp_news.py::test_build_fetchers_url_params_and_no_apikey_leak을
     build_fmp_fetchers(이름 변경)로 이관 — Task 8에서 원본 테스트는 삭제한다."""
