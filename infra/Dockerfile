@@ -41,4 +41,4 @@ ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     PYTHONUNBUFFERED=1
 
-CMD ["python", "-m", "newsstore.entrypoints.run_collect"]
+CMD ["python", "-m", "newsstore.entrypoints.run_collect_all"]

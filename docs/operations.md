@@ -58,6 +58,10 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
   ```
   printf '%s' "<NEW_GEMINI_API_KEY>" | gcloud secrets versions add gemini-api-key --data-file=-
   ```
+- **비밀**: `FMP_API_KEY`도 같은 `newsstore-collect-all` 잡에 Secret Manager `fmp-api-key`로 주입한다(생성은 `docs/setup.md §8`). 키를 재발급했으면 새 버전을 올리고 잡을 재실행한다:
+  ```
+  printf '%s' "<NEW_FMP_API_KEY>" | gcloud secrets versions add fmp-api-key --data-file=-
+  ```
 - **배포 직후 실측(MEASURE-FIRST)**: 첫 런 로그에서 (collect 소요 + embed 소요) < task-timeout 600초를 확인하고, 넘치면 embed_pass cap을 낮춘다.
 
 ### 임베딩 백필 (일회성 — 배포 직후)
