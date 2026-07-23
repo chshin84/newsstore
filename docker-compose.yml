@@ -36,7 +36,7 @@ services:
       dockerfile: infra/Dockerfile
       args:
         INSTALL_DEV: "false"
-        INSTALL_GCP: "true"       # 실 Firestore 접속(run_collect) — firestore 라이브러리 필수
+        INSTALL_GCP: "true"       # 실 Firestore 접속(run_collect_all) — firestore 라이브러리 필수
         INSTALL_EMBED: "true"     # 임베딩 패스(gemini) — 백필 실행도 이 서비스로
     image: newsstore
     volumes:
