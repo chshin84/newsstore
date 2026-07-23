@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timezone, timedelta
 from newsstore.contracts.models import RawItem
 from newsstore.store.firestore_store import FirestoreStore, _to_doc
@@ -191,3 +192,38 @@ def test_upsert_items_batched_dedups_and_is_idempotent(store):
     items = [mk("http://x/1"), mk("http://x/2"), mk("http://x/1")]   # 배치 내 중복 1건
     assert store.upsert_items_batched(items) == 2      # 고유 2건만
     assert store.upsert_items_batched(items) == 0      # 멱등 재-pull(불변식: 재저장 0)
+
+
+def test_concurrent_threads_share_one_store_safely(store):
+    """run_collect_all 설계의 핵심 전제 검증: 3개 스레드가 같은 FirestoreStore(같은
+    firestore.Client)로 서로 다른 컬렉션에 동시에 upsert_items/set_feed_state를 해도
+    예외 없이 전부 반영되는지. 실패하면 스펙의 '대안'(스레드별 독립 클라이언트)으로 전환한다."""
+    errors = []
+
+    def write_items(prefix, n):
+        try:
+            items = [_story(f"{prefix}{i}") for i in range(n)]
+            store.upsert_items(items)
+        except Exception as e:
+            errors.append(e)
+
+    def write_feed_state(feed_id, n):
+        try:
+            for i in range(n):
+                store.set_feed_state(feed_id, last_fetched=NOW, consecutive_failures=i)
+        except Exception as e:
+            errors.append(e)
+
+    threads = [
+        threading.Thread(target=write_items, args=("ca", 10)),
+        threading.Thread(target=write_items, args=("cb", 10)),
+        threading.Thread(target=write_feed_state, args=("naver:x", 10)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert store.count() == 20
+    assert store.get_feed_state("naver:x")["consecutive_failures"] == 9
