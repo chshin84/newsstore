@@ -7,8 +7,8 @@ export const LEAD_FRACTION = 0.4;   // §2: 지연 문턱 = TTL_DAYS × 이 비�
 
 // 실제 수집 스케줄(Cloud Scheduler cron)의 UI측 사본(초).
 // 클라이언트는 스케줄러를 못 읽어 불가피한 두 번째 출처 — 스케줄을 바꾸면 여기도 바꾼다.
-// (operations.md 리소스 표의 Cloud Scheduler `newsstore-5min` 행과 일치해야 함.)
-export const SCHEDULE = { intraday: 300 };
+// (operations.md 리소스 표의 Cloud Scheduler `newsstore-collect-all-15min` 행과 일치해야 함.)
+export const SCHEDULE = { intraday: 900 };
 
 // 카드 SSOT — 뉴스 수집 표면(`items`)만 본다.
 // marketData=주말 완화 대상, backfillImpossible=데드라인 문턱(뉴스는 둘 다 해당 없음).
@@ -20,7 +20,7 @@ export const CARDS = [
 // 스케줄 잡 헬스 — 각 잡이 실행 상태를 job_health/{key}에 남긴다(entrypoints/_health.job_health).
 // 백필(backfill_embed)은 수동 일회성이라 제외한다(스케줄이 없어 항상 stale=오탐).
 export const JOBS = [
-  { key: 'collector', label: '뉴스 수집',    expectedSec: SCHEDULE.intraday },
+  { key: 'collect_all', label: '뉴스 수집(RSS+네이버+FMP+임베딩)', expectedSec: SCHEDULE.intraday },
 ];
 
 // 잡 헬스 판정. h={lastStatus, fetchedMs}(Firestore Timestamp→ms 변환은 호출자).

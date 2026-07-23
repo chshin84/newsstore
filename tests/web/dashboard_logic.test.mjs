@@ -32,8 +32,8 @@ test('CARDS는 뉴스(items) 카드만 덮고, expectedSec는 SCHEDULE 값', () 
   for (const c of CARDS) assert.ok(sched.has(c.expectedSec), `${c.key} expectedSec는 SCHEDULE 값`);
 });
 
-test('JOBS는 collector 하나(뉴스 수집 잡)', () => {
-  assert.deepEqual(JOBS.map(j => j.key), ['collector']);
+test('JOBS는 collect_all 하나(통합 수집 잡)', () => {
+  assert.deepEqual(JOBS.map(j => j.key), ['collect_all']);
 });
 
 test('jobVerdict: 실패 > 멈춤(running 고착) > 지연/미실행 > 정상', () => {
