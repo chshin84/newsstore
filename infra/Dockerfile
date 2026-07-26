@@ -7,7 +7,7 @@ WORKDIR /app
 #   docker build --build-arg INSTALL_DEV=false ... 로 [dev] 제외.
 ARG INSTALL_DEV=true
 # 클라우드(Cloud Run) 이미지는 INSTALL_DEV=false INSTALL_GCP=true 로 빌드 → google-cloud-firestore 포함.
-# 가격·펀더멘털 수집(run_prices/run_fundamentals)도 Firestore 저장에 [gcp]가 필요하다.
+# run_collect_all·run_backfill_embed 모두 Firestore 저장에 [gcp]가 필요하다.
 ARG INSTALL_GCP=false
 # 임베딩(gemini) — collector 이미지용. lock -c 는 버전 제약일 뿐 설치 트리거가 아니므로
 # extra를 명시 설치해야 한다(스펙 2026-07-16 재리뷰 critical).

@@ -1,7 +1,7 @@
 """수집 후 임베딩 패스 — 대기 큐를 cap까지 임베딩(스펙 2026-07-16).
 
-cap 근거: collector Cloud Run 잡은 task-timeout 600초·5분 주기라, 상한 없이 백필
-백로그를 물면 타임아웃 반복(thrash)에 빠진다. 잔여분은 다음 런(또는 백필 drain
+cap 근거: `newsstore-collect-all` Cloud Run 잡은 task-timeout이 600초라, 상한 없이
+백필 백로그를 물면 타임아웃 반복(thrash)에 빠진다. 잔여분은 다음 런(또는 백필 drain
 루프)이 이어받는다. store는 Protocol 주입(모듈 경계 — embed는 store를 import 안 함).
 
 cap=5000 실측 근거(2026-07-22, 라이브 Cloud Run 실행): 5,000건 처리(임베딩+저장)에

@@ -94,7 +94,8 @@ class GeminiEmbedClient:
                 config=types.EmbedContentConfig(
                     output_dimensionality=EMBED_DIM,
                     # 실효 타임아웃(ms) — 행(hang)이 워커 50개를 무한 점유하면 런이
-                    # 5분을 넘겨 겹실행 전제(스펙 §임베딩 패스)가 무너진다.
+                    # 스케줄러 주기(값은 운영 문서 참조)를 넘겨 겹실행 전제
+                    # (스펙 §임베딩 패스)가 무너진다.
                     http_options=types.HttpOptions(timeout=int(timeout * 1000))))
             embs = getattr(r, "embeddings", None)
             return embs[0].values if embs else None

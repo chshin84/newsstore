@@ -52,7 +52,7 @@ def mark_pending(store, *, min_life: timedelta = MIN_LIFE) -> int:
 
 def drain(store, client, *, cap: int = DEFAULT_CAP) -> dict:
     """embed_pass를 대기분 0까지 반복. 무진전(저장·처분 0) 2회 연속이면 중단하고
-    totals["stalled"]=True로 알린다 — 잔여분은 정규 5분 주기 런이 이어받는다.
+    totals["stalled"]=True로 알린다 — 잔여분은 정규 스케줄 런이 이어받는다.
     주의: 재시도 가능 실패 항목은 라운드마다 다시 임베딩을 시도하므로(항목당
     call_with_retry 3회 × 최대 2라운드) 지속 장애 시 쿼터를 추가 소모한다 —
     무진전 2회 가드가 그 상한이다."""
