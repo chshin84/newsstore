@@ -46,10 +46,13 @@ def parse_feed(raw: bytes, feed: FeedConfig, fetched_at: datetime) -> list[RawIt
     # HTTP 200이어도 차단·오류 페이지면 feedparser는 예외 없이 entries=0을 준다.
     # 이를 '0건 성공'으로 삼키면 피드가 조용히 영구 무수집이 된다(fail-loud).
     # 인식된 피드 포맷(version)의 빈 피드만 합법 — 정상형 XML 차단 페이지는
-    # bozo=0이라 version 부재도 함께 본다.
-    if not fp.entries and (fp.bozo or not fp.version):
+    # bozo=0이라 version 부재도 함께 본다. 빈 본문(0바이트) 응답에서는 version
+    # 키가 아예 없어 속성 접근이 AttributeError를 낸다 — 가드가 스스로 죽지 않게
+    # 반드시 .get()으로 읽는다(부재도 '포맷 미인식'으로 같이 처리).
+    version = fp.get("version")
+    if not fp.entries and (fp.bozo or not version):
         raise FeedParseError(
-            f"not a parseable feed (bozo={bool(fp.bozo)}, version={fp.version!r})")
+            f"not a parseable feed (bozo={bool(fp.bozo)}, version={version!r})")
     items: list[RawItem] = []
     skipped = 0
     for e in fp.entries:

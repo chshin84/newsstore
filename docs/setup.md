@@ -75,7 +75,7 @@ Invoke-RestMethod -Method POST -Uri "$base/webApps" -Headers $H -ContentType "ap
 # (c) config 발급 → apiKey 등
 Invoke-RestMethod -Method GET -Uri "$base/webApps/<APP_ID>/config" -Headers $H
 ```
-→ 받은 `apiKey/authDomain/projectId/...`를 **`web/index.html`의 `firebaseConfig`** 에 인라인(공개 read 전용이라 노출 안전).
+→ 받은 `apiKey/authDomain/projectId/...`를 **`web/config.js`의 `firebaseConfig`** 에 넣는다(공개 read 전용이라 노출 안전). `web/index.html`과 `web/dashboard.html`이 이 모듈을 import하므로 값은 한 곳에만 둔다 — Hosting 배포는 `web/` 전체 스냅샷이라 `config.js`를 빠뜨리면 사이트가 무한 로딩이 된다(§B 주의).
 
 ## 6. 보안 규칙 + 복합 인덱스
 **규칙**(`firebaserules` REST): ruleset 생성 → `cloud.firestore` release 갱신.

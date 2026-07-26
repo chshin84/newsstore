@@ -17,16 +17,16 @@
 Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료시킨다. 이 스토어의 만료 필드명은 **`expire_at`**로 통일한다.
 - **`items`**: 각 문서에 `expire_at`(저장 시각 + 60일)을 넣고, gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`).
 - **`feed_state`엔 `expire_at`을 절대 넣지 않는다.** ETag·커서가 만료되면 증분 수집이 매번 전량 재수집으로 어긋난다.
-- **`item_vectors`는 원본 item의 `expire_at`을 그대로 미러링**한다(기사와 벡터가 함께 만료 — 고아 벡터 방지). 이 컬렉션만 호출자(임베딩 패스)가 원본에서 읽은 값을 전달하고, `embed_model`·`embedded_at`은 store가 주입한다.
-- `expire_at` 주입은 store가 단일 통제점이다(`firestore_store.py`). 호출자가 안 넣어도 store가 보장한다.
+- **`item_vectors`는 원본 item의 `expire_at`을 그대로 미러링**한다(기사와 벡터가 함께 만료 — 고아 벡터 방지). 이 컬렉션만 호출자(임베딩 패스)가 원본에서 읽은 값을 전달하고, `embed_model`·`embed_task_type`·`embedded_at`은 store가 주입한다.
+- `items`의 `expire_at`은 store가 단일 통제점으로 박는다(`firestore_store.py`의 `_to_doc`). 호출자가 안 넣어도 store가 보장한다. **`item_vectors`는 예외로 호출자가 넘긴 원본 값을 그대로 통과시킨다**(미러링이 목적이라 store가 새로 계산하지 않는다) — 원본에서 읽은 값을 넘기는 책임은 임베딩 패스에 있다.
 
 ## 컬렉션 스키마
 
 ### `items` (collect가 기록, 공개 read)
-- **필드**: `feed_id, source, asset_hint, language, url, title, body, published_at, fetched_at, kind, expire_at`.
+- **필드**: `feed_id, source, asset_hint, language, url, title, body, symbol, published_at, fetched_at, kind, expire_at`. story 문서에는 여기에 transient 플래그 `embed_pending`이 임베딩 전까지 더 붙는다(아래 별도 절).
 - **문서 키**: `sha1(url)`의 hex다(URL이 없으면 guid, 그것도 없으면 title로 폴백 — `collect/feeds.py`의 `make_id`). 같은 URL은 같은 문서라 재수집해도 덮어쓰지 않는다(비파괴).
 - 모델 SSOT는 `src/newsstore/contracts/models.py`의 `RawItem`.
-- **`kind`** (story|spam|digest|sports) — 수집 시점 선분류. `_to_doc()`가 `upsert_items` 시점에 `classify_kind(title, body)`를 호출해 박는다(SSOT: `src/newsstore/contracts/classify.py`의 SPAM/SPORTS/DIGEST 키워드). web UI는 `kind === "story"`만 노출하고 나머지는 숨긴다. LLM이 아니라 순수 키워드 규칙 필터다.
+- **`kind`** (story|spam|digest|sports) — 수집 시점 선분류. `_to_doc()`가 `upsert_items` 시점에 `classify_kind(title, body)`를 호출해 박는다(SSOT: `src/newsstore/contracts/classify.py`의 SPAM/SPORTS/DIGEST 키워드). web UI는 `kind`가 `"story"`인 기사와 **`kind` 필드가 아예 없는 기사**를 노출하고 나머지는 숨긴다(`web/index.html`의 `keepInFeed`). 분류 이전의 레거시 문서를 fail-soft로 계속 보여주려는 의도된 선택이다. LLM이 아니라 순수 키워드 규칙 필터다.
 - **`expire_at`** = `fetched_at + 60일`. TTL 정책이 이 필드를 보고 만료시킨다.
 
 ### `feed_state` (수집기 전용, 비공개)
@@ -50,7 +50,7 @@ story 기사당 벡터 1문서. 문서 키는 item id와 같다(위 `items`의 �
 
 ### FMP 뉴스(2026-07-19)
 - `items` 문서에 `symbol`(옵션, str) 추가 — FMP 뉴스의 티커 태깅. RSS 아이템은 "".
-- `feed_state`에 `fmp:{endpoint}` 문서 — FMP 뉴스 엔드포인트별 is_due 스케줄·건강(커서 아님, 고정 lookback).
+- `feed_state`에 `fmp:{endpoint}` 문서 — FMP 뉴스 엔드포인트별 **건강만** 기록한다(커서도 스케줄도 아니다 — 매 실행이 고정 lookback을 재스캔한다).
 - 신규 컬렉션 없음(기존 items 재사용). TTL·kind·embed_pending 계약 동일.
 
 ### 네이버 검색 뉴스

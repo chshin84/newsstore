@@ -33,7 +33,8 @@ class PendingItem(TypedDict):
 
 
 class VectorEntry(TypedDict):
-    """save_vectors 입력 — 호출자는 이 셋만 제공, embed_model·embedded_at은 store가 주입."""
+    """save_vectors 입력 — 호출자는 이 셋만 제공, embed_model·embed_task_type·embedded_at은
+    store가 주입한다(계약 상수의 SSOT는 contracts/embedding)."""
     item_id: str
     vector: list[float]
     expire_at: datetime
@@ -88,8 +89,8 @@ class Store(Protocol):
         """items where embed_pending==true 를 limit까지(대기 큐 조회)."""
         ...
     def save_vectors(self, entries: list[VectorEntry]) -> int:
-        """item_vectors set + 원본 embed_pending 해제(같은 batch). embed_model·embedded_at은
-        store가 주입(단일 통제점). 원본이 TTL로 사라진 항목은 건너뛴다(격리). 반환=쓴 수."""
+        """item_vectors set + 원본 embed_pending 해제(같은 batch). embed_model·embed_task_type·
+        embedded_at은 store가 주입(단일 통제점). 원본이 TTL로 사라진 항목은 건너뛴다(격리). 반환=쓴 수."""
         ...
     def clear_embed_pending(self, ids: list[str]) -> None:
         """재시도 무의미(영구 실패) 기사의 플래그 처분 — 벡터 없이 플래그만 제거."""

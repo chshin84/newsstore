@@ -70,6 +70,20 @@ def test_upsert_stamps_expire_at_from_fetched_at(store):
     assert "processed" not in d and "processed_at" not in d and "tags" not in d
 
 
+# --- 스키마 드리프트 가드: web UI가 읽는 필드명이 저장 문서에서 사라지면 터진다 ---
+# 사이트는 이름이 어긋나도 예외 없이 빈 화면이 되므로(조용한 실패) 저장 쪽에서 잡는다.
+# 목록의 근거는 web/index.html·web/dashboard.html이 실제로 읽는 필드다(kind·published_at·
+# source·title·body·url). 필드를 바꾸려면 web과 docs/firestore-contract.md를 함께 고쳐야 한다.
+_WEB_READ_FIELDS = ("kind", "published_at", "source", "title", "body", "url")
+
+
+def test_web_read_field_names_survive_in_stored_doc(store):
+    store.upsert_items([_item("w")])
+    d = store.db.collection("items").document("w").get().to_dict()
+    missing = [f for f in _WEB_READ_FIELDS if f not in d]
+    assert not missing, f"web UI가 읽는 필드가 저장 문서에 없다: {missing}"
+
+
 def test_feed_state_has_no_expire_at(store):
     store.set_feed_state("f1", etag="e1", last_fetched=NOW)
     d = store.db.collection("feed_state").document("f1").get().to_dict()

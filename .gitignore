@@ -22,15 +22,6 @@ venv/
 # 로컬 uv venv 산물; 표준 의존성 락은 infra/requirements.lock
 uv.lock
 
-# --- 런타임 산출물 (재생성 가능: run.py --force) ---
-data/
-*.db
-
-# 로컬 작업장 캐시·산출물(재생성 가능)
-data/*.db
-data/*.db-journal
-radar_out/
-
 # --- OS ---
 .DS_Store
 Thumbs.db

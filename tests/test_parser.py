@@ -92,6 +92,16 @@ def test_wellformed_html_page_still_raises_parse_error():
     with pytest.raises(FeedParseError):
         parse_feed(html, FEED, fetched_at=NOW)
 
+def test_empty_body_raises_parse_error():
+    # 본문이 0바이트인 200 응답에서는 feedparser 결과에 version 키가 **아예 없다**
+    # (bozo=0). 속성 접근으로 읽으면 가드가 스스로 AttributeError로 터져 원인이
+    # 'parse/store error'로 뭉개진다 — 2026-07-25 프로덕션에서 15분마다 재발했다.
+    # 가드는 죽지 말고 이 응답을 FeedParseError로 분류해야 한다.
+    import pytest
+    from newsstore.collect.parser import FeedParseError
+    with pytest.raises(FeedParseError):
+        parse_feed(b"", FEED, fetched_at=NOW)
+
 def test_valid_empty_feed_is_legitimate_zero():
     # 인식된 피드 포맷의 항목 0건은 합법(신규 없음) — 실패가 아니다.
     raw = (b'<?xml version="1.0"?><rss version="2.0"><channel>'

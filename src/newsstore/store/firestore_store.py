@@ -101,7 +101,8 @@ class FirestoreStore:
         return out
 
     def save_vectors(self, entries: list[dict]) -> int:
-        """item_vectors/{item_id} set + 원본 embed_pending 해제를 청크 batch(250건×2op)로
+        """item_vectors/{item_id} set + 원본 embed_pending 해제를 청크 batch(50건×2op — 아래
+        루프의 청크 크기가 SSOT)로
         커밋 — 벡터 저장과 플래그 해제가 원자적이라 부분 상태가 없다. 원본이 TTL로
         사라져 batch가 롤백되면 그 청크만 항목 단위로 재커밋해 부재 항목만 건너뛴다
         (만료 경합 격리 — 벡터 고아 방지). embed_model·embedded_at은 store가 주입

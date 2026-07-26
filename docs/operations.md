@@ -3,7 +3,7 @@
 이 문서는 **변경분을 클라우드에 반영**하는 명령 모음이다.
 **0→배포 최초 셋업 절차(프로젝트/Firestore/Cloud Run/Scheduler/IAM/Firebase/규칙/Hosting/TTL 생성)는 `docs/setup.md` 참조.**
 
-newsstore는 **뉴스 수집 전용**이다 — 뉴스 RSS 수집기, FMP 뉴스 수집기, 정적 사이트만 운영한다. 분석/LLM 잡은 없다. (FMP 팩터·가격 수집은 별개 로컬 레포 `DB-news-data`(DuckDB)로 이관됐다.)
+newsstore는 **뉴스 수집 전용**이다 — RSS·네이버 검색 뉴스·FMP 뉴스를 한 잡에서 수집하고, 그 뒤에 임베딩 패스가 붙으며, 정적 사이트를 함께 운영한다. 생성형 LLM 분석 잡은 없다(임베딩은 수집 산출물이라 예외다). (FMP 팩터·가격 수집은 별개 로컬 레포 `DB-news-data`(DuckDB)로 이관됐다.)
 
 ## 전제
 - `gcloud`가 사용자 프로필에 인증돼 있어야 함 (`chshin84@gmail.com`, 프로젝트 `daily-recap-498506`).
@@ -108,7 +108,7 @@ Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -H
 `firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기. **전면 공개 read 모델**이다:
 - **공개 read**: `items`·`meta`·`item_vectors`·`job_health` 모두 `allow read: if true`. 대시보드(`web/dashboard.html`)·뉴스 리더(`web/index.html`)가 **로그인 없이** 읽는다.
 - **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). `feed_state`(폴링 커서)만 기본 거부.
-- **노출 범위는 60일 버퍼뿐**(깊은 아카이브는 다운스트림 로컬 DB 몫이라 Firestore 밖). **구글 auth·허용목록 불요**(공개 모델). 배포는 `firebase deploy --only firestore:rules,hosting`.
+- **노출 범위는 60일 버퍼뿐**(깊은 아카이브는 다운스트림 로컬 DB 몫이라 Firestore 밖). **구글 auth·허용목록 불요**(공개 모델). 배포는 이 절 서두의 `firebaserules` REST 절차로 하고, 사이트는 §B의 Hosting REST 절차로 한다 — 이 환경에는 firebase CLI를 두지 않는다(`docs/setup.md` 서두의 전제와 같다).
 
 ## D. 복합 인덱스 추가
 ```
