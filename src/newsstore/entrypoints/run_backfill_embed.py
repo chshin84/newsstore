@@ -4,7 +4,9 @@
 로컬(Docker)에서 실행한다: Cloud Run task-timeout 제약이 없다.
   MSYS_NO_PATHCONV=1 docker compose run --rm collect \
     python -m newsstore.entrypoints.run_backfill_embed
-멱등: 이미 벡터가 있거나 마킹된 기사는 건너뛴다. 재실행 안전.
+멱등: 현행 계약(모델·task_type)으로 만든 벡터가 이미 있거나 마킹된 기사는 건너뛴다. 재실행 안전.
+계약이 바뀌면 옛 벡터는 좌표계가 달라 '없음'으로 취급되어 재임베딩 대상이 된다 — 그래서
+모델이나 task_type을 바꾼 뒤 이 스크립트를 돌리는 것이 전량 재임베딩 경로다.
 """
 from __future__ import annotations
 import argparse
@@ -12,6 +14,7 @@ import logging
 import os
 from datetime import datetime, timezone, timedelta
 
+from ..contracts.embedding import EMBED_MODEL, EMBED_TASK_TYPE
 from ..embed.embed_pass import embed_pass, DEFAULT_CAP
 from ..store.factory import make_store
 
@@ -21,8 +24,19 @@ MIN_LIFE = timedelta(days=2)     # 잔여 수명 2일 미만은 제외 — 곧 �
 _MARK_CHUNK = 250                # Firestore batch 500 op 한도 내(update 1op씩)
 
 
+def _is_current_contract(vec: dict) -> bool:
+    """현재 계약(모델·task_type)으로 만든 벡터인가.
+
+    계약이 바뀌면 옛 벡터는 좌표계가 달라 같은 공간에서 비교할 수 없다. 그래서 '벡터 있음'이
+    아니라 '없음'으로 취급해 재임베딩 대상에 넣는다 — 이 판정이 없으면 계약을 바꿔도
+    멱등 가드에 걸려 재임베딩이 영영 일어나지 않는다.
+    """
+    return (vec.get("embed_model") == EMBED_MODEL
+            and vec.get("embed_task_type") == EMBED_TASK_TYPE)
+
+
 def mark_pending(store, *, min_life: timedelta = MIN_LIFE) -> int:
-    """kind==story ∧ 벡터 없음 ∧ 미마킹 ∧ 잔여 수명 ≥ min_life 에 embed_pending 마킹.
+    """kind==story ∧ 현행 계약 벡터 없음 ∧ 미마킹 ∧ 잔여 수명 ≥ min_life 에 embed_pending 마킹.
     select 프로젝션으로 본문 다운로드를 피한다(일회성이지만 read 페이로드 절약)."""
     now = datetime.now(timezone.utc)
     db = store.db
@@ -32,7 +46,10 @@ def mark_pending(store, *, min_life: timedelta = MIN_LIFE) -> int:
     for i in range(0, len(snaps), _MARK_CHUNK):
         chunk = snaps[i:i + _MARK_CHUNK]
         refs = [db.collection("item_vectors").document(s.id) for s in chunk]
-        have_vector = {r.id for r in db.get_all(refs) if r.exists}
+        # 계약 필드만 투영한다 — 768차원 본문까지 받으면 19만 건에서 페이로드가 GB 단위다.
+        have_vector = {r.id for r in db.get_all(
+            refs, field_paths=["embed_model", "embed_task_type"])
+            if r.exists and _is_current_contract(r.to_dict() or {})}
         batch = db.batch()
         pending_ops = 0
         for s in chunk:

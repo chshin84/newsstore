@@ -11,7 +11,7 @@ import re
 import time
 from typing import Any, Callable
 
-from ..contracts.embedding import EMBED_MODEL, EMBED_DIM
+from ..contracts.embedding import EMBED_MODEL, EMBED_DIM, EMBED_TASK_TYPE
 
 log = logging.getLogger("newsstore.embed.gemini")
 
@@ -93,6 +93,9 @@ class GeminiEmbedClient:
                 model=EMBED_MODEL, contents=text,
                 config=types.EmbedContentConfig(
                     output_dimensionality=EMBED_DIM,
+                    # 저장 문서용 임베딩임을 명시한다 — 미지정이면 기본 타입이 쓰여
+                    # 다운스트림이 쿼리 임베딩을 맞출 근거가 없다(계약 SSOT: contracts/embedding).
+                    task_type=EMBED_TASK_TYPE,
                     # 실효 타임아웃(ms) — 행(hang)이 워커 50개를 무한 점유하면 런이
                     # 스케줄러 주기(값은 운영 문서 참조)를 넘겨 겹실행 전제
                     # (스펙 §임베딩 패스)가 무너진다.

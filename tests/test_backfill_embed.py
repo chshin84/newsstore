@@ -17,13 +17,37 @@ def test_mark_pending_selects_unembedded_fresh_stories(store):
     db = store.db
     _legacy_doc(db, "L1")                                     # 대상
     _legacy_doc(db, "L2", kind="spam")                        # 비-story → 제외
-    _legacy_doc(db, "L3")                                     # 벡터 이미 있음 → 제외
-    db.collection("item_vectors").document("L3").set({"vector": [0.1] * 768})
+    _legacy_doc(db, "L3")                                     # 현행 계약 벡터 있음 → 제외
+    from newsstore.contracts.embedding import EMBED_MODEL, EMBED_TASK_TYPE
+    db.collection("item_vectors").document("L3").set(
+        {"vector": [0.1] * 768, "embed_model": EMBED_MODEL, "embed_task_type": EMBED_TASK_TYPE})
     _legacy_doc(db, "L4", life=timedelta(days=1))             # 잔여 수명 <2일 → 제외
     assert mark_pending(store) == 1
     assert db.collection("items").document("L1").get().to_dict()["embed_pending"] is True
     for i in ("L2", "L3", "L4"):
         assert "embed_pending" not in db.collection("items").document(i).get().to_dict()
+
+
+def test_mark_pending_remarks_vectors_from_a_stale_contract(store):
+    """모델이나 task_type이 현재 SSOT와 다른 벡터는 좌표계가 달라 쓸 수 없다 —
+    '벡터 있음'으로 보고 건너뛰면 계약을 바꿔도 재임베딩이 영영 일어나지 않는다."""
+    from newsstore.entrypoints.run_backfill_embed import mark_pending
+    from newsstore.contracts.embedding import EMBED_MODEL, EMBED_TASK_TYPE
+    db = store.db
+    _legacy_doc(db, "S1")                                     # 낡은 task_type → 재임베딩 대상
+    db.collection("item_vectors").document("S1").set(
+        {"vector": [0.1] * 768, "embed_model": EMBED_MODEL, "embed_task_type": "OLD_TYPE"})
+    _legacy_doc(db, "S2")                                     # task_type 필드 자체가 없는 레거시 → 대상
+    db.collection("item_vectors").document("S2").set(
+        {"vector": [0.1] * 768, "embed_model": EMBED_MODEL})
+    _legacy_doc(db, "S3")                                     # 현행 계약과 일치 → 제외
+    db.collection("item_vectors").document("S3").set(
+        {"vector": [0.1] * 768, "embed_model": EMBED_MODEL, "embed_task_type": EMBED_TASK_TYPE})
+
+    assert mark_pending(store) == 2
+    for i in ("S1", "S2"):
+        assert db.collection("items").document(i).get().to_dict()["embed_pending"] is True
+    assert "embed_pending" not in db.collection("items").document("S3").get().to_dict()
 
 
 def test_mark_pending_is_idempotent(store):

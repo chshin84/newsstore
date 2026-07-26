@@ -116,6 +116,10 @@ def test_save_vectors_writes_vector_and_clears_flag(store):
     vec = store.db.collection("item_vectors").document("v1").get().to_dict()
     assert len(vec["vector"]) == 768
     assert vec["embed_model"] == "gemini-embedding-001"   # store가 SSOT에서 주입
+    # task_type도 벡터의 좌표계를 가르는 계약이라 함께 기록한다 — 모델만으로는
+    # 타입이 바뀐 낡은 벡터를 구분할 수 없어 재임베딩 대상을 못 고른다.
+    from newsstore.contracts.embedding import EMBED_TASK_TYPE
+    assert vec["embed_task_type"] == EMBED_TASK_TYPE
     assert vec["embedded_at"] is not None
     assert vec["expire_at"] == p["expire_at"]             # 원본 TTL 미러링
     item = store.db.collection("items").document("v1").get().to_dict()

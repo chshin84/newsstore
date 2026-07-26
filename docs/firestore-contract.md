@@ -37,10 +37,12 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 
 ### `item_vectors` (collect Job의 임베딩 패스가 기록, 공개 read)
 story 기사당 벡터 1문서. 문서 키는 item id와 같다(위 `items`의 문서 키 규칙을 그대로 따른다). **분석이 아니라 수집 시점 1회 계산**이다(생성형 LLM 아님 — 스코프 예외).
-- **필드**: `vector`(float×768), `embed_model`("gemini-embedding-001" — store가 SSOT 주입), `embedded_at`, `expire_at`(원본 미러링).
+- **필드**: `vector`(float×768), `embed_model`("gemini-embedding-001" — store가 SSOT 주입), `embed_task_type`("RETRIEVAL_DOCUMENT" — store가 SSOT 주입), `embedded_at`, `expire_at`(원본 미러링).
 - **`vector`의 저장 타입은 평범한 double 배열이다 — Firestore 네이티브 벡터 타입이 아니다(의도된 선택).** 그래서 이 컬렉션에는 `find_nearest`(KNN)를 쓸 수 없고 벡터 인덱스도 걸 수 없다. 유사도 검색은 다운스트림(`DB-news-data`)이 벡터를 당겨가 거기서 계산한다는 것이 이 저장소의 경계이며, 배열이 그쪽에서 다루기 가장 단순하기 때문이다. Firestore 안에서 KNN을 돌리기로 방침이 바뀌면 저장 타입을 네이티브 벡터로 바꾸고 벡터 인덱스를 걸어야 하는데, **이는 모델 교체와 같은 단방향 문이다** — 다운스트림 파서를 함께 고쳐야 하고 TTL이 한 바퀴 돌 때까지 두 타입이 섞인다.
-- **임베딩 입력 규칙(계약)**: `title + " " + body[:500]`. 모델·차원과 함께 다운스트림 계약이다 — 유사도 검색 쿼리도 같은 모델·차원·규칙으로 임베딩해야 한다. 모델명·차원 상수의 SSOT는 `src/newsstore/contracts/embedding.py`이고, 입력 조립과 본문 절단 상수(`BODY_CAP`)는 `src/newsstore/embed/embedder.py`의 `embed_text`에 있다.
-- **모델 교체는 단방향 문**: 다운스트림이 이 계약에 의존하면 교체 시 전량 재임베딩 + 다운스트림 협응이 필요하다. `embed_model` 필드가 mismatch 감지 수단.
+- **임베딩 입력 규칙(계약)**: `title + " " + body[:500]`. 모델·차원과 함께 다운스트림 계약이다 — 유사도 검색 쿼리도 같은 모델·차원·규칙으로 임베딩해야 한다. 모델명·차원·task_type 상수의 SSOT는 `src/newsstore/contracts/embedding.py`이고, 입력 조립과 본문 절단 상수(`BODY_CAP`)는 `src/newsstore/embed/embedder.py`의 `embed_text`에 있다.
+- **`task_type`은 모델·차원과 동급의 계약이다.** 같은 문장이라도 task_type이 다르면 다른 벡터가 나온다. 저장 문서는 `RETRIEVAL_DOCUMENT`로 임베딩하므로, **다운스트림은 질의를 `RETRIEVAL_QUERY`로 임베딩해야 짝이 맞는다.** 문서끼리의 유사도·군집에 쓸 때는 양쪽 다 `RETRIEVAL_DOCUMENT` 벡터를 그대로 비교하면 된다. `RETRIEVAL_DOCUMENT`를 고른 이유는 저장 문서용 범용 타입이라 질의 검색과 문서 간 비교 양쪽을 열어두기 때문이다.
+- **`vector`는 정규화되어 있지 않다(L2 norm 약 0.59).** 3072차원 단위 벡터를 `output_dimensionality`로 768까지 잘라내면 길이가 1보다 작아지기 때문이다. 문서 간 편차는 2% 안쪽이라 코사인 유사도는 영향을 받지 않지만, **내적을 코사인 대신 쓰거나 절대 거리 임계값을 쓰는 소비자는 직접 정규화해야 한다.**
+- **모델·task_type 교체는 단방향 문**: 다운스트림이 이 계약에 의존하면 교체 시 전량 재임베딩 + 다운스트림 협응이 필요하다. `embed_model`·`embed_task_type` 두 필드가 mismatch 감지 수단이며, **전량 재임베딩 경로는 `entrypoints/run_backfill_embed`다** — 그 스크립트는 현행 계약과 어긋나는 벡터를 '없음'으로 보고 다시 마킹한다.
 
 ### `items.embed_pending` (transient 플래그)
 `_to_doc`가 story에만 `embed_pending: true`를 박고, 임베딩 패스가 완료 시 `DELETE_FIELD`로 걷는다(항목 귀속 영구 실패 — 빈 입력·400 — 도 처분 시 걷는다; 좀비 재시도 방지). Firestore가 "필드 없음"을 쿼리할 수 없어 플래그 존재 = 대기를 뜻한다. **공개 read인 items에 임베딩 전까지 노출되는 백엔드 상태 필드**다 — 경미한 노출은 수용 결정(웹 파서는 미지 필드 무시).

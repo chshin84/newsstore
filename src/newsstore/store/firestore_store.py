@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from ..contracts.models import RawItem
 from ..contracts.classify import classify_kind   # 순수 triage(키워드 매칭) — contracts 공유
-from ..contracts.embedding import EMBED_MODEL
+from ..contracts.embedding import EMBED_MODEL, EMBED_TASK_TYPE
 from ..contracts.ports import FeedState        # feed_state 필드 집합의 SSOT(_STATE_FIELDS를 여기서 도출)
 
 _ITEMS = "items"
@@ -119,6 +119,9 @@ class FirestoreStore:
         def _ops(batch, e):
             batch.set(vec_col.document(e["item_id"]), {
                 "vector": e["vector"], "embed_model": EMBED_MODEL,
+                # task_type도 좌표계를 가르므로 모델과 함께 박는다 — 이 둘이 재임베딩
+                # 대상 판별(backfill의 stale 판정)과 다운스트림 mismatch 감지의 근거다.
+                "embed_task_type": EMBED_TASK_TYPE,
                 "embedded_at": now, "expire_at": e["expire_at"]})
             batch.update(items_col.document(e["item_id"]),
                          {"embed_pending": DELETE_FIELD})
