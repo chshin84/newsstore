@@ -157,14 +157,20 @@ load().catch(showLoadError);
 setInterval(() => load().catch(() => {}), 10 * 60 * 1000);
 $("refresh").onclick = () => load().catch(showLoadError);
 
+// detail에는 피드에서 온 기사 제목·발행처가 섞여 들어온다 — 원문을 그대로 innerHTML에
+// 넣으면 피드 제목이 마크업으로 실행된다. index.html의 esc와 같은 규칙을 쓴다.
+function esc(s) {
+  return (s || "").replace(/[&<>"']/g, c =>
+    ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+}
 function showLoadError(e) {
-  $("joblist").innerHTML = `<div class="row"><div class="load-err">불러오기 실패: ${e.code || e.message}</div></div>`;
+  $("joblist").innerHTML = `<div class="row"><div class="load-err">불러오기 실패: ${esc(e.code || e.message)}</div></div>`;
 }
 function rowHtml(level, name, detail, when) {
   const chip = LEVEL_TEXT[level] || "—";
   return `<div class="row ${level}">
     <span class="dot"></span>
-    <div class="body"><div class="name">${name}</div>${detail ? `<div class="detail">${detail}</div>` : ""}</div>
+    <div class="body"><div class="name">${esc(name)}</div>${detail ? `<div class="detail">${esc(detail)}</div>` : ""}</div>
     <span class="chip">${chip}</span>
     <span class="when num">${when}</span>
   </div>`;

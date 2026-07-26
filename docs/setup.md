@@ -124,7 +124,7 @@ gcloud secrets add-iam-policy-binding gemini-api-key \
   --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
 # (b) collect_all 잡에 주입
 gcloud run jobs update newsstore-collect-all \
-  --set-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>
+  --update-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>
 ```
 
 **네이버 검색 API 자격증명**: collect_all의 네이버 뉴스 수집은 네이버 검색 API를 호출하므로 `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`(백엔드 전용 비밀)이 필요하다 — 네이버 개발자센터에서 애플리케이션을 등록해 발급받은 뒤 FMP·Gemini와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collect-all` 잡에 주입한다. `run_collect_all`이 두 값을 `os.environ`으로 fail-loud 읽으므로 주입 전에는 §3의 스모크 실행이 그 자리에서 실패한다.
