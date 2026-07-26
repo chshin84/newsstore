@@ -7,6 +7,14 @@
         { "fieldPath": "source", "order": "ASCENDING" },
         { "fieldPath": "published_at", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "source", "order": "ASCENDING" },
+        { "fieldPath": "fetched_at", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

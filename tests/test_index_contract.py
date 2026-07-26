@@ -7,10 +7,10 @@ import json
 import pathlib
 
 # 코드의 복합쿼리(where+order_by/배열) ↔ 필요한 복합 인덱스 (collectionGroup, (fields...))
-# 수집 전용(data-only): 남는 복합쿼리는 UI의 소스별 최신 뉴스 하나뿐이다.
-# prices·fundamentals는 문서 id로 단건 조회라 복합 인덱스가 필요 없다.
+# 수집 전용(data-only): 남는 복합쿼리는 UI가 소스로 거르는 두 가지(뉴스 목록과 상태 탭)뿐이다.
 REQUIRED = [
     ("items", ("source", "published_at")),     # UI 소스 필터: where(source==X).order_by(published_at desc)
+    ("items", ("source", "fetched_at")),       # UI 상태 탭: where(source==X).order_by(fetched_at desc)
 ]
 
 
