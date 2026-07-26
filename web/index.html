@@ -188,7 +188,7 @@
       <div class="hrow">
         <div class="hleft">
           <button id="sideToggle" class="side-toggle" title="사이드바 열기/닫기" aria-label="사이드바 열기/닫기" aria-expanded="true">☰</button>
-          <h1>newsstore <small>5분마다 갱신되는 뉴스 피드</small></h1>
+          <h1>newsstore <small>뉴스 피드</small></h1>
         </div>
         <div class="hbtns">
           <button id="fsBtn" title="글자 크기 (작게/중간/크게 순환)" aria-label="글자 크기">가</button>
@@ -203,8 +203,6 @@
       <div class="controls" id="feedControls" hidden>
         <label for="src">소스</label>
         <select id="src"><option value="__all__">전체</option></select>
-        <label for="tag">태그</label>
-        <select id="tag"><option value="__all__">전체</option></select>
         <button id="refresh">새로고침</button>
         <span id="status">불러오는 중…</span>
       </div>
@@ -236,9 +234,7 @@
 
     const listEl = document.getElementById("list");
     const statusEl = document.getElementById("status");
-    const tagSel = document.getElementById("tag");
     const srcSel = document.getElementById("src");
-    const seenTags = new Set();
     const db = getFirestore(initializeApp(firebaseConfig));
 
     // WW5 persistence 일관: 트리 폴더 펼침(nav:*)과 WW1 주시·미발생 펼침(extra:*)을 단일 localStorage 스토어로 통일.
@@ -288,18 +284,6 @@
       return d.toLocaleDateString("ko-KR");
     }
 
-    function refreshTagOptions(items) {
-      let added = false;
-      for (const it of items) for (const t of (it.tags || [])) {
-        if (!seenTags.has(t)) { seenTags.add(t); added = true; }
-      }
-      if (!added) return;
-      const cur = tagSel.value;
-      tagSel.innerHTML = '<option value="__all__">전체</option>' +
-        [...seenTags].sort().map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join("");
-      tagSel.value = cur;
-    }
-
     function render(items, el) {
       el = el || listEl;                     // 대상 컨테이너(피드=list, 리서치=researchList)
       if (!items.length) { el.innerHTML = `<div class="empty">표시할 뉴스가 없습니다.</div>`; return; }
@@ -310,14 +294,12 @@
         const titleHtml = isTS ? "Truth Social" : (txt(it.title) || "(제목 없음)");
         const body = bodyHtml(isTS ? (it.title || it.body) : it.body);
         const c = srcColors(it.source);
-        const tags = (it.tags || []).map(t => `<span class="pill">${txt(t)}</span>`).join("");
         return `<div class="card${body ? " has-body" : ""}" style="border-left-color:${c.bar}">
           <a class="title" href="${esc(it.url)}" target="_blank" rel="noopener">${titleHtml}</a>
           ${body ? `<p class="excerpt">${body}</p>` : ""}
           <div class="meta">
             <span class="pill src" style="background:${c.bg};color:${c.fg}">${txt(it.source) || "?"}</span>
             ${it.asset_hint ? `<span class="pill">${txt(it.asset_hint)}</span>` : ""}
-            ${tags}
             <span>${relTime(pub)}</span>
           </div>
         </div>`;
@@ -328,15 +310,11 @@
     async function load(bg) {
       const seq = ++loadSeq;
       if (!bg) statusEl.textContent = "불러오는 중…";   // 4a: bg면 상태 텍스트 유지
-      const tag = tagSel.value, src = srcSel.value;
+      const src = srcSel.value;
       const col = collection(db, "items");
-      let q;
-      if (src !== "__all__")
-        q = query(col, where("source", "==", src), orderBy("published_at", "desc"), limit(80));
-      else if (tag !== "__all__")
-        q = query(col, where("tags", "array-contains", tag), orderBy("published_at", "desc"), limit(80));
-      else
-        q = query(col, orderBy("published_at", "desc"), limit(80));
+      const q = src !== "__all__"
+        ? query(col, where("source", "==", src), orderBy("published_at", "desc"), limit(80))
+        : query(col, orderBy("published_at", "desc"), limit(80));
       try {
         const snap = await getDocs(q);
         if (seq !== loadSeq) return;                         // 더 새 요청이 나감 → 낡은 응답 버림
@@ -345,14 +323,11 @@
         const seen = new Set(); const items = [];
         for (const it of rawItems) {
           if (!keepInFeed(it)) continue;                     // 백엔드 kind=spam/digest 숨김(SSOT)
-          // 소스+태그 동시 선택: 쿼리는 소스만 걸고(복합 인덱스 회피) 태그는 클라이언트 필터
-          if (src !== "__all__" && tag !== "__all__" && !(it.tags || []).includes(tag)) continue;
           const k = decode(it.title).trim().toLowerCase().replace(/\s+/g, " ");
           if (k && seen.has(k)) continue;
           if (k) seen.add(k);
           items.push(it);
         }
-        if (tag === "__all__") refreshTagOptions(items);
         render(items);
         statusEl.textContent = `${items.length}건 · ${new Date().toLocaleTimeString("ko-KR")}`;
       } catch (e) {
@@ -378,7 +353,6 @@
       load();
     }
     srcSel.addEventListener("change", load);
-    tagSel.addEventListener("change", load);
     document.getElementById("refresh").addEventListener("click", load);
     // 카드 클릭 확장(패턴 E): 링크/버튼 클릭은 토글하지 않음, 본문 있는 카드만
     listEl.addEventListener("click", (e) => {
@@ -577,7 +551,9 @@
     routeFromHash();
     window.__nsBooted = true;      // B5: 모듈이 여기까지 실행됨 → 부트 워치독 폴백 무력화(import 실패만 폴백 발동)
 
-    // 자동경신: 5분마다 피드 데이터 재로드(헤더 "5분마다 갱신" 약속 이행).
+    // 자동경신: 열어둔 탭이 낡지 않게 주기적으로 피드 데이터를 재로드한다. 이것은
+    // 브라우저 쪽 갱신 주기일 뿐 서버 수집 주기(Cloud Scheduler)와는 무관하다 —
+    // 헤더에 주기를 약속하지 않는 이유다.
     // 백그라운드 탭이면 스킵(불필요한 read 절감), 펼친 카드가 있으면 스킵(사용자 방해 방지).
     const AUTO_REFRESH_MS = 5 * 60 * 1000;
     setInterval(() => {
