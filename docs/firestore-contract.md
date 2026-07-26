@@ -38,6 +38,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 ### `item_vectors` (collect Job의 임베딩 패스가 기록, 공개 read)
 story 기사당 벡터 1문서. 문서 키는 item id와 같다(위 `items`의 문서 키 규칙을 그대로 따른다). **분석이 아니라 수집 시점 1회 계산**이다(생성형 LLM 아님 — 스코프 예외).
 - **필드**: `vector`(float×768), `embed_model`("gemini-embedding-001" — store가 SSOT 주입), `embedded_at`, `expire_at`(원본 미러링).
+- **`vector`의 저장 타입은 평범한 double 배열이다 — Firestore 네이티브 벡터 타입이 아니다(의도된 선택).** 그래서 이 컬렉션에는 `find_nearest`(KNN)를 쓸 수 없고 벡터 인덱스도 걸 수 없다. 유사도 검색은 다운스트림(`DB-news-data`)이 벡터를 당겨가 거기서 계산한다는 것이 이 저장소의 경계이며, 배열이 그쪽에서 다루기 가장 단순하기 때문이다. Firestore 안에서 KNN을 돌리기로 방침이 바뀌면 저장 타입을 네이티브 벡터로 바꾸고 벡터 인덱스를 걸어야 하는데, **이는 모델 교체와 같은 단방향 문이다** — 다운스트림 파서를 함께 고쳐야 하고 TTL이 한 바퀴 돌 때까지 두 타입이 섞인다.
 - **임베딩 입력 규칙(계약)**: `title + " " + body[:500]`. 모델·차원과 함께 다운스트림 계약이다 — 유사도 검색 쿼리도 같은 모델·차원·규칙으로 임베딩해야 한다. 모델명·차원 상수의 SSOT는 `src/newsstore/contracts/embedding.py`이고, 입력 조립과 본문 절단 상수(`BODY_CAP`)는 `src/newsstore/embed/embedder.py`의 `embed_text`에 있다.
 - **모델 교체는 단방향 문**: 다운스트림이 이 계약에 의존하면 교체 시 전량 재임베딩 + 다운스트림 협응이 필요하다. `embed_model` 필드가 mismatch 감지 수단.
 
