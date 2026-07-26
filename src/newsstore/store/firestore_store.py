@@ -3,6 +3,7 @@ from datetime import datetime, timezone, timedelta
 from ..contracts.models import RawItem
 from ..contracts.classify import classify_kind   # 순수 triage(키워드 매칭) — contracts 공유
 from ..contracts.embedding import EMBED_MODEL
+from ..contracts.ports import FeedState        # feed_state 필드 집합의 SSOT(_STATE_FIELDS를 여기서 도출)
 
 _ITEMS = "items"
 _FEED_STATE = "feed_state"
@@ -25,7 +26,7 @@ def _to_doc(item: RawItem) -> dict:
         "symbol": item.symbol,
         "published_at": item.published_at, "fetched_at": item.fetched_at,
         "kind": kind,
-        # TTL: 수집 시각 기준 30일 뒤 만료. 원본은 이때까지 보존된다.
+        # TTL: 수집 시각 + `_TTL` 뒤 만료(기간은 상단 `_TTL`이 SSOT). 원본은 이때까지 보존된다.
         "expire_at": item.fetched_at + _TTL,
     }
     if kind == "story":
@@ -80,7 +81,7 @@ class FirestoreStore:
 
     def count(self) -> int:
         # 집계 쿼리(1000건당 1 read) — 전 문서 stream()은 문서수 비례 read 과금에
-        # 본문까지 통째 전송한다(run_collect가 매 실행 호출 → 비용 단조 증가).
+        # 본문까지 통째 전송한다(run_collect_all이 매 실행 호출 → 비용 단조 증가).
         result = self.db.collection(_ITEMS).count().get()
         return int(result[0][0].value)
 
@@ -158,8 +159,9 @@ class FirestoreStore:
     # feed_state 지속 필드: 증분 수집 커서(etag·last_modified·last_fetched) + 피드 건강
     # (last_success·consecutive_failures·last_error·last_error_at). 건강은 대시보드 표시와
     # 실패 판정(만성 죽음 식별)에 쓴다 — 같은 문서라 쓰기 횟수는 안 늘어난다.
-    _STATE_FIELDS = ("etag", "last_modified", "last_fetched",
-                     "last_success", "consecutive_failures", "last_error", "last_error_at")
+    # 필드 목록은 손으로 베끼지 않고 contracts.ports.FeedState에서 도출한다 — 타입 계약과
+    # 저장 필드가 어긋날 수 없게 한 곳만 고치면 되게 만든다(SSOT).
+    _STATE_FIELDS = tuple(FeedState.__annotations__)
 
     def get_feed_state(self, feed_id: str) -> dict:
         snap = self.db.collection(_FEED_STATE).document(feed_id).get()

@@ -60,7 +60,7 @@ def test_upsert_stamps_kind_at_collect_time(store):
     assert dg["kind"] == "story"
 
 
-# --- TTL(1개월): content 컬렉션은 expire_at, feed_state는 절대 없음 ---
+# --- TTL(60일): content 컬렉션은 expire_at, feed_state는 절대 없음 ---
 
 def test_upsert_stamps_expire_at_from_fetched_at(store):
     store.upsert_items([_item("a")])
