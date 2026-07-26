@@ -10,7 +10,7 @@
 
 사용:
   pwsh scripts/deploy-office.ps1 auth     # 1회: 브라우저 인증(자격증명은 docker volume에 저장)
-  pwsh scripts/deploy-office.ps1 deploy   # 빌드 → 두 Job 이미지 갱신 → enricher 실행
+  pwsh scripts/deploy-office.ps1 deploy   # 빌드 → newsstore-collect-all Job 이미지 갱신 → 그 Job 실행
 #>
 param([Parameter(Position=0)][ValidateSet("auth","deploy")][string]$cmd = "deploy")
 
@@ -28,7 +28,7 @@ foreach ($line in Get-Content $envFile) {
 $PROJECT = $envMap["GOOGLE_CLOUD_PROJECT"]
 $REGION  = $envMap["GCP_REGION"]
 if (-not $PROJECT -or -not $REGION) { throw ".env에 GOOGLE_CLOUD_PROJECT·GCP_REGION이 필요하다" }
-$PROC   = "$REGION-docker.pkg.dev/$PROJECT/newsstore/processor:latest"
+$PROC   = "$REGION-docker.pkg.dev/$PROJECT/newsstore/collector:latest"
 
 # 컨테이너 진입 시 ePrism CA 신뢰 + gcloud CA 지정(모든 호출 공통)
 $setup = "cp /work/ePrism-SSL-ROOT-CA.crt /usr/local/share/ca-certificates/eprism.crt && update-ca-certificates >/dev/null 2>&1 && gcloud config set core/custom_ca_certs_file /etc/ssl/certs/ca-certificates.crt >/dev/null && gcloud config set project $PROJECT >/dev/null"
@@ -38,9 +38,8 @@ if ($cmd -eq "auth") {
 }
 else {
   $deploy = "$setup && " +
-    "gcloud builds submit --config infra/cloudbuild.processor.yaml --substitutions=_IMAGE=$PROC . && " +
-    "gcloud --quiet beta run jobs update newsstore-enricher  --image=$PROC --region=$REGION && " +
-    "gcloud --quiet beta run jobs update newsstore-summarizer --image=$PROC --region=$REGION && " +
-    "gcloud --quiet beta run jobs execute newsstore-enricher --region=$REGION --wait"
+    "gcloud builds submit --config infra/cloudbuild.yaml --substitutions=_IMAGE=$PROC . && " +
+    "gcloud --quiet beta run jobs update newsstore-collect-all --image=$PROC --region=$REGION && " +
+    "gcloud --quiet beta run jobs execute newsstore-collect-all --region=$REGION --wait"
   docker run --rm -v "${VOL}:/root/.config/gcloud" -v "${REPO}:/work" -w /work $IMG bash -c "$deploy"
 }
