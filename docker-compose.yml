@@ -1,6 +1,7 @@
 # 로컬 개발용 (Docker-only). compose가 `.` 경로를 자체 해석 → Git Bash 마운트 폴백 회피.
 #   docker compose build
-#   docker compose run --rm test        # 테스트 (Firestore 에뮬레이터에 붙어서 실행)
+#   docker compose run --rm test        # 파이썬 테스트 (Firestore 에뮬레이터에 붙어서 실행)
+#   docker compose run --rm webtest     # 웹 순수로직 테스트 (tests/web/*.test.mjs)
 #   docker compose run --rm collect     # 1회 수집 (.env 필요: cp .env.example .env)
 services:
   firestore-emulator:
@@ -29,6 +30,16 @@ services:
     volumes:
       - ".:/app"
     command: pytest -q
+
+  webtest:                        # web/*.mjs 순수 로직 가드 — 파이썬 러너가 .mjs를 수집하지 못해
+    image: node:22-alpine         # 별도 서비스로 둔다(에뮬레이터·파이썬 의존 없음).
+    working_dir: /app
+    volumes:
+      - ".:/app"
+    # 디렉터리 인자(`node --test tests/web/`)는 MODULE_NOT_FOUND로 죽어 glob을 쓴다(node가 직접 전개).
+    # 앞의 `ls`는 fail-loud 가드다 — glob이 0개를 맞추면 node가 exit 0으로 조용히 통과하므로,
+    # 파일명이 바뀌어 가드가 텅 비는 순간을 여기서 터뜨린다(기대 개수는 박지 않는다).
+    command: sh -c 'set -e; ls tests/web/*.test.mjs > /dev/null; node --test "tests/web/*.test.mjs"'
 
   collect:
     build:                        # 머리말 절차(docker compose build)만으로 실행 가능해야 한다 —
