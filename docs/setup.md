@@ -43,10 +43,18 @@ gcloud run jobs create newsstore-collect-all \
   --service-account=$SA \
   --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
   --max-retries=1 --task-timeout=600
-# 네이버 자격증명(NAVER_CLIENT_ID/NAVER_CLIENT_SECRET)은 §8과 같은 패턴으로 Secret Manager에
-# 만들어 --set-secrets로 이 잡에 추가 주입해야 한다(이 문서는 그 비밀 생성 절차를 아직
-# 다루지 않는다 — 누락하면 이 잡은 NAVER_CLIENT_ID 미설정으로 fail-loud 실패한다).
+# 네이버 자격증명(NAVER_CLIENT_ID/NAVER_CLIENT_SECRET)은 §8에서 생성·주입한다
+# (누락하면 이 잡은 NAVER_CLIENT_ID 미설정으로 fail-loud 실패하므로 아래 스모크 전에 §8을 마친다).
 gcloud run jobs execute newsstore-collect-all --region=<REGION> --wait   # 스모크: Firestore에 items 쌓이는지
+# 임베딩 백필 잡(일회성·멱등) — 같은 이미지를 쓰고 CMD만 다르다. 언제 쓰는지는 docs/operations.md 참조.
+# 백필은 대기분이 많아 한 번에 오래 도므로 task-timeout을 정규 수집보다 길게 잡는다.
+gcloud run jobs create newsstore-backfill-embed \
+  --image=<REGION>-docker.pkg.dev/<PROJECT_ID>/newsstore/collector:latest --region=<REGION> \
+  --command=python --args=-m,newsstore.entrypoints.run_backfill_embed \
+  --service-account=$SA \
+  --set-env-vars=GOOGLE_CLOUD_PROJECT=<PROJECT_ID>,APP_ENV=home \
+  --max-retries=1 --task-timeout=3600
+# 이 잡도 임베딩을 하므로 §8의 gemini-api-key를 같은 방식으로 이 잡에도 주입한다.
 ```
 
 ## 4. Cloud Scheduler (15분마다)
@@ -78,10 +86,12 @@ $rs=Invoke-RestMethod -Method POST -Uri "$rb/rulesets" -Headers $H -ContentType 
 Invoke-RestMethod -Method POST -Uri "$rb/releases" -Headers $H -ContentType "application/json" -Body (@{name="projects/<PROJECT_ID>/releases/cloud.firestore";rulesetName=$rs.name}|ConvertTo-Json)
 ```
 (또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기.)
-**인덱스**(gcloud): `firestore.indexes.json`에 정의된 것 = `source+published_at`(소스 필터). 가격·펀더멘털은 문서 키 직접 조회라 복합 인덱스가 필요 없다.
+**인덱스**(gcloud): `firestore.indexes.json`에 정의된 것은 둘이다. `items`의 `source+published_at`은 소스 필터와 리서치 탭이 쓰고, `items`의 `source+fetched_at`은 상태 탭의 소스별 최신 1건 조회가 쓴다.
 ```
 gcloud firestore indexes composite create --collection-group=items \
   --field-config=field-path=source,order=ascending --field-config=field-path=published_at,order=descending --async
+gcloud firestore indexes composite create --collection-group=items \
+  --field-config=field-path=source,order=ascending --field-config=field-path=fetched_at,order=descending --async
 ```
 
 ## 7. TTL 정책 (content 컬렉션 60일 만료 — 비용 통제)
@@ -94,7 +104,7 @@ done
 ```
 (콘솔 → Firestore → TTL에서도 컬렉션 그룹별 `expire_at` 필드를 지정할 수 있다. 새 컬렉션을 계약에 추가하면 이 목록도 함께 늘린다.)
 
-## 8. FMP 뉴스 키 (collect_all)
+## 8. 백엔드 비밀 (collect_all) — FMP·Gemini·네이버
 collect_all의 FMP 뉴스 수집은 FMP REST를 호출하므로 `FMP_API_KEY`(백엔드 전용 비밀)가 필요하다 — Secret Manager로 만들어 §3의 `newsstore-collect-all` 잡에 주입한다(커밋/이미지/로그 금지). (FMP 시장 가격·펀더멘털은 이 repo가 아니라 로컬 레포 `DB-news-data`가 수집한다.)
 ```
 # (a) 비밀 생성 + Job SA에 접근 권한
@@ -115,6 +125,20 @@ gcloud secrets add-iam-policy-binding gemini-api-key \
 # (b) collect_all 잡에 주입
 gcloud run jobs update newsstore-collect-all \
   --set-secrets=GEMINI_API_KEY=gemini-api-key:latest --region=<REGION>
+```
+
+**네이버 검색 API 자격증명**: collect_all의 네이버 뉴스 수집은 네이버 검색 API를 호출하므로 `NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`(백엔드 전용 비밀)이 필요하다 — 네이버 개발자센터에서 애플리케이션을 등록해 발급받은 뒤 FMP·Gemini와 같은 패턴으로 Secret Manager에 만들고 §3에서 생성한 `newsstore-collect-all` 잡에 주입한다. `run_collect_all`이 두 값을 `os.environ`으로 fail-loud 읽으므로 주입 전에는 §3의 스모크 실행이 그 자리에서 실패한다.
+```
+# (a) 비밀 생성 + Job SA에 접근 권한
+printf '%s' "<NAVER_CLIENT_ID>" | gcloud secrets create naver-client-id --data-file=- --replication-policy=automatic
+printf '%s' "<NAVER_CLIENT_SECRET>" | gcloud secrets create naver-client-secret --data-file=- --replication-policy=automatic
+for s in naver-client-id naver-client-secret ; do
+  gcloud secrets add-iam-policy-binding $s \
+    --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
+done
+# (b) collect_all 잡에 주입
+gcloud run jobs update newsstore-collect-all --region=<REGION> \
+  --update-secrets=NAVER_CLIENT_ID=naver-client-id:latest,NAVER_CLIENT_SECRET=naver-client-secret:latest
 ```
 
 ## 9. 사이트 배포 (Firebase Hosting, REST)

@@ -12,15 +12,16 @@
 
 ## 환경 (중요)
 - 로컬 Python 없음 → **Docker로만** 실행/테스트.
-  테스트: **`MSYS_NO_PATHCONV=1 docker compose run --rm test`** (Firestore 에뮬레이터 자동 기동 후 pytest). store 테스트는 에뮬레이터에 붙음 — `mock-firestore`·sqlite 제거됨(store 단일=Firestore).
-- 설정은 루트 **`.env`** (`cp .env.example .env`): `APP_ENV` home|office · `GOOGLE_CLOUD_PROJECT` · `GCP_REGION` · `FMP_API_KEY`(비밀). **저장소=Firestore 단일**(로컬/테스트는 `FIRESTORE_EMULATOR_HOST`로 에뮬레이터; sqlite 백엔드 제거).
-- **비밀 구분**: `FMP_API_KEY`·`GEMINI_API_KEY`는 **백엔드 전용 비밀**(클라이언트/커밋 금지 — `.env.example`엔 플레이스홀더만). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
+  테스트는 **둘 다** 돌려야 한다 — **`MSYS_NO_PATHCONV=1 docker compose run --rm test`**(Firestore 에뮬레이터 자동 기동 후 pytest)와 **`MSYS_NO_PATHCONV=1 docker compose run --rm webtest`**(`tests/web/*.test.mjs` — 파이썬 러너가 `.mjs`를 수집하지 못해 별도 node 서비스로 돈다). store 테스트는 에뮬레이터에 붙음 — `mock-firestore`·sqlite 제거됨(store 단일=Firestore).
+- 설정은 루트 **`.env`** (`cp .env.example .env`): `APP_ENV` home|office · `GOOGLE_CLOUD_PROJECT` · `GCP_REGION` · `FMP_API_KEY`(비밀) · `GEMINI_API_KEY`(비밀) · `NAVER_CLIENT_ID`(비밀) · `NAVER_CLIENT_SECRET`(비밀). **저장소=Firestore 단일**(로컬/테스트는 `FIRESTORE_EMULATOR_HOST`로 에뮬레이터; sqlite 백엔드 제거).
+- **비밀 구분**: `FMP_API_KEY`·`GEMINI_API_KEY`·`NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`는 **백엔드 전용 비밀**(클라이언트/커밋 금지 — `.env.example`엔 플레이스홀더만). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프 (중요):** newsstore = **뉴스 수집 전용**이다 — 뉴스 RSS 수집 + FMP 뉴스 수집 + Firestore 저장 + 정적 확인 UI. **FMP 팩터·가격 수집은 이 repo에서 제거**됐다(별개 로컬 레포 `DB-news-data`(DuckDB)로 이관). **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 2개월(60일) TTL(`expire_at`, `feed_state` 제외).
+- **스코프 (중요):** newsstore = **뉴스 수집 전용**이다 — 뉴스 RSS 수집 + 네이버 검색 뉴스 수집 + FMP 뉴스 수집 + Firestore 저장 + 정적 확인 UI. **FMP 팩터·가격 수집은 이 repo에서 제거**됐다(별개 로컬 레포 `DB-news-data`(DuckDB)로 이관). **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 2개월(60일) TTL(`expire_at`, `feed_state` 제외).
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - Firestore 스키마 계약(TTL·kind): `docs/firestore-contract.md`
+- 수집 소스 전수·제거 사유: `docs/data-sources.md`
 - 코드 원칙 상세: `docs/coding-principles.md`
 - 오답노트(해결 교훈, append-only): `docs/solved_problems.md`
 - 서브에이전트 컨텍스트 주입: `docs/subagent-context.md`
@@ -33,6 +34,6 @@
 - **SDD/ultracode 서브에이전트엔 `coding-principles` + `solved_problems.md`의 '핵심 gotchas'를 주입**(전체 아카이브 X — 관련성>분량). 배선: `docs/subagent-context.md`. 서브에이전트는 세션 맥락이 없어 주입해야 실수를 안 반복한다.
 
 ## 배포 (요약, 상세는 operations.md)
-- 코드/피드 변경 → 이미지 재빌드 → 수집 Job(collector·fmp-news) 모두 `gcloud run jobs update --image` → execute (같은 이미지, CMD만 다름)
-- 사이트(`web/index.html`) 변경 → Hosting REST 재배포
+- 코드·피드 변경 → 이미지 재빌드 → `newsstore-collect-all` 잡을 `gcloud run jobs update --image`로 갱신한 뒤 execute한다(RSS·네이버·FMP·임베딩이 이 잡 하나로 통합됐다). 상세는 `docs/operations.md`.
+- 사이트(`web/` 전 파일) 변경 → Hosting REST 재배포(릴리스는 파일 전체 스냅샷이라 빠뜨린 파일은 404가 된다)
 - gcloud가 PATH에 없으면 설치 풀경로로 호출(머신별로 다름 — `where gcloud`/설치 경로로 확인, 머신로컬 값은 메모리에). Firebase REST엔 `x-goog-user-project` 헤더 필수.

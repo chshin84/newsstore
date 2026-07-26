@@ -5,6 +5,7 @@
 ## 1. Single Source of Truth (SSOT)
 같은 정보는 **한 곳에만** 정의한다.
 - 예: 피드/소스 목록의 유일 출처 = `config/feeds.yaml`. 사이트 드롭다운은 그걸 **도출**해서 쓴다(수집기가 `meta/sources` 문서로 Firestore에 기록 → `index.html`이 읽음).
+- 다만 이 SSOT의 범위는 **RSS로 한정**된다. `feeds.yaml`은 RSS 소스 목록의 SSOT이며 `meta/sources`도 RSS 소스만 담는다. 네이버와 FMP로 들어온 기사는 실제 발행처 이름으로 저장되므로 이 목록에 포함되지 않는다.
 - 복제하면 한쪽만 고쳐 **드리프트** → 조용한 버그. (예전 `index.html`의 `SRC_ORDER` 하드코딩이 이 위반이었음.)
 
 ## 2. 복제 말고 도출 (Derive, don't duplicate)
@@ -33,7 +34,7 @@
 ## 8. Docker 전용 개발/테스트
 - **로컬 Python 사용 금지** — 모든 실행·테스트·빌드는 Docker로만.
 - 이유: 호스트에 로컬 Python 없음 + 환경 재현성(프로덕션 이미지와 동일 환경에서 테스트).
-- 테스트: `MSYS_NO_PATHCONV=1 docker compose run --rm test`(Firestore 에뮬레이터 자동 기동 후 pytest).
+- 테스트는 러너가 둘이라 **둘 다** 돌려야 한다 — `MSYS_NO_PATHCONV=1 docker compose run --rm test`(Firestore 에뮬레이터 자동 기동 후 pytest)와 `MSYS_NO_PATHCONV=1 docker compose run --rm webtest`(`tests/web/*.test.mjs`를 node로 실행). 명령의 SSOT는 `docker-compose.yml`의 서비스 정의다.
 
 ## 9. 비밀 분리
 - 진짜 비밀(`FMP_API_KEY`, 서비스계정 키)은 **백엔드 전용** — `.env`(gitignore+dockerignore) / Cloud Run env / Secret Manager. 클라이언트·커밋 금지.

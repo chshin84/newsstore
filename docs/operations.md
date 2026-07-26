@@ -23,11 +23,11 @@ newsstore는 **뉴스 수집 전용**이다 — 뉴스 RSS 수집기, FMP 뉴스
 | Cloud Run Job | `newsstore-collect-all` — RSS+네이버+FMP 병렬 수집 + 임베딩 패스(`run_collect_all`, secrets `gemini-api-key`·`fmp-api-key`·네이버 자격증명) |
 | Cloud Run Job | `newsstore-backfill-embed` — 임베딩 백필 일회성 잡(`run_backfill_embed`, secret `gemini-api-key`) |
 | Cloud Scheduler | `newsstore-collect-all-15min` (`*/15 * * * *`) — 통합 수집기 |
-| Secret Manager | `fmp-api-key` (FMP 뉴스 Job에 `--set-secrets`로 주입; SA에 secretAccessor) |
-| Secret Manager | `gemini-api-key` (collector Job에 `--set-secrets`로 주입 — 임베딩 패스; SA에 secretAccessor) |
+| Secret Manager | `fmp-api-key` (`newsstore-collect-all` 잡에 `--set-secrets`로 주입; SA에 secretAccessor) |
+| Secret Manager | `gemini-api-key` (`newsstore-collect-all` 잡에 `--set-secrets`로 주입 — 임베딩 패스; SA에 secretAccessor) |
 | 서비스계정 | `newsstore-job@daily-recap-498506.iam.gserviceaccount.com` (roles: `datastore.user`, `run.invoker`) |
 | Firebase Hosting | site `daily-recap-498506` → https://daily-recap-498506.web.app |
-| Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/index.html`에 인라인) |
+| Firebase 웹앱 | appId `1:754646487603:web:19e77fba52a8aacf1b0946` (config는 `web/config.js`로 분리되어 index.html과 dashboard.html이 import한다) |
 
 ---
 
@@ -51,7 +51,7 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 ```
 
 ### 임베딩 패스 (newsstore-collect-all 잡 내)
-- 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 500건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 15분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
+- 수집 후 `embed_pass`가 story 대기분(`embed_pending`)을 런당 `embed_pass.DEFAULT_CAP`(현재 5000)건까지 임베딩해 `item_vectors`에 쓴다. Gemini 장애는 수집을 막지 않고, 실패분은 다음 15분 런이 재시도한다. 설정 드리프트(키 오류·차원 불일치)는 항목 처분 없이 run 실패로 승격된다.
 - **키 부재 + 대기분 존재 = run 실패(exit 1)** — 조용한 무임베딩 고착을 스케줄러가 감지한다(대기 0건이면 경고 후 정상 종료 — 키 없는 로컬 수집 스모크 보존).
 - **최초 롤아웃 순서**: 시크릿 바인딩을 **이미지 배포보다 먼저** 한다 — 순서가 뒤집히면 새 이미지가 대기분을 쌓으며 매 15분 런이 exit 1로 끝난다(수집분은 보존되고 키 바인딩 즉시 자가치유되는 의도된 fail-loud지만, 알림 소음을 피하려면 순서를 지킨다).
 - **비밀**: `GEMINI_API_KEY`는 Secret Manager `gemini-api-key`로 주입한다(생성은 `docs/setup.md §8`). 키를 재발급했으면 새 버전을 올리고 잡을 재실행한다:
@@ -65,21 +65,25 @@ gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name=
 - **배포 직후 실측(MEASURE-FIRST)**: 첫 런 로그에서 (collect 소요 + embed 소요) < task-timeout 600초를 확인하고, 넘치면 embed_pass cap을 낮춘다.
 
 ### 임베딩 백필 (일회성 — 배포 직후)
-로컬 Docker로 실행한다(Cloud Run 타임아웃 제약 없음). 멱등 — 재실행 안전. 무진전(지속 장애)이면 exit 1로 끝나며 잔여분은 정규 15분 런이 이어받는다.
+실행 경로는 둘이다 — 대기분이 많아 Cloud Run task-timeout 안에 못 끝날 것 같으면 타임아웃 제약이 없는 아래 로컬 Docker로 돌리고, 작업 PC 없이 클라우드에서 끝내고 싶으면 인벤토리의 `newsstore-backfill-embed` 잡을 `gcloud beta run jobs execute newsstore-backfill-embed --region=asia-northeast3 --wait`로 실행한다. 멱등 — 재실행 안전. 무진전(지속 장애)이면 exit 1로 끝나며 잔여분은 정규 15분 런이 이어받는다.
 ```bash
 MSYS_NO_PATHCONV=1 docker compose run --rm collect python -m newsstore.entrypoints.run_backfill_embed
 ```
 
 ## B. 사이트 재배포 (web/ 변경 시)
 Firebase CLI/Node 없이 **Hosting REST API**로 배포 (PowerShell).
-> ⚠️ **Hosting 릴리스는 파일 전체 스냅샷이다.** populateFiles에 넣은 파일만 새 릴리스에 존재하고, 빠뜨린 파일은 **404로 사라진다**(이전 릴리스가 갖고 있어도 무관). `index.html`이 `./config.js`(Firebase 웹 설정)를 import하면 **둘 다** 올려야 한다 — 하나만 올리면 config.js 404 → Firebase 초기화 실패 → 무한 로딩. 그래서 아래는 `web/` 배포 대상 **전체**를 자동으로 올린다(파일 추가 시 `$deployFiles`만 갱신).
+> ⚠️ **Hosting 릴리스는 파일 전체 스냅샷이다.** populateFiles에 넣은 파일만 새 릴리스에 존재하고, 빠뜨린 파일은 **404로 사라진다**(이전 릴리스가 갖고 있어도 무관). `index.html`이 `./config.js`(Firebase 웹 설정)를 import하면 **둘 다** 올려야 한다 — 하나만 올리면 config.js 404 → Firebase 초기화 실패 → 무한 로딩. 그래서 아래는 `web/` 배포 대상 **전체**를 자동으로 올린다(배포 목록을 `web/` 디렉터리에서 도출하므로 정적 파일을 추가해도 사람이 목록을 맞출 필요가 없다).
+
+아래 스크립트는 **저장소 루트(`newsstore/`)에서 실행한다** — `web` 상대경로를 쓰므로 다른 디렉터리에서 실행하면 `Get-ChildItem`이 그 자리에서 실패한다.
 ```powershell
 $g="C:\Users\ho381\AppData\Local\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
 $tok=(& $g auth print-access-token).Trim()
 $H=@{Authorization="Bearer $tok"; "x-goog-user-project"="daily-recap-498506"}
 $site="https://firebasehosting.googleapis.com/v1beta1/projects/daily-recap-498506/sites/daily-recap-498506"
-# 배포 대상 전체 (URL경로 → 로컬파일). 새 정적파일 추가 시 여기만 늘린다.
-$deployFiles=@{ "/index.html"="D:\projects\data-only\web\index.html"; "/config.js"="D:\projects\data-only\web\config.js"; "/dashboard.html"="D:\projects\data-only\web\dashboard.html"; "/dashboard_logic.mjs"="D:\projects\data-only\web\dashboard_logic.mjs" }
+# 배포 대상(URL경로 → 로컬파일)은 web\ 디렉터리에서 도출한다. 파일을 추가해도 여기를 고칠 필요가 없다.
+# -ErrorAction Stop: 저장소 루트가 아닌 곳에서 실행하면 빈 릴리스로 사이트를 지우는 대신 즉시 멈춘다.
+$deployFiles=@{}
+Get-ChildItem web -File -ErrorAction Stop | ForEach-Object { $deployFiles["/$($_.Name)"]=$_.FullName }
 $gzmap=@{}; $hashmap=@{}
 foreach($p in $deployFiles.Keys){
   $raw=[IO.File]::ReadAllBytes($deployFiles[$p])
@@ -111,9 +115,12 @@ Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -H
 gcloud firestore indexes composite create --collection-group=items \
   --field-config=field-path=source,order=ascending \
   --field-config=field-path=published_at,order=descending --async
+gcloud firestore indexes composite create --collection-group=items \
+  --field-config=field-path=source,order=ascending \
+  --field-config=field-path=fetched_at,order=descending --async
 gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
-현재 인덱스: `source+published_at`(소스 필터).
+현재 인덱스는 둘이다. `items`의 `source+published_at`은 소스 필터와 리서치 탭이 쓰고, `items`의 `source+fetched_at`은 상태 탭의 소스별 최신 1건 조회가 쓴다.
 
 ## F. TTL 정책 (content 컬렉션 60일 만료)
 모든 content 컬렉션(`items`·`item_vectors`)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — 저장 시각 + 60일; `item_vectors`는 원본 item의 `expire_at` 미러링). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
@@ -157,7 +164,7 @@ gcloud alpha monitoring policies create --policy-from-file=/tmp/job-fail-policy.
 
 ## 접근 방식 / 결정 (newsstore)
 - **비파괴 우선**: 중복 제거·스팸 필터·TruthSocial 라벨 등은 원본을 지우지 않는다. 수집 시점 `kind` 분류(`classify_kind`)로 라벨링하고, 노출은 `web/index.html`(뷰)이 `kind === "story"`만 보여주는 식으로 처리한다. 튜닝·되돌리기 쉽다.
-- **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`src/newsstore/collect/body_fetch.py` — 한경 `.article-body`). **무차별 크롤링은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 본문 부족 소스는 피드 추가도 병행.
+- **본문 정책(무스크래핑 오버라이드):** 기본은 "피드가 주면 사용". 헤드라인-only라도 **화이트리스트 소스는 개별 기사 페이지를 fetch해 본문을 채운다**(`src/newsstore/collect/body_fetch.py`). 다만 화이트리스트가 현재 비어 있어 이 기능은 휴면 상태다(사유는 `docs/data-sources.md`). **무차별 크롤링은 안 함** — 도달성·추출이 실증된 소스만 화이트리스트, 바운드(per-feed 상한·per-article 타임아웃·스로틀)로 IP 차단 위험 억제, 배포 스모크로 RSS까지 정상인지 확인. 본문 부족 소스는 피드 추가도 병행.
 - **피드 추가 전 curl 실측**(HTTP·item수·desc 유무) → 되는 것만 등록 → A 재배포.
 - **콘솔 수동 대신 REST**로 GCP/Firebase 운영(인증 공유).
 - 환경(`APP_ENV`=home/office, 저장소=Firestore 단일)은 `README.md` 표 참조.

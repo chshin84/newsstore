@@ -1,6 +1,6 @@
 # newsstore
 
-무료 RSS 피드와 FMP 뉴스를 5분마다 수집해 **Firestore**에 중복 제거 저장하고, **공개 웹사이트**로 보여주는 **뉴스 수집 전용** 데이터 모듈. (`daytrade_assist`의 뉴스 데이터 모듈 — 별개 자기완결 repo)
+무료 RSS 피드·네이버 검색 뉴스·FMP 뉴스를 15분마다 수집해 **Firestore**에 중복 제거 저장하고, **공개 웹사이트**로 보여주는 **뉴스 수집 전용** 데이터 모듈. (`daytrade_assist`의 뉴스 데이터 모듈 — 별개 자기완결 repo)
 
 - **사이트:** https://daily-recap-498506.web.app
 - **GitHub:** https://github.com/chshin84/newsstore (public)
@@ -11,11 +11,12 @@
 ## 아키텍처
 
 ```
-Cloud Scheduler (*/5분)   → Cloud Run Job (뉴스 수집 1패스 + 임베딩 패스) → Firestore: items, feed_state, meta, item_vectors
-Firebase Hosting (web/index.html, 정적)
+Cloud Scheduler (*/15분, newsstore-collect-all-15min) → Cloud Run Job newsstore-collect-all (RSS·네이버·FMP 병렬 수집 + 임베딩 패스) → Firestore: items, feed_state, meta, item_vectors, job_health
+Firebase Hosting (web/index.html · web/dashboard.html · web/config.js · web/dashboard_logic.mjs, 정적)
    └─ 브라우저가 Firestore JS SDK로 items 직접 읽기(공개 read 규칙) → 목록/소스필터 렌더
 ```
 
+- 뉴스 리더(`/index.html`)와 수집 상태 대시보드(`/dashboard.html`)는 모두 로그인 없이 공개 read 규칙으로 `items`·`meta`·`job_health`를 읽는다.
 - 전부 한 GCP 프로젝트 `daily-recap-498506` (리전 `asia-northeast3` 서울).
 - 수집 Job은 Admin SDK라 보안규칙 우회. 사이트는 **읽기 전용**.
 - 인증은 IAM 바인딩(서비스계정 `newsstore-job`, role `datastore.user`) — **키 파일 없음**.
@@ -32,6 +33,8 @@ Firebase Hosting (web/index.html, 정적)
 | `GCP_REGION` | `asia-northeast3` | 배포/셋업 리전 (`docs/setup.md`·`operations.md`) |
 | **`FMP_API_KEY`** | (비밀) | **백엔드 전용 비밀.** FMP 뉴스 수집(FMP REST)에 필요. 커밋/클라이언트 노출 금지 — `.env`(로컬)·Secret Manager(클라우드). `.env.example`엔 플레이스홀더만. |
 | **`GEMINI_API_KEY`** | (비밀) | **백엔드 전용 비밀.** story 기사 임베딩 패스(Gemini API)에 필요. 커밋/클라이언트 노출 금지 — `.env`(로컬)·Secret Manager(클라우드). `.env.example`엔 플레이스홀더만. |
+| **`NAVER_CLIENT_ID`** | (비밀) | **백엔드 전용 비밀.** 네이버 검색 뉴스 수집(네이버 오픈 API)에 필요하며, 설정하지 않으면 수집 잡이 즉시 실패한다. 커밋/클라이언트 노출 금지 — `.env`(로컬)·Secret Manager(클라우드). `.env.example`엔 플레이스홀더만. |
+| **`NAVER_CLIENT_SECRET`** | (비밀) | **백엔드 전용 비밀.** 네이버 검색 뉴스 수집(네이버 오픈 API)에 필요하며, 설정하지 않으면 수집 잡이 즉시 실패한다. 커밋/클라이언트 노출 금지 — `.env`(로컬)·Secret Manager(클라우드). `.env.example`엔 플레이스홀더만. |
 
 → **모든 값은 루트 `.env` 한 곳에서 관리.** `cp .env.example .env` 로 만들고 값만 바꾸면 됨(타겟 프로젝트 변경 = `GOOGLE_CLOUD_PROJECT` 한 줄). Docker 실행은 `--env-file .env`.
 
@@ -44,17 +47,17 @@ Firebase Hosting (web/index.html, 정적)
 
 ```bash
 cp .env.example .env          # 값 확인/수정 (APP_ENV, GOOGLE_CLOUD_PROJECT, …)
-docker build -f infra/Dockerfile -t newsstore .
+docker compose build
 
-# 1회 뉴스 수집 (.env 설정 사용, named volume로 영속)
-docker run --rm --env-file .env -v newsstore_data:/data newsstore \
-  python -m newsstore.entrypoints.run_collect_all
+# 1회 뉴스 수집 (.env 설정 사용)
+MSYS_NO_PATHCONV=1 docker compose run --rm collect
 ```
 
 ### 테스트
-**Firestore 에뮬레이터를 자동 기동**해 store 테스트를 실 client 계약대로 검증(mock-firestore·sqlite 제거):
+테스트는 두 러너로 나뉜다. 파이썬 테스트는 **Firestore 에뮬레이터를 자동 기동**해 store 계약을 실 client로 검증하고(mock-firestore·sqlite 제거), 웹 순수 로직 테스트(`tests/web/*.test.mjs`)는 파이썬 러너가 `.mjs`를 수집하지 못해 별도 node 서비스로 돈다. **둘 다 돌려야 전체가 검증된다.**
 ```bash
-MSYS_NO_PATHCONV=1 docker compose run --rm test
+MSYS_NO_PATHCONV=1 docker compose run --rm test      # 파이썬 (pytest + 에뮬레이터)
+MSYS_NO_PATHCONV=1 docker compose run --rm webtest   # 웹 순수 로직 (node --test)
 ```
 
 ## 셋업 / 재배포 / 운영
@@ -62,11 +65,12 @@ MSYS_NO_PATHCONV=1 docker compose run --rm test
 - **변경 반영**(피드·코드·사이트 수정 후): **`docs/operations.md`** (이미지 재빌드 → Job 갱신 / Hosting REST 배포 / 인덱스·규칙)
 
 ## 피드 레지스트리
-`config/feeds.yaml` — 한국(인포맥스·한경·매경), 미국주식(Benzinga), 크립토(CoinDesk·Cointelegraph), FX/금리(InvestingLive·Investing·Fed·ECB), **Bloomberg(markets/technology/economics/business/politics/opinion/crypto/wealth + Flipboard Korea)**, Reuters(Google News 경유), Google News(루머·KR칩), TruthSocial, Axios.
+수집 경로는 셋이며 각 설정 파일이 SSOT다. RSS는 `config/feeds.yaml`, 네이버 검색 키워드는 `config/naver_news.yaml`, FMP 뉴스 엔드포인트는 `config/fmp_news.yaml`이다. 소스별 사유와 계열 설명은 `docs/data-sources.md`를 보라.
 - 피드 추가/변경은 이미지에 `COPY` 되므로 **재빌드+Job 갱신** 필요.
 
 ## 문서
 - 최초 셋업(0→배포): `docs/setup.md` · 운영·재배포: `docs/operations.md`
 - Firestore 스키마 계약(TTL·kind): `docs/firestore-contract.md`
+- 수집 소스 전수·제거 사유: `docs/data-sources.md`
 - 코드 원칙: `docs/coding-principles.md` · 오답노트(교훈 로그): `docs/solved_problems.md`
 - 목적·다운스트림 맥락: `docs/purpose.md`
