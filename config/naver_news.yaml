@@ -7,28 +7,73 @@ queries:
   - {q: 코스닥,        asset_hint: kr_stock}
   - {q: 원달러환율,    asset_hint: kr_fx}
   - {q: 기준금리,      asset_hint: kr_macro}
-  - {q: 레버리지ETF,   asset_hint: kr_stock}
+  - {q: 금통위,        asset_hint: kr_macro}
+  - {q: 레버리지,      asset_hint: kr_stock}
+  - {q: ETF,           asset_hint: kr_stock}
   - {q: 서학개미,      asset_hint: kr_stock}
+  - {q: 국민연금,      asset_hint: kr_stock}
+  - {q: 공매도,        asset_hint: kr_stock}
+  - {q: 상법,          asset_hint: kr_stock}
+  - {q: 배당,          asset_hint: kr_stock}
+  - {q: 자사주,        asset_hint: kr_stock}
+  - {q: 특징주,        asset_hint: kr_stock}
+  # 국내 대형주
+  - {q: 현대차,        asset_hint: kr_stock}
+  - {q: 네이버,        asset_hint: kr_stock}
+  - {q: 카카오,        asset_hint: kr_stock}
   # 반도체·메모리·AI
   - {q: 반도체,        asset_hint: kr_tech}
   - {q: 메모리,        asset_hint: kr_tech}
   - {q: DRAM,          asset_hint: kr_tech}
+  - {q: D램,           asset_hint: kr_tech}
+  - {q: 낸드,          asset_hint: kr_tech}
   - {q: HBM,           asset_hint: kr_tech}
   - {q: 하이닉스,      asset_hint: kr_stock}
   - {q: 삼성전자,      asset_hint: kr_stock}
   - {q: 엔비디아,      asset_hint: us_stock}
+  - {q: 브로드컴,      asset_hint: us_stock}
+  - {q: 마이크론,      asset_hint: us_stock}
+  - {q: TSMC,          asset_hint: us_stock}
+  - {q: 파운드리,      asset_hint: kr_tech}
   - {q: 인공지능,      asset_hint: tech}
   - {q: AI,            asset_hint: tech}
   - {q: 데이터센터,    asset_hint: kr_tech}
+  - {q: MLCC,          asset_hint: kr_tech}
+  # 미국 빅테크·클라우드
+  - {q: 메타,          asset_hint: us_stock}
+  - {q: MS,            asset_hint: us_stock}
+  - {q: 마이크로소프트, asset_hint: us_stock}
+  - {q: 구글,          asset_hint: us_stock}
+  - {q: 아마존,        asset_hint: us_stock}
+  - {q: 애플,          asset_hint: us_stock}
+  - {q: 테슬라,        asset_hint: us_stock}
+  - {q: 오픈AI,        asset_hint: tech}
+  - {q: 앤트로픽,      asset_hint: tech}
+  - {q: 오라클,        asset_hint: us_stock}
+  - {q: 클라우드,      asset_hint: tech}
+  # 소프트웨어·플랫폼
+  - {q: 소프트웨어,    asset_hint: tech}
+  - {q: SaaS,          asset_hint: tech}
+  - {q: 플랫폼,        asset_hint: kr_tech}
+  - {q: 구독경제,      asset_hint: tech}
+  # 중국 AI·빅테크
+  - {q: 딥시크,        asset_hint: cn_tech}
+  - {q: 알리바바,      asset_hint: cn_tech}
+  - {q: 텐센트,        asset_hint: cn_tech}
+  - {q: 바이두,        asset_hint: cn_tech}
+  - {q: 화웨이,        asset_hint: cn_tech}
+  - {q: 문샷,          asset_hint: cn_tech}
+  - {q: 창신메모리,    asset_hint: cn_tech}
+  - {q: 양쯔메모리,    asset_hint: cn_tech}
   # AI 인프라·특별 테마
   - {q: 광통신,        asset_hint: kr_tech}
   - {q: 액침냉각,      asset_hint: kr_tech}
   - {q: 유리기판,      asset_hint: kr_tech}
   - {q: 전력설비,      asset_hint: kr_tech}
-  - {q: 전력,          asset_hint: kr_macro}
-  - {q: 온디바이스AI,  asset_hint: tech}
-  - {q: 생산성,        asset_hint: kr_macro}
+  - {q: 온디바이스,    asset_hint: tech}
+  - {q: 소버린AI,      asset_hint: tech}
   # 로봇
+  - {q: 로봇,          asset_hint: kr_tech}
   - {q: 휴머노이드,    asset_hint: kr_tech}
   - {q: 로보틱스,      asset_hint: kr_tech}
   # 원자력·에너지
@@ -36,22 +81,39 @@ queries:
   - {q: SMR,           asset_hint: kr_stock}
   - {q: 우라늄,        asset_hint: commodity}
   - {q: 해상풍력,      asset_hint: kr_stock}
+  - {q: 태양광,        asset_hint: kr_stock}
   # 성장 섹터
   - {q: 2차전지,       asset_hint: kr_tech}
+  - {q: 이차전지,      asset_hint: kr_tech}
+  - {q: 전고체,        asset_hint: kr_tech}
+  - {q: 자율주행,      asset_hint: kr_tech}
   - {q: 방산,          asset_hint: kr_stock}
   - {q: 조선,          asset_hint: kr_stock}
   - {q: 바이오,        asset_hint: kr_stock}
   - {q: 비만치료제,    asset_hint: kr_stock}
-  - {q: 초전도체,      asset_hint: kr_stock}
+  # PE·사모신용
+  - {q: 사모펀드,      asset_hint: kr_stock}
+  - {q: 사모대출,      asset_hint: global_macro}
   # 거시·글로벌
   - {q: 물가,          asset_hint: kr_macro}
+  - {q: 수출,          asset_hint: kr_macro}
   - {q: 부동산,        asset_hint: kr_realestate}
   - {q: 관세,          asset_hint: global_macro}
   - {q: 연준,          asset_hint: us_policy}
-  - {q: 중동전쟁,      asset_hint: geopolitics}
+  - {q: 트럼프,        asset_hint: us_policy}
+  - {q: 국채,          asset_hint: global_macro}
+  # 지정학
+  - {q: 중동,          asset_hint: geopolitics}
+  - {q: 이란,          asset_hint: geopolitics}
+  - {q: 후티,          asset_hint: geopolitics}
+  - {q: 우크라이나,    asset_hint: geopolitics}
   # 원자재·크립토
   - {q: 유가,          asset_hint: commodity}
+  - {q: 금값,          asset_hint: commodity}
   - {q: 비트코인,      asset_hint: crypto}
-  - {q: 크립토,        asset_hint: crypto}
+  - {q: 이더리움,      asset_hint: crypto}
+  - {q: 리플,          asset_hint: crypto}
+  - {q: 가상자산,      asset_hint: crypto}
+  - {q: 가상화폐,      asset_hint: crypto}
   - {q: 스테이블코인,  asset_hint: crypto}
   - {q: 암호화폐,      asset_hint: crypto}
