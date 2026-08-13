@@ -108,7 +108,7 @@ Invoke-RestMethod -Method POST -Uri "$site/releases?versionName=$($ver.name)" -H
 `firebaserules` REST로 ruleset 생성 + `cloud.firestore` release 갱신 (PowerShell, 헤더 `x-goog-user-project` 필수). 또는 Firebase 콘솔 → Firestore → 규칙에 붙여넣기. **전면 공개 read 모델**이다:
 - **공개 read**: `items`·`meta`·`item_vectors`·`job_health` 모두 `allow read: if true`. 대시보드(`web/dashboard.html`)·뉴스 리더(`web/index.html`)가 **로그인 없이** 읽는다.
 - **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). `feed_state`(폴링 커서)만 기본 거부.
-- **노출 범위는 60일 버퍼뿐**(깊은 아카이브는 다운스트림 로컬 DB 몫이라 Firestore 밖). **구글 auth·허용목록 불요**(공개 모델). 배포는 이 절 서두의 `firebaserules` REST 절차로 하고, 사이트는 §B의 Hosting REST 절차로 한다 — 이 환경에는 firebase CLI를 두지 않는다(`docs/setup.md` 서두의 전제와 같다).
+- **노출 범위는 1년 버퍼뿐**(깊은 아카이브는 다운스트림 로컬 DB 몫이라 Firestore 밖). **구글 auth·허용목록 불요**(공개 모델). 배포는 이 절 서두의 `firebaserules` REST 절차로 하고, 사이트는 §B의 Hosting REST 절차로 한다 — 이 환경에는 firebase CLI를 두지 않는다(`docs/setup.md` 서두의 전제와 같다).
 
 ## D. 복합 인덱스 추가
 ```
@@ -122,11 +122,23 @@ gcloud firestore indexes composite list --format="value(state,fields.fieldPath)"
 ```
 현재 인덱스는 둘이다. `items`의 `source+published_at`은 소스 필터와 리서치 탭이 쓰고, `items`의 `source+fetched_at`은 상태 탭의 소스별 최신 1건 조회가 쓴다.
 
-## F. TTL 정책 (content 컬렉션 60일 만료)
-모든 content 컬렉션(`items`·`item_vectors`)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — 저장 시각 + 60일; `item_vectors`는 원본 item의 `expire_at` 미러링). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
+## F. TTL 정책 (content 컬렉션 1년 만료)
+모든 content 컬렉션(`items`·`item_vectors`)은 `expire_at`을 TTL 정책이 보고 만료시킨다(비용 통제 — 저장 시각 + 1년; `item_vectors`는 원본 item의 `expire_at` 미러링). **`feed_state`·`meta`엔 TTL을 걸지 않는다**(폴링 커서 만료 시 증분 수집 어긋남). 최초 프로비저닝은 `docs/setup.md §7`(전 컬렉션 루프). 현재 상태 확인:
 ```
 gcloud firestore fields ttl list --collection-group=items
 ```
+
+### 보존 기간을 바꿀 때 (기존분 백필)
+TTL 정책 자체는 기간을 모른다 — 기간은 각 문서의 `expire_at` 값에 이미 박혀 있다. 그래서 `firestore_store.py`의 `_TTL`을 바꾸고 이미지를 재배포해도 **그 뒤에 수집된 문서만** 새 기간을 받고, 기존 문서는 옛 기간에 사라진다. 기존분까지 옮기려면 백필을 돌린다(멱등 — 재실행 안전, `items`와 `item_vectors`를 한 배치에서 함께 고친다).
+```bash
+# 먼저 규모만 재본다(쓰기 없음) — 몇 건을 고칠지와 가장 오래된 수집 시각을 보고한다
+MSYS_NO_PATHCONV=1 docker compose run --rm collect \
+  python -m newsstore.entrypoints.run_backfill_ttl --dry-run
+# 실제 적용
+MSYS_NO_PATHCONV=1 docker compose run --rm collect \
+  python -m newsstore.entrypoints.run_backfill_ttl
+```
+**순서가 중요하다.** 기간을 늘리는 경우에는 백필을 먼저 돌려도 되지만, 이미지 재배포가 늦어지면 그사이 수집분이 옛 기간으로 저장되어 백필을 한 번 더 돌려야 한다. 이미지를 먼저 올리고 백필을 뒤에 돌리면 한 번으로 끝난다.
 
 ## G. 잡 실패 알림 (Cloud Monitoring)
 **왜:** Cloud Scheduler는 잡을 `:run`으로 **시작**시키고 HTTP 200(=시작 수락)만 받는다. 잡이 시작 직후 죽어도 스케줄러는 초록(성공)으로 보여 **조용한 실패**가 된다(Fail-Loud 위반). → Cloud Run Job **실패 실행 수>0**이면 알림.

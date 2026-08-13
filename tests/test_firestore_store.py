@@ -60,12 +60,14 @@ def test_upsert_stamps_kind_at_collect_time(store):
     assert dg["kind"] == "story"
 
 
-# --- TTL(60일): content 컬렉션은 expire_at, feed_state는 절대 없음 ---
+# --- TTL(1년): content 컬렉션은 expire_at, feed_state는 절대 없음 ---
+# 기간은 _TTL을 import하지 않고 여기에 따로 박는다 — import하면 상수를 바꿀 때 테스트가
+# 함께 움직여 계약이 조용히 흘러간다(vacuous). 여기가 계약을 못 박는 두 번째 못이다.
 
 def test_upsert_stamps_expire_at_from_fetched_at(store):
     store.upsert_items([_item("a")])
     d = store.db.collection("items").document("a").get().to_dict()
-    assert d["expire_at"] == NOW + timedelta(days=60)
+    assert d["expire_at"] == NOW + timedelta(days=365)
     # enrich 전용 필드는 제거됐다(소비자 없음).
     assert "processed" not in d and "processed_at" not in d and "tags" not in d
 

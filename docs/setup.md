@@ -94,8 +94,8 @@ gcloud firestore indexes composite create --collection-group=items \
   --field-config=field-path=source,order=ascending --field-config=field-path=fetched_at,order=descending --async
 ```
 
-## 7. TTL 정책 (content 컬렉션 60일 만료 — 비용 통제)
-content 컬렉션(`items`·`item_vectors`)은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(저장 시각 + 60일 — 비용 통제). **`feed_state`·`meta`·`job_health`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타·잡 상태는 만료 대상이 아니다). 컬렉션마다 한 번씩 정책을 건다:
+## 7. TTL 정책 (content 컬렉션 1년 만료 — 비용 통제)
+content 컬렉션(`items`·`item_vectors`)은 각 문서의 `expire_at`을 Firestore TTL 정책이 보고 만료시킨다(저장 시각 + 1년 — 비용 통제). **`feed_state`·`meta`·`job_health`엔 TTL을 걸지 않는다**(폴링 커서·발행 메타·잡 상태는 만료 대상이 아니다). 컬렉션마다 한 번씩 정책을 건다:
 ```
 for c in items item_vectors ; do
   gcloud firestore fields ttl update expire_at --collection-group=$c \

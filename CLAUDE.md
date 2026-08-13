@@ -17,7 +17,7 @@
 - **비밀 구분**: `FMP_API_KEY`·`GEMINI_API_KEY`·`NAVER_CLIENT_ID`·`NAVER_CLIENT_SECRET`는 **백엔드 전용 비밀**(클라이언트/커밋 금지 — `.env.example`엔 플레이스홀더만). Firebase 웹 apiKey는 **비밀 아님**(클라이언트 OK, 규칙이 데이터 보호).
 
 ## 어디를 볼까
-- **스코프 (중요):** newsstore = **뉴스 수집 전용**이다 — 뉴스 RSS 수집 + 네이버 검색 뉴스 수집 + FMP 뉴스 수집 + Firestore 저장 + 정적 확인 UI. **FMP 팩터·가격 수집은 이 repo에서 제거**됐다(별개 로컬 레포 `DB-news-data`(DuckDB)로 이관). **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 2개월(60일) TTL(`expire_at`, `feed_state` 제외).
+- **스코프 (중요):** newsstore = **뉴스 수집 전용**이다 — 뉴스 RSS 수집 + 네이버 검색 뉴스 수집 + FMP 뉴스 수집 + Firestore 저장 + 정적 확인 UI. **FMP 팩터·가격 수집은 이 repo에서 제거**됐다(별개 로컬 레포 `DB-news-data`(DuckDB)로 이관). **생성형 LLM/분석/신호/리포트는 이 repo에 없다**(태깅·클러스터·스토리·렌즈·프레임·리포트·레이더 전부 제거). **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 비-LLM 규칙(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다. content 데이터엔 1년(365일) TTL(`expire_at`, `feed_state` 제외).
 - 현재 상태·아키텍처: `README.md`
 - 운영·재배포: `docs/operations.md` · 최초 셋업: `docs/setup.md`
 - Firestore 스키마 계약(TTL·kind): `docs/firestore-contract.md`

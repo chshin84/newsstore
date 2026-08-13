@@ -9,10 +9,12 @@ _ITEMS = "items"
 _FEED_STATE = "feed_state"
 _VECTORS = "item_vectors"
 
-# content 데이터의 보존 기간(60일). Firestore TTL 정책이 각 문서의 expire_at을
+# content 데이터의 보존 기간(1년). Firestore TTL 정책이 각 문서의 expire_at을
 # 가리켜 만료시킨다(비용 통제). feed_state에는 절대 넣지 않는다 — 증분 수집 커서가
 # 유실되면 재수집이 어긋난다.
-_TTL = timedelta(days=60)
+# 이 상수를 바꿔도 이미 저장된 문서의 expire_at은 옛 값 그대로다(신규 쓰기에만 걸린다).
+# 기존분까지 옮기려면 entrypoints/run_backfill_ttl.py를 돌려 여기서 다시 계산시킨다.
+_TTL = timedelta(days=365)
 
 
 def _to_doc(item: RawItem) -> dict:

@@ -4,7 +4,7 @@
 
 ## 컬렉션 개요
 
-| 컬렉션 | writer | reader | TTL(60일) | 비고 |
+| 컬렉션 | writer | reader | TTL(1년) | 비고 |
 |---|---|---|---|---|
 | `items` | collect Job | web UI | 있음(`expire_at`) | 뉴스 기사 원본 + 수집 시점 `kind` 분류 |
 | `feed_state` | collect Job | collect Job | **없음** | etag/last_modified 폴링 커서 — 만료시키면 증분 수집이 어긋난다 |
@@ -12,10 +12,11 @@
 | `item_vectors` | collect Job(임베딩 패스) | 공개(다운스트림) | 있음(`expire_at` — **원본 item 미러링**) | story 기사 임베딩 벡터(768차원) — 기사와 함께 만료 |
 | `job_health` | collect_all 통합 Job | web UI(대시보드) | 없음 | 잡별 최근 실행 상태(조용한 실패 감지) |
 
-## TTL 규칙 (2개월, 비용 통제)
+## TTL 규칙 (1년, 비용 통제)
 
-Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료시킨다. 이 스토어의 만료 필드명은 **`expire_at`**로 통일한다.
-- **`items`**: 각 문서에 `expire_at`(저장 시각 + 60일)을 넣고, gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`).
+Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료시킨다. 이 스토어의 만료 필드명은 **`expire_at`**로 통일한다. **보존 기간의 SSOT는 `src/newsstore/store/firestore_store.py`의 `_TTL` 상수**이고, 이 문서와 테스트는 그 값을 따로 못 박아 드리프트를 터뜨린다.
+- **`items`**: 각 문서에 `expire_at`(저장 시각 + 1년)을 넣고, gcloud TTL 정책을 건다(프로비저닝은 `docs/setup.md`·`docs/operations.md`).
+- **`_TTL`을 바꾸면 신규 문서만 새 기간을 받는다.** 이미 저장된 문서는 옛 `expire_at`을 들고 옛 기간에 사라지므로, 기존분까지 옮기려면 `entrypoints/run_backfill_ttl.py`를 돌려 `fetched_at + _TTL`로 다시 계산시킨다(멱등 — 재실행 안전).
 - **`feed_state`엔 `expire_at`을 절대 넣지 않는다.** ETag·커서가 만료되면 증분 수집이 매번 전량 재수집으로 어긋난다.
 - **`item_vectors`는 원본 item의 `expire_at`을 그대로 미러링**한다(기사와 벡터가 함께 만료 — 고아 벡터 방지). 이 컬렉션만 호출자(임베딩 패스)가 원본에서 읽은 값을 전달하고, `embed_model`·`embed_task_type`·`embedded_at`은 store가 주입한다.
 - `items`의 `expire_at`은 store가 단일 통제점으로 박는다(`firestore_store.py`의 `_to_doc`). 호출자가 안 넣어도 store가 보장한다. **`item_vectors`는 예외로 호출자가 넘긴 원본 값을 그대로 통과시킨다**(미러링이 목적이라 store가 새로 계산하지 않는다) — 원본에서 읽은 값을 넘기는 책임은 임베딩 패스에 있다.
@@ -27,7 +28,7 @@ Firestore TTL은 문서의 타임스탬프 필드를 정책이 가리켜 만료�
 - **문서 키**: `sha1(url)`의 hex다(URL이 없으면 guid, 그것도 없으면 title로 폴백 — `collect/feeds.py`의 `make_id`). 같은 URL은 같은 문서라 재수집해도 덮어쓰지 않는다(비파괴).
 - 모델 SSOT는 `src/newsstore/contracts/models.py`의 `RawItem`.
 - **`kind`** (story|spam|digest|sports) — 수집 시점 선분류. `_to_doc()`가 `upsert_items` 시점에 `classify_kind(title, body)`를 호출해 박는다(SSOT: `src/newsstore/contracts/classify.py`의 SPAM/SPORTS/DIGEST 키워드). web UI는 `kind`가 `"story"`인 기사와 **`kind` 필드가 아예 없는 기사**를 노출하고 나머지는 숨긴다(`web/index.html`의 `keepInFeed`). 분류 이전의 레거시 문서를 fail-soft로 계속 보여주려는 의도된 선택이다. LLM이 아니라 순수 키워드 규칙 필터다.
-- **`expire_at`** = `fetched_at + 60일`. TTL 정책이 이 필드를 보고 만료시킨다.
+- **`expire_at`** = `fetched_at + 365일`. TTL 정책이 이 필드를 보고 만료시킨다.
 
 ### `feed_state` (수집기 전용, 비공개)
 폴링 커서(`etag, last_modified, last_fetched`)와 피드 건강(`last_success, consecutive_failures, last_error, last_error_at`)을 함께 담는다. 건강 필드는 만성 죽음 판정(`entrypoints/_health.py`의 `CHRONIC_DEAD_STREAK`)에 쓰여 잡의 성공 여부를 가른다. **`expire_at` 없음**(위 TTL 규칙).
@@ -83,7 +84,7 @@ story 기사당 벡터 1문서. 문서 키는 item id와 같다(위 `items`의 �
 - **feed_state에 `expire_at` 부재** — TTL이 폴링 커서를 만료시키지 않음을 지킨다.
 
 ## 인프라
-- **전면 공개 read 보안규칙** (`firestore.rules`, `docs/operations.md §C`): 대시보드·뉴스 리더가 **로그인 없이** 최근 데이터를 본다. `items`·`meta`·`item_vectors`·`job_health` 모두 `allow read: if true`. **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). 공개해도 노출은 **60일 버퍼**에 한정된다(깊은 아카이브는 다운스트림 로컬 DB 몫이라 Firestore 밖). `feed_state`(폴링 커서)만 기본 거부.
+- **전면 공개 read 보안규칙** (`firestore.rules`, `docs/operations.md §C`): 대시보드·뉴스 리더가 **로그인 없이** 최근 데이터를 본다. `items`·`meta`·`item_vectors`·`job_health` 모두 `allow read: if true`. **write는 전면 금지**(수집기는 Admin SDK라 규칙 우회). 공개해도 노출은 **1년 버퍼**에 한정된다(깊은 아카이브는 다운스트림 로컬 DB 몫이라 Firestore 밖). `feed_state`(폴링 커서)만 기본 거부.
   - **복합 인덱스** (§D). TTL 정책 프로비저닝은 `docs/setup.md`·`docs/operations.md`.
 - 비밀(`FMP_API_KEY`·`GEMINI_API_KEY`)은 백엔드 전용(SECRETS) — 클라이언트/커밋 금지.
 

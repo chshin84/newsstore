@@ -6,7 +6,7 @@
 - **GitHub:** https://github.com/chshin84/newsstore (public)
 - **뉴스 수집 전용, 무 생성형 LLM.** 분석·태깅·클러스터·스토리·리포트·신호 같은 인리치 레이어는 이 repo에 없다. **단 하나의 예외 — 임베딩 벡터 계산**: 수집 후 패스가 story 기사를 gemini-embedding-001(768차원)로 임베딩해 `item_vectors`에 저장한다(다운스트림 재사용 — 분석이 아니라 수집 산출물). 필터는 LLM이 아니라 **비-LLM 규칙**(중복 제거 + 스팸·스포츠·다이제스트 키워드 분류)이다.
 - **FMP 팩터·가격 수집은 이 repo에서 제거됐다** — 별개 로컬 레포 `DB-news-data`(DuckDB)로 이관됐다. 이 repo는 뉴스만 다룬다.
-- **모든 content 데이터에 60일 TTL**을 걸어 Firestore 비용을 통제한다(`items`·`item_vectors`의 `expire_at`; `feed_state` 제외). 계약 SSOT: `docs/firestore-contract.md`.
+- **모든 content 데이터에 1년 TTL**을 걸어 Firestore 비용을 통제한다(`items`·`item_vectors`의 `expire_at`; `feed_state` 제외). 계약 SSOT: `docs/firestore-contract.md`.
 
 ## 아키텍처
 
